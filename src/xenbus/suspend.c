@@ -34,6 +34,8 @@
 #include <xen.h>
 #include <util.h>
 
+#include <unplug_interface.h>
+
 #include "suspend.h"
 #include "thread.h"
 #include "fdo.h"
@@ -48,24 +50,25 @@ struct _XENBUS_SUSPEND_CALLBACK {
 };
 
 struct _XENBUS_SUSPEND_CONTEXT {
+    PXENBUS_FDO                 Fdo;
+    KSPIN_LOCK                  Lock;
     LONG                        References;
     ULONG                       Count;
     LIST_ENTRY                  EarlyList;
     LIST_ENTRY                  LateList;
-    KSPIN_LOCK                  Lock;
-    PXENFILT_UNPLUG_INTERFACE   UnplugInterface;
-    PXENBUS_DEBUG_INTERFACE     DebugInterface;
+    XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
+    XENFILT_UNPLUG_INTERFACE    UnplugInterface;
 };
 
-#define SUSPEND_TAG 'PSUS'
+#define XENBUS_SUSPEND_TAG  'PSUS'
 
 static FORCEINLINE PVOID
 __SuspendAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, SUSPEND_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_SUSPEND_TAG);
 }
 
 static FORCEINLINE VOID
@@ -73,18 +76,19 @@ __SuspendFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, SUSPEND_TAG);
+    ExFreePoolWithTag(Buffer, XENBUS_SUSPEND_TAG);
 }
 
 static NTSTATUS
 SuspendRegister(
-    IN  PXENBUS_SUSPEND_CONTEXT         Context,
+    IN  PINTERFACE                      Interface,
     IN  XENBUS_SUSPEND_CALLBACK_TYPE    Type,
     IN  VOID                            (*Function)(PVOID),
     IN  PVOID                           Argument OPTIONAL,
     OUT PXENBUS_SUSPEND_CALLBACK        *Callback
     )
 {
+    PXENBUS_SUSPEND_CONTEXT             Context = Interface->Context;
     KIRQL                               Irql;
     NTSTATUS                            status;
 
@@ -125,10 +129,11 @@ fail1:
 
 static VOID
 SuspendDeregister(
-    IN  PXENBUS_SUSPEND_CONTEXT     Context,
+    IN  PINTERFACE                  Interface,
     IN  PXENBUS_SUSPEND_CALLBACK    Callback
     )
 {
+    PXENBUS_SUSPEND_CONTEXT         Context = Interface->Context;
     KIRQL                           Irql;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
@@ -138,56 +143,17 @@ SuspendDeregister(
     __SuspendFree(Callback);
 }
 
-static ULONG
-SuspendCount(
-    IN  PXENBUS_SUSPEND_CONTEXT     Context
-    )
-{
-    //
-    // No locking is required here since the system will be
-    // single-threaded with interrupts disabled when the
-    // value is incremented.
-    //
-    return Context->Count;
-}
-
-static VOID
-SuspendAcquire(
-    IN  PXENBUS_SUSPEND_CONTEXT     Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-SuspendRelease(
-    IN  PXENBUS_SUSPEND_CONTEXT     Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define SUSPEND_OPERATION(_Type, _Name, _Arguments) \
-        Suspend ## _Name,
-
-static XENBUS_SUSPEND_OPERATIONS  Operations = {
-    DEFINE_SUSPEND_OPERATIONS
-};
-
-#undef SUSPEND_OPERATION
-
 VOID
 #pragma prefast(suppress:28167) // Function changes IRQL
 SuspendTrigger(
-    IN  PXENBUS_SUSPEND_INTERFACE   Interface
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_SUSPEND_CONTEXT         Context = Interface->Context;
-    KIRQL                           Irql;
-    NTSTATUS                        status;
+    PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+    NTSTATUS                status;
 
-    KeAcquireSpinLock(&Context->Lock, &Irql);
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
     LogPrintf(LOG_LEVEL_INFO,
               "SUSPEND: ====>\n");
@@ -207,8 +173,8 @@ SuspendTrigger(
 
         Context->Count++;
 
-        if (Context->UnplugInterface != NULL)
-            UNPLUG(Replay, Context->UnplugInterface);
+        if (Context->UnplugInterface.Interface.Context != NULL)
+            XENFILT_UNPLUG(Replay, &Context->UnplugInterface);
 
         for (ListEntry = Context->EarlyList.Flink;
              ListEntry != &Context->EarlyList;
@@ -221,6 +187,9 @@ SuspendTrigger(
     }
 
     SyncEnableInterrupts();
+
+    // No lock is required here as the VM is single-threaded until
+    // SyncRelease() is called.
 
     if (NT_SUCCESS(status)) {
         PLIST_ENTRY ListEntry;
@@ -239,7 +208,22 @@ SuspendTrigger(
 
     LogPrintf(LOG_LEVEL_INFO, "SUSPEND: <====\n");
 
-    KeReleaseSpinLock(&Context->Lock, Irql);
+    KeLowerIrql(Irql);
+}
+
+static ULONG
+SuspendGetCount(
+    IN  PINTERFACE          Interface
+    )
+{
+    PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
+
+    //
+    // No locking is required here since the system will be
+    // single-threaded with interrupts disabled when the
+    // value is incremented.
+    //
+    return Context->Count;
 }
 
 static VOID
@@ -253,11 +237,10 @@ SuspendDebugCallback(
 
     UNREFERENCED_PARAMETER(Crashing);
 
-    DEBUG(Printf,
-          Context->DebugInterface,
-          Context->DebugCallback,
-          "Count = %u\n",
-          Context->Count);
+    XENBUS_DEBUG(Printf,
+                 &Context->DebugInterface,
+                 "Count = %u\n",
+                 Context->Count);
 
     for (ListEntry = Context->EarlyList.Flink;
          ListEntry != &Context->EarlyList;
@@ -271,20 +254,18 @@ SuspendDebugCallback(
         ModuleLookup((ULONG_PTR)Callback->Function, &Name, &Offset);
 
         if (Name == NULL) {
-            DEBUG(Printf,
-                  Context->DebugInterface,
-                  Context->DebugCallback,
-                  "EARLY: %p (%p)\n",
-                  Callback->Function,
-                  Callback->Argument);
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "EARLY: %p (%p)\n",
+                         Callback->Function,
+                         Callback->Argument);
         } else {
-            DEBUG(Printf,
-                  Context->DebugInterface,
-                  Context->DebugCallback,
-                  "EARLY: %s + %p (%p)\n",
-                  Name,
-                  (PVOID)Offset,
-                  Callback->Argument);
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "EARLY: %s + %p (%p)\n",
+                         Name,
+                         (PVOID)Offset,
+                         Callback->Argument);
         }
     }
 
@@ -300,79 +281,168 @@ SuspendDebugCallback(
         ModuleLookup((ULONG_PTR)Callback->Function, &Name, &Offset);
 
         if (Name == NULL) {
-            DEBUG(Printf,
-                  Context->DebugInterface,
-                  Context->DebugCallback,
-                  "LATE: %p (%p)\n",
-                  Callback->Function,
-                  Callback->Argument);
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "LATE: %p (%p)\n",
+                         Callback->Function,
+                         Callback->Argument);
         } else {
-            DEBUG(Printf,
-                  Context->DebugInterface,
-                  Context->DebugCallback,
-                  "LATE: %s + %p (%p)\n",
-                  Name,
-                  (PVOID)Offset,
-                  Callback->Argument);
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "LATE: %s + %p (%p)\n",
+                         Name,
+                         (PVOID)Offset,
+                         Callback->Argument);
         }
     }
 }
-                     
-NTSTATUS
-SuspendInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_SUSPEND_INTERFACE   Interface
+
+static NTSTATUS
+SuspendAcquire(
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_SUSPEND_CONTEXT         Context;
-    NTSTATUS                        status;
+    PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+    NTSTATUS                status;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
 
     Trace("====>\n");
 
-    Context = __SuspendAllocate(sizeof (XENBUS_SUSPEND_CONTEXT));
-
-    status = STATUS_NO_MEMORY;
-    if (Context == NULL)
+    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
+    if (!NT_SUCCESS(status))
         goto fail1;
 
-    InitializeListHead(&Context->EarlyList);
-    InitializeListHead(&Context->LateList);
-    KeInitializeSpinLock(&Context->Lock);
-
-    Context->UnplugInterface = FdoGetUnplugInterface(Fdo);
-
-    if (Context->UnplugInterface != NULL)
-        UNPLUG(Acquire, Context->UnplugInterface);
-
-    Context->DebugInterface = FdoGetDebugInterface(Fdo);
-
-    DEBUG(Acquire, Context->DebugInterface);
-
-    status = DEBUG(Register,
-                   Context->DebugInterface,
-                   __MODULE__ "|SUSPEND",
-                   SuspendDebugCallback,
-                   Context,
-                   &Context->DebugCallback);
+    status = XENBUS_DEBUG(Register,
+                          &Context->DebugInterface,
+                          __MODULE__ "|SUSPEND",
+                          SuspendDebugCallback,
+                          Context,
+                          &Context->DebugCallback);
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
+    if (Context->UnplugInterface.Interface.Context != NULL) {
+        status = XENFILT_UNPLUG(Acquire, &Context->UnplugInterface);
+
+        if (!NT_SUCCESS(status))
+            goto fail3;
+    }
 
     Trace("<====\n");
 
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
+    Context->DebugCallback = NULL;
 
 fail2:
     Error("fail2\n");
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
-    RtlZeroMemory(&Context->LateList, sizeof (LIST_ENTRY));
-    RtlZeroMemory(&Context->EarlyList, sizeof (LIST_ENTRY));
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    --Context->References;
+    ASSERT3U(Context->References, ==, 0);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return status;
+}
+
+static VOID
+SuspendRelease(
+    IN  PINTERFACE          Interface
+    )
+{
+    PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
+
+    Trace("====>\n");
+
+    if (!IsListEmpty(&Context->LateList) ||
+        !IsListEmpty(&Context->EarlyList))
+        BUG("OUTSTANDING CALLBACKS");
+
+    Context->Count = 0;
+
+    if (Context->UnplugInterface.Interface.Context != NULL)
+        XENFILT_UNPLUG(Release, &Context->UnplugInterface);
+
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
+    Context->DebugCallback = NULL;
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENBUS_SUSPEND_INTERFACE_V1 SuspendInterfaceVersion1 = {
+    { sizeof (struct _XENBUS_SUSPEND_INTERFACE_V1), 1, NULL, NULL, NULL },
+    SuspendAcquire,
+    SuspendRelease,
+    SuspendRegister,
+    SuspendDeregister,
+    SuspendTrigger,
+    SuspendGetCount
+};
+                     
+NTSTATUS
+SuspendInitialize(
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_SUSPEND_CONTEXT *Context
+    )
+{
+    NTSTATUS                    status;
+
+    Trace("====>\n");
+
+    *Context = __SuspendAllocate(sizeof (XENBUS_SUSPEND_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    status = DebugGetInterface(FdoGetDebugContext(Fdo),
+                               XENBUS_DEBUG_INTERFACE_VERSION_MAX,
+                               (PINTERFACE)&(*Context)->DebugInterface,
+                               sizeof ((*Context)->DebugInterface));
+    ASSERT(NT_SUCCESS(status));
+
+    FdoGetUnplugInterface(Fdo, &(*Context)->UnplugInterface);
+
+    InitializeListHead(&(*Context)->EarlyList);
+    InitializeListHead(&(*Context)->LateList);
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    (*Context)->Fdo = Fdo;
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -380,32 +450,58 @@ fail1:
     return status;
 }
 
-VOID
-SuspendTeardown(
-    IN OUT  PXENBUS_SUSPEND_INTERFACE   Interface
+NTSTATUS
+SuspendGetInterface(
+    IN      PXENBUS_SUSPEND_CONTEXT Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     )
 {
-    PXENBUS_SUSPEND_CONTEXT             Context = Interface->Context;
+    NTSTATUS                        status;
 
+    ASSERT(Context != NULL);
+
+    switch (Version) {
+    case 1: {
+        struct _XENBUS_SUSPEND_INTERFACE_V1  *SuspendInterface;
+
+        SuspendInterface = (struct _XENBUS_SUSPEND_INTERFACE_V1 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_SUSPEND_INTERFACE_V1))
+            break;
+
+        *SuspendInterface = SuspendInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
+
+VOID
+SuspendTeardown(
+    IN  PXENBUS_SUSPEND_CONTEXT Context
+    )
+{
     Trace("====>\n");
 
-    if (!IsListEmpty(&Context->LateList) || !IsListEmpty(&Context->EarlyList))
-        BUG("OUTSTANDING CALLBACKS");
+    Context->Fdo = NULL;
 
-    Context->Count = 0;
+    RtlZeroMemory(&Context->UnplugInterface,
+                  sizeof (XENFILT_UNPLUG_INTERFACE));
 
-    DEBUG(Deregister,
-          Context->DebugInterface,
-          Context->DebugCallback);
-    Context->DebugCallback = NULL;
-
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
-
-    if (Context->UnplugInterface != NULL) {
-        UNPLUG(Release, Context->UnplugInterface);
-        Context->UnplugInterface = NULL;
-    }
+    RtlZeroMemory(&Context->DebugInterface,
+                  sizeof (XENBUS_DEBUG_INTERFACE));
 
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&Context->LateList, sizeof (LIST_ENTRY));
@@ -413,8 +509,6 @@ SuspendTeardown(
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_SUSPEND_CONTEXT)));
     __SuspendFree(Context);
-
-    RtlZeroMemory(Interface, sizeof (XENBUS_SUSPEND_INTERFACE));
 
     Trace("<====\n");
 }

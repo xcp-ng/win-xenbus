@@ -33,41 +33,30 @@
 #define _XENBUS_RANGE_SET_H
 
 #include <ntddk.h>
+#include <xen.h>
+#include <range_set_interface.h>
 
-typedef struct _XENBUS_RANGE_SET   XENBUS_RANGE_SET, *PXENBUS_RANGE_SET;
+typedef struct _XENBUS_RANGE_SET_CONTEXT  XENBUS_RANGE_SET_CONTEXT, *PXENBUS_RANGE_SET_CONTEXT;
 
-extern BOOLEAN
-RangeSetIsEmpty(
-    IN  PXENBUS_RANGE_SET   RangeSet
-    );
-
-extern NTSTATUS
-RangeSetPop(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    OUT PLONGLONG           Item
-    );
-
-extern NTSTATUS
-RangeSetGet(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Item
-    );
-
-extern NTSTATUS
-RangeSetPut(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Start,
-    IN  LONGLONG            End
-    );
+#include "fdo.h"
 
 extern NTSTATUS
 RangeSetInitialize(
-    OUT PXENBUS_RANGE_SET   *RangeSet
+    IN  PXENBUS_FDO                 Fdo,
+    OUT PXENBUS_RANGE_SET_CONTEXT   *Context
+    );
+
+extern NTSTATUS
+RangeSetGetInterface(
+    IN      PXENBUS_RANGE_SET_CONTEXT   Context,
+    IN      ULONG                       Version,
+    IN OUT  PINTERFACE                  Interface,
+    IN      ULONG                       Size
     );
 
 extern VOID
 RangeSetTeardown(
-    IN  PXENBUS_RANGE_SET   RangeSet
+    IN  PXENBUS_RANGE_SET_CONTEXT   Context
     );
 
 #endif  // _XENBUS_RANGE_SET_H

@@ -56,7 +56,7 @@ __BusAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, BUS_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, BUS_TAG);
 }
 
 static FORCEINLINE VOID
@@ -64,7 +64,7 @@ __BusFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, BUS_TAG);
+    ExFreePoolWithTag(Buffer, BUS_TAG);
 }
 
 static VOID

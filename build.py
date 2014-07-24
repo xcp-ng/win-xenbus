@@ -361,8 +361,8 @@ if __name__ == '__main__':
     sdv = { 'nosdv': False, None: True }
     driver = 'xenbus'
 
-    os.environ['MAJOR_VERSION'] = '7'
-    os.environ['MINOR_VERSION'] = '2'
+    os.environ['MAJOR_VERSION'] = '8'
+    os.environ['MINOR_VERSION'] = '0'
     os.environ['MICRO_VERSION'] = '0'
 
     if 'BUILD_NUMBER' not in os.environ.keys():

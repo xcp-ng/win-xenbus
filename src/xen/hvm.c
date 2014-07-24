@@ -38,13 +38,13 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-static FORCEINLINE LONG_PTR
+static LONG_PTR
 HvmOp(
     IN  ULONG   Command,
     IN  PVOID   Argument
     )
 {
-    return Hypercall2(LONG_PTR, hvm_op, Command, Argument);
+    return HYPERCALL(LONG_PTR, hvm_op, 2, Command, Argument);
 }
 
 __checkReturn
@@ -52,7 +52,7 @@ XEN_API
 NTSTATUS
 HvmSetParam(
     IN  ULONG               Parameter,
-    IN  ULONG_PTR           Value
+    IN  ULONGLONG           Value
     )
 {
     struct xen_hvm_param    op;
@@ -83,7 +83,7 @@ XEN_API
 NTSTATUS
 HvmGetParam(
     IN  ULONG               Parameter,
-    OUT PULONG_PTR          Value
+    OUT PULONGLONG          Value
     )
 {
     struct xen_hvm_param    op;
@@ -102,7 +102,7 @@ HvmGetParam(
     }
 
     ASSERT(op.value != 0xFEEDFACE);
-    *Value = (ULONG_PTR)op.value;
+    *Value = op.value;
 
     return STATUS_SUCCESS;
 

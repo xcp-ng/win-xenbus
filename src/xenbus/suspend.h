@@ -36,31 +36,27 @@
 #include <xen.h>
 #include <suspend_interface.h>
 
+typedef struct _XENBUS_SUSPEND_CONTEXT  XENBUS_SUSPEND_CONTEXT, *PXENBUS_SUSPEND_CONTEXT;
+
 #include "fdo.h"
-
-struct _XENBUS_SUSPEND_INTERFACE {
-    PXENBUS_SUSPEND_OPERATIONS  Operations;
-    PXENBUS_SUSPEND_CONTEXT     Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENBUS_SUSPEND_INTERFACE, Operations) == (ULONG_PTR)SUSPEND_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENBUS_SUSPEND_INTERFACE, Context) == (ULONG_PTR)SUSPEND_CONTEXT(NULL));
 
 extern NTSTATUS
 SuspendInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_SUSPEND_INTERFACE   Interface
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_SUSPEND_CONTEXT *Context
     );
 
-extern VOID
-SuspendTrigger(
-    IN  PXENBUS_SUSPEND_INTERFACE   Interface
+extern NTSTATUS
+SuspendGetInterface(
+    IN      PXENBUS_SUSPEND_CONTEXT Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 SuspendTeardown(
-    IN OUT  PXENBUS_SUSPEND_INTERFACE   Interface
+    IN  PXENBUS_SUSPEND_CONTEXT Context
     );
 
 #endif  // _XENBUS_SUSPEND_H
-

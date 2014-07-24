@@ -200,7 +200,7 @@ __DmaAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, DMA_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, DMA_TAG);
 }
 
 static FORCEINLINE VOID
@@ -208,11 +208,11 @@ __DmaFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, DMA_TAG);
+    ExFreePoolWithTag(Buffer, DMA_TAG);
 }
 
-static FORCEINLINE VOID
-__DmaDumpDeviceDescription(
+static VOID
+DmaDumpDeviceDescription(
     IN  PDEVICE_DESCRIPTION DeviceDescription
     )
 {
@@ -233,8 +233,8 @@ __DmaDumpDeviceDescription(
     Info("DmaPort = %08x\n", DeviceDescription->DmaPort);
 }
 
-static FORCEINLINE  PXENBUS_DMA_CONTEXT
-__DmaCreateContext(
+static PXENBUS_DMA_CONTEXT
+DmaCreateContext(
     VOID
     )
 {
@@ -260,8 +260,8 @@ fail1:
     return NULL;
 }
 
-static FORCEINLINE VOID
-__DmaDestroyContext(
+static VOID
+DmaDestroyContext(
     IN  PXENBUS_DMA_CONTEXT Context
     )
 {
@@ -286,8 +286,8 @@ static PXENBUS_DMA_CONTEXT  DmaContext[NR_CONTEXT_BUCKETS];
     (((ULONG_PTR)(_Key) >> 8) % NR_CONTEXT_BUCKETS)
 
 #pragma warning(suppress: 28167) // changes the IRQL and does not restore the IRQL before it exits
-static FORCEINLINE  KIRQL
-__DmaAcquireLock(
+static KIRQL
+DmaAcquireLock(
     IN  PKSPIN_LOCK         Lock
     )
 {
@@ -302,8 +302,8 @@ __DmaAcquireLock(
 }
 
 #pragma warning(suppress: 28167) // changes the IRQL and does not restore the IRQL before it exits
-static FORCEINLINE  VOID
-__DmaReleaseLock(
+static VOID
+DmaReleaseLock(
     IN  PKSPIN_LOCK         Lock,
     IN  KIRQL               Irql
     )
@@ -315,8 +315,8 @@ __DmaReleaseLock(
     KeReleaseSpinLock(Lock, Irql);
 }
 
-static FORCEINLINE  VOID
-__DmaAddContext(
+static VOID
+DmaAddContext(
     IN  PVOID               Key,
     IN  PXENBUS_DMA_CONTEXT Context
     )
@@ -326,15 +326,15 @@ __DmaAddContext(
 
     Context->Key = Key;
 
-    Irql = __DmaAcquireLock(&DmaContextLock);
+    Irql = DmaAcquireLock(&DmaContextLock);
     Bucket = DMA_CONTEXT_BUCKET(Key);
     Context->Next = DmaContext[Bucket];
     DmaContext[Bucket] = Context;
-    __DmaReleaseLock(&DmaContextLock, Irql);
+    DmaReleaseLock(&DmaContextLock, Irql);
 }
 
-static FORCEINLINE VOID
-__DmaRemoveContext(
+static VOID
+DmaRemoveContext(
     IN  PXENBUS_DMA_CONTEXT Context
     )
 {
@@ -346,7 +346,7 @@ __DmaRemoveContext(
     ASSERT(Context != NULL);
     Key = Context->Key;
 
-    Irql = __DmaAcquireLock(&DmaContextLock);
+    Irql = DmaAcquireLock(&DmaContextLock);
     Bucket = DMA_CONTEXT_BUCKET(Key);
     Entry = &DmaContext[Bucket];
     while (*Entry != NULL) {
@@ -356,14 +356,14 @@ __DmaRemoveContext(
         }
         Entry = &(*Entry)->Next;
     }
-    __DmaReleaseLock(&DmaContextLock, Irql);
+    DmaReleaseLock(&DmaContextLock, Irql);
 
     ASSERT(Context != NULL);
     Context->Key = 0;
 }
 
-static FORCEINLINE PXENBUS_DMA_CONTEXT
-__DmaFindContext(
+static PXENBUS_DMA_CONTEXT
+DmaFindContext(
     IN  PVOID           Key
     )
 {
@@ -371,14 +371,14 @@ __DmaFindContext(
     ULONG_PTR           Bucket;
     PXENBUS_DMA_CONTEXT Context;
 
-    Irql = __DmaAcquireLock(&DmaContextLock);
+    Irql = DmaAcquireLock(&DmaContextLock);
     Bucket = DMA_CONTEXT_BUCKET(Key);
     for (Context = DmaContext[Bucket];
          Context != NULL;
          Context = Context->Next)
         if (Context->Key == Key)
             break;
-    __DmaReleaseLock(&DmaContextLock, Irql);
+    DmaReleaseLock(&DmaContextLock, Irql);
 
     ASSERT(Context != NULL);
     return Context;
@@ -392,13 +392,13 @@ DmaPutAdapter(
     PXENBUS_DMA_CONTEXT Context;
     PDMA_OPERATIONS     Operations;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Operations->PutDmaAdapter(Context->LowerAdapter);
 
-    __DmaRemoveContext(Context);
-    __DmaDestroyContext(Context);
+    DmaRemoveContext(Context);
+    DmaDestroyContext(Context);
 }
 
 static PVOID
@@ -415,7 +415,7 @@ DmaAllocateCommonBuffer(
 
     ASSERTIRQL(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Buffer = Operations->AllocateCommonBuffer(Context->LowerAdapter,
@@ -440,7 +440,7 @@ DmaFreeCommonBuffer(
 
     ASSERTIRQL(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Operations->FreeCommonBuffer(Context->LowerAdapter,
@@ -450,8 +450,8 @@ DmaFreeCommonBuffer(
                                  CacheEnabled);
 }
 
-static FORCEINLINE PXENBUS_DMA_CONTROL
-__DmaAddControl(
+static PXENBUS_DMA_CONTROL
+DmaAddControl(
     IN  PXENBUS_DMA_CONTEXT Context,
     IN  PDEVICE_OBJECT      DeviceObject,
     IN  PVOID               TransferContext OPTIONAL,
@@ -488,8 +488,8 @@ fail1:
     return NULL;
 }
 
-static FORCEINLINE VOID
-__DmaRemoveControl(
+static VOID
+DmaRemoveControl(
     IN  PXENBUS_DMA_CONTROL Control
     )
 {
@@ -529,7 +529,7 @@ DmaAdapterControl(
         Action = DeallocateObject;
     }
 
-    __DmaRemoveControl(Control);
+    DmaRemoveControl(Control);
 
     return Action;
 }
@@ -552,7 +552,7 @@ DmaAllocateAdapterChannel(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) {
         Operations = Context->LowerOperations;
@@ -564,7 +564,7 @@ DmaAllocateAdapterChannel(
         return status;
     }
 
-    Control = __DmaAddControl(Context,
+    Control = DmaAddControl(Context,
                               DeviceObject,
                               NULL,
                               Function,
@@ -586,7 +586,7 @@ DmaAllocateAdapterChannel(
     return status;
 
 fail2:
-    __DmaRemoveControl(Control);
+    DmaRemoveControl(Control);
 
 fail1:
     return status;
@@ -613,7 +613,7 @@ DmaAllocateAdapterChannelEx(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) {
@@ -629,7 +629,7 @@ DmaAllocateAdapterChannelEx(
         return status;
     }
 
-    Control = __DmaAddControl(Context,
+    Control = DmaAddControl(Context,
                               DeviceObject,
                               TransferContext,
                               Function,
@@ -654,7 +654,7 @@ DmaAllocateAdapterChannelEx(
     return status;
 
 fail2:
-    __DmaRemoveControl(Control);
+    DmaRemoveControl(Control);
 
 fail1:
     return status;
@@ -674,7 +674,7 @@ DmaFlushAdapterBuffers(
     PDMA_OPERATIONS     Operations;
     BOOLEAN             Success;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Success = Operations->FlushAdapterBuffers(Context->LowerAdapter,
@@ -697,7 +697,7 @@ DmaFreeAdapterChannel(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Operations->FreeAdapterChannel(Context->LowerAdapter);
@@ -715,7 +715,7 @@ DmaFreeMapRegisters(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Operations->FreeMapRegisters(Context->LowerAdapter,
@@ -723,8 +723,8 @@ DmaFreeMapRegisters(
                                  NumberOfMapRegisters);
 
     if (Context->Freed) {
-        __DmaRemoveContext(Context);
-        __DmaDestroyContext(Context);
+        DmaRemoveContext(Context);
+        DmaDestroyContext(Context);
     }
 }
 
@@ -742,7 +742,7 @@ DmaMapTransfer(
     PDMA_OPERATIONS         Operations;
     PHYSICAL_ADDRESS        LogicalAddress;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     LogicalAddress = Operations->MapTransfer(Context->LowerAdapter,
@@ -766,7 +766,7 @@ DmaGetAlignment(
 
     ASSERTIRQL(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Alignment = Operations->GetDmaAlignment(Context->LowerAdapter);
@@ -783,7 +783,7 @@ DmaReadCounter(
     PDMA_OPERATIONS     Operations;
     ULONG               Counter;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Counter = Operations->ReadDmaCounter(Context->LowerAdapter);
@@ -791,8 +791,8 @@ DmaReadCounter(
     return Counter;
 }
 
-static FORCEINLINE PXENBUS_DMA_LIST_CONTROL
-__DmaAddListControl(
+static PXENBUS_DMA_LIST_CONTROL
+DmaAddListControl(
     IN  PXENBUS_DMA_CONTEXT     Context,
     IN  PDEVICE_OBJECT          DeviceObject,
     IN  PVOID                   TransferContext OPTIONAL,
@@ -829,8 +829,8 @@ fail1:
     return NULL;
 }
 
-static FORCEINLINE VOID
-__DmaRemoveListControl(
+static VOID
+DmaRemoveListControl(
     IN  PXENBUS_DMA_LIST_CONTROL    ListControl
     )
 {
@@ -865,7 +865,7 @@ DmaAdapterListControl(
                           ScatterGather,
                           ListControl->Argument);
 
-    __DmaRemoveListControl(ListControl);
+    DmaRemoveListControl(ListControl);
 }
 
 static NTSTATUS
@@ -889,7 +889,7 @@ DmaGetScatterGatherList(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) {
         Operations = Context->LowerOperations;
@@ -904,11 +904,11 @@ DmaGetScatterGatherList(
         return status;
     }
 
-    ListControl = __DmaAddListControl(Context,
-                                      DeviceObject,
-                                      NULL,
-                                      Function,
-                                      Argument);
+    ListControl = DmaAddListControl(Context,
+                                    DeviceObject,
+                                    NULL,
+                                    Function,
+                                    Argument);
     status = STATUS_NO_MEMORY;
     if (ListControl == NULL)
         goto fail1;
@@ -928,7 +928,7 @@ DmaGetScatterGatherList(
     return status;
 
 fail2:
-    __DmaRemoveListControl(ListControl);
+    DmaRemoveListControl(ListControl);
 
 fail1:
     return status;
@@ -958,7 +958,7 @@ DmaGetScatterGatherListEx(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) {
@@ -979,11 +979,11 @@ DmaGetScatterGatherListEx(
         return status;
     }
 
-    ListControl = __DmaAddListControl(Context,
-                                      DeviceObject,
-                                      TransferContext,
-                                      Function,
-                                      Argument);
+    ListControl = DmaAddListControl(Context,
+                                    DeviceObject,
+                                    TransferContext,
+                                    Function,
+                                    Argument);
     status = STATUS_NO_MEMORY;
     if (ListControl == NULL)
         goto fail1;
@@ -1008,7 +1008,7 @@ DmaGetScatterGatherListEx(
     return status;
 
 fail2:
-    __DmaRemoveListControl(ListControl);
+    DmaRemoveListControl(ListControl);
 
 fail1:
     return status;
@@ -1028,7 +1028,7 @@ DmaCalculateScatterGatherList(
     PDMA_OPERATIONS     Operations;
     NTSTATUS            status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 2);
 
     Operations = Context->LowerOperations;
@@ -1065,7 +1065,7 @@ DmaBuildScatterGatherList(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 2);
 
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) {
@@ -1083,11 +1083,11 @@ DmaBuildScatterGatherList(
         return status;
     }
 
-    ListControl = __DmaAddListControl(Context,
-                                      DeviceObject,
-                                      NULL,
-                                      Function,
-                                      Argument);
+    ListControl = DmaAddListControl(Context,
+                                    DeviceObject,
+                                    NULL,
+                                    Function,
+                                    Argument);
     status = STATUS_NO_MEMORY;
     if (ListControl == NULL)
         goto fail1;
@@ -1110,7 +1110,7 @@ DmaBuildScatterGatherList(
     return status;
 
 fail2:
-    __DmaRemoveListControl(ListControl);
+    DmaRemoveListControl(ListControl);
 
 fail1:
     return status;
@@ -1144,7 +1144,7 @@ DmaBuildScatterGatherListEx(
 
     ASSERTIRQL(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) {
@@ -1167,11 +1167,11 @@ DmaBuildScatterGatherListEx(
         return status;
     }
 
-    ListControl = __DmaAddListControl(Context,
-                                      DeviceObject,
-                                      TransferContext,
-                                      Function,
-                                      Argument);
+    ListControl = DmaAddListControl(Context,
+                                    DeviceObject,
+                                    TransferContext,
+                                    Function,
+                                    Argument);
     status = STATUS_NO_MEMORY;
     if (ListControl == NULL)
         goto fail1;
@@ -1198,7 +1198,7 @@ DmaBuildScatterGatherListEx(
     return status;
 
 fail2:
-    __DmaRemoveListControl(ListControl);
+    DmaRemoveListControl(ListControl);
 
 fail1:
     return status;
@@ -1217,7 +1217,7 @@ DmaPutScatterGatherList(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
  
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
 
     Operations = Context->LowerOperations;
     Operations->PutScatterGatherList(Context->LowerAdapter,
@@ -1237,7 +1237,7 @@ DmaBuildMdlFromScatterGatherList(
     PDMA_OPERATIONS             Operations;
     NTSTATUS                    status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 2);
 
     Operations = Context->LowerOperations;
@@ -1262,7 +1262,7 @@ DmaCancelAdapterChannel(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1283,7 +1283,7 @@ DmaCancelAdapterChannel(
             Control = CONTAINING_RECORD(ListEntry, XENBUS_DMA_CONTROL, ListEntry);
 
             if (Control->TransferContext == TransferContext)
-                __DmaRemoveControl(Control);
+                DmaRemoveControl(Control);
 
             ListEntry = Next;
         }
@@ -1298,7 +1298,7 @@ DmaCancelAdapterChannel(
             ListControl = CONTAINING_RECORD(ListEntry, XENBUS_DMA_LIST_CONTROL, ListEntry);
 
             if (ListControl->TransferContext == TransferContext)
-                __DmaRemoveListControl(ListControl);
+                DmaRemoveListControl(ListControl);
 
             ListEntry = Next;
         }
@@ -1317,7 +1317,7 @@ DmaGetAdapterInfo(
     PDMA_OPERATIONS             Operations;
     NTSTATUS                    status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1341,7 +1341,7 @@ DmaGetTransferInfo(
     PDMA_OPERATIONS             Operations;
     NTSTATUS                    status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1365,7 +1365,7 @@ DmaInitializeTransferContext(
     PDMA_OPERATIONS     Operations;
     NTSTATUS            status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1391,7 +1391,7 @@ DmaAllocateCommonBufferEx(
 
     ASSERTIRQL(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1416,7 +1416,7 @@ DmaConfigureAdapterChannel(
     PDMA_OPERATIONS     Operations;
     NTSTATUS            status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1446,7 +1446,7 @@ DmaMapTransferEx(
     PDMA_OPERATIONS                 Operations;
     NTSTATUS                        status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1479,7 +1479,7 @@ DmaFlushAdapterBuffersEx(
     PDMA_OPERATIONS     Operations;
     NTSTATUS            status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1502,7 +1502,7 @@ DmaFreeAdapterObject(
     PXENBUS_DMA_CONTEXT         Context;
     PDMA_OPERATIONS             Operations;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1511,8 +1511,8 @@ DmaFreeAdapterObject(
 
     switch (AllocationAction) {
     case DeallocateObject:
-        __DmaRemoveContext(Context);
-        __DmaDestroyContext(Context);
+        DmaRemoveContext(Context);
+        DmaDestroyContext(Context);
         break;
 
     case DeallocateObjectKeepRegisters:
@@ -1538,7 +1538,7 @@ DmaCancelMappedTransfer(
     PDMA_OPERATIONS     Operations;
     NTSTATUS            status;
 
-    Context = __DmaFindContext(Adapter);
+    Context = DmaFindContext(Adapter);
     ASSERT3U(Context->Version, >=, 3);
 
     Operations = Context->LowerOperations;
@@ -1604,7 +1604,7 @@ DmaGetAdapter(
     PDMA_ADAPTER                Adapter;
     NTSTATUS                    status;
 
-    __DmaDumpDeviceDescription(DeviceDescription);
+    DmaDumpDeviceDescription(DeviceDescription);
 
     // Hardcode use of PCIBus style dma adaptors to avoid
     // map register related races in Windows 2008
@@ -1627,7 +1627,7 @@ DmaGetAdapter(
 
     LowerDeviceObject = FdoGetPhysicalDeviceObject(PdoGetFdo(Pdo));
 
-    Context = __DmaCreateContext();
+    Context = DmaCreateContext();
 
     status = STATUS_NO_MEMORY;
     if (Context == NULL)
@@ -1681,7 +1681,7 @@ DmaGetAdapter(
         Adapter = Context->LowerAdapter;
     }
 
-    __DmaAddContext(Adapter, Context);
+    DmaAddContext(Adapter, Context);
 
 done:
     return Adapter;

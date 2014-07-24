@@ -36,25 +36,27 @@
 #include <xen.h>
 #include <gnttab_interface.h>
 
+typedef struct _XENBUS_GNTTAB_CONTEXT  XENBUS_GNTTAB_CONTEXT, *PXENBUS_GNTTAB_CONTEXT;
+
 #include "fdo.h"
-
-struct _XENBUS_GNTTAB_INTERFACE {
-    PXENBUS_GNTTAB_OPERATIONS   Operations;
-    PXENBUS_GNTTAB_CONTEXT      Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENBUS_GNTTAB_INTERFACE, Operations) == (ULONG_PTR)GNTTAB_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENBUS_GNTTAB_INTERFACE, Context) == (ULONG_PTR)GNTTAB_CONTEXT(NULL));
 
 extern NTSTATUS
 GnttabInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_GNTTAB_INTERFACE    Interface
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_GNTTAB_CONTEXT  *Context
+    );
+
+extern NTSTATUS
+GnttabGetInterface(
+    IN      PXENBUS_GNTTAB_CONTEXT  Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 GnttabTeardown(
-    IN OUT  PXENBUS_GNTTAB_INTERFACE    Interface
+    IN  PXENBUS_GNTTAB_CONTEXT  Context
     );
 
 #endif  // _XENBUS_GNTTAB_H

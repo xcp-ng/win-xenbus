@@ -44,7 +44,7 @@ MemoryOp(
     IN  PVOID   Argument
     )
 {
-    return Hypercall2(LONG_PTR, memory_op, Command, Argument);
+    return HYPERCALL(LONG_PTR, memory_op, 2, Command, Argument);
 }
 
 __checkReturn

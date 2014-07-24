@@ -30,12 +30,14 @@
  */
 
 #include <ntddk.h>
+#include <ntstrsafe.h>
 #include <util.h>
 
 #include "registry.h"
 #include "fdo.h"
 #include "pdo.h"
 #include "driver.h"
+#include "names.h"
 #include "dbg_print.h"
 #include "assert.h"
 #include "version.h"
@@ -48,6 +50,24 @@ typedef struct _XENBUS_DRIVER {
 } XENBUS_DRIVER, *PXENBUS_DRIVER;
 
 static XENBUS_DRIVER    Driver;
+
+#define XENBUS_DRIVER_TAG   'VIRD'
+
+static FORCEINLINE PVOID
+__DriverAllocate(
+    IN  ULONG   Length
+    )
+{
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_DRIVER_TAG);
+}
+
+static FORCEINLINE VOID
+__DriverFree(
+    IN  PVOID   Buffer
+    )
+{
+    ExFreePoolWithTag(Buffer, XENBUS_DRIVER_TAG);
+}
 
 static FORCEINLINE VOID
 __DriverSetDriverObject(
@@ -114,12 +134,20 @@ DriverUnload(
         goto done;
 
     ParametersKey = __DriverGetParametersKey();
-    if (ParametersKey != NULL) {
-        RegistryCloseKey(ParametersKey);
-        __DriverSetParametersKey(NULL);
-    }
+
+    RegistryCloseKey(ParametersKey);
+    __DriverSetParametersKey(NULL);
 
     RegistryTeardown();
+
+    Info("XENBUS %d.%d.%d (%d) (%02d.%02d.%04d)\n",
+         MAJOR_VERSION,
+         MINOR_VERSION,
+         MICRO_VERSION,
+         BUILD_NUMBER,
+         DAY,
+         MONTH,
+         YEAR);
 
 done:
     __DriverSetDriverObject(NULL);
@@ -148,10 +176,10 @@ DriverQueryIdCompletion(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static FORCEINLINE NTSTATUS
-__DriverQueryId(
+static NTSTATUS
+DriverQueryId(
     IN  PDEVICE_OBJECT      PhysicalDeviceObject,
-    IN  BUS_QUERY_ID_TYPE   IdType,
+    IN  BUS_QUERY_ID_TYPE   Type,
     OUT PVOID               *Information
     )
 {
@@ -162,6 +190,8 @@ __DriverQueryId(
     NTSTATUS                status;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    Trace("====> %s\n", BusQueryIdTypeName(Type));
 
     DeviceObject = IoGetAttachedDeviceReference(PhysicalDeviceObject);
 
@@ -176,7 +206,7 @@ __DriverQueryId(
     StackLocation->MajorFunction = IRP_MJ_PNP;
     StackLocation->MinorFunction = IRP_MN_QUERY_ID;
     StackLocation->Flags = 0;
-    StackLocation->Parameters.QueryId.IdType = IdType;
+    StackLocation->Parameters.QueryId.IdType = Type;
     StackLocation->DeviceObject = DeviceObject;
     StackLocation->FileObject = NULL;
 
@@ -212,6 +242,8 @@ __DriverQueryId(
     IoFreeIrp(Irp);
     ObDereferenceObject(DeviceObject);
 
+    Trace("<====\n");
+
     return STATUS_SUCCESS;
 
 fail2:
@@ -227,106 +259,190 @@ fail1:
     return status;
 }
 
-DRIVER_ADD_DEVICE   AddDevice;
-
-NTSTATUS
-#pragma prefast(suppress:28152) // Does not clear DO_DEVICE_INITIALIZING
-AddDevice(
-    IN  PDRIVER_OBJECT  DriverObject,
-    IN  PDEVICE_OBJECT  DeviceObject
+static NTSTATUS
+DriverGetActiveDeviceInstance(
+    OUT PWCHAR      *DeviceID,
+    OUT PWCHAR      *InstanceID
     )
 {
-    HANDLE              ParametersKey;
-    PANSI_STRING        ActiveDevice;
-    BOOLEAN             Active;
-    PWCHAR              DeviceID;
-    UNICODE_STRING      Unicode;
-    ULONG               Length;
-    NTSTATUS            status;
-
-    ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
+    HANDLE          ParametersKey;
+    PANSI_STRING    Ansi;
+    UNICODE_STRING  Unicode;
+    NTSTATUS        status;
 
     ParametersKey = __DriverGetParametersKey();
 
-    if (ParametersKey != NULL) {
-        status = RegistryQuerySzValue(ParametersKey,
-                                      "ActiveDevice",
-                                      &ActiveDevice);
-        if (!NT_SUCCESS(status))
-            ActiveDevice = NULL;
-    } else {
-        ActiveDevice = NULL;
+    *DeviceID = NULL;
+    *InstanceID = NULL;
+
+    status = RegistryQuerySzValue(ParametersKey,
+                                  "ActiveDeviceID",
+                                  &Ansi);
+    if (!NT_SUCCESS(status)) {
+        if (status != STATUS_OBJECT_NAME_NOT_FOUND)
+            goto fail1;
+
+        // The active device is not yet set
+        goto done;
     }
 
-    Active = FALSE;
+    Unicode.MaximumLength = (USHORT)(Ansi[0].MaximumLength / sizeof (CHAR) * sizeof (WCHAR));
+    Unicode.Buffer = __DriverAllocate(Unicode.MaximumLength);
 
-    DeviceID = NULL;
-
-    RtlZeroMemory(&Unicode, sizeof (UNICODE_STRING));
-
-    if (ActiveDevice == NULL)
-        goto done;
-
-    status = __DriverQueryId(DeviceObject, BusQueryDeviceID, &DeviceID);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = RtlAnsiStringToUnicodeString(&Unicode, ActiveDevice, TRUE);
-    if (!NT_SUCCESS(status))
+    status = STATUS_NO_MEMORY;
+    if (Unicode.Buffer == NULL)
         goto fail2;
 
-    Length = (ULONG)wcslen(DeviceID);
-    if (_wcsnicmp(Unicode.Buffer,
-                  DeviceID,
-                  Length) != 0)
-        goto done;
+    status = RtlAnsiStringToUnicodeString(&Unicode,
+                                          &Ansi[0],
+                                          FALSE);
+    ASSERT(NT_SUCCESS(status));
 
-    Active = TRUE;
+    RegistryFreeSzValue(Ansi);
 
-done:
-    if (ActiveDevice != NULL) {
-        RegistryFreeSzValue(ActiveDevice);
-        ActiveDevice = NULL;
-    }
-
-    if (Unicode.Buffer != NULL) {
-        RtlFreeUnicodeString(&Unicode);
-        Unicode.Buffer = NULL;
-    }
-
-    if (DeviceID != NULL) {
-        ExFreePool(DeviceID);
-        DeviceID = NULL;
-    }
-
-    status = FdoCreate(DeviceObject, Active);
+    *DeviceID = Unicode.Buffer;
+        
+    status = RegistryQuerySzValue(ParametersKey,
+                                  "ActiveInstanceID",
+                                  &Ansi);
     if (!NT_SUCCESS(status))
         goto fail3;
 
+    Unicode.MaximumLength = (USHORT)(Ansi[0].MaximumLength / sizeof (CHAR) * sizeof (WCHAR));
+    Unicode.Buffer = __DriverAllocate(Unicode.MaximumLength);
+
+    status = STATUS_NO_MEMORY;
+    if (Unicode.Buffer == NULL)
+        goto fail4;
+
+    status = RtlAnsiStringToUnicodeString(&Unicode,
+                                          &Ansi[0],
+                                          FALSE);
+    ASSERT(NT_SUCCESS(status));
+
+    RegistryFreeSzValue(Ansi);
+
+    *InstanceID = Unicode.Buffer;
+
+done:        
+    Trace("DeviceID = %ws\n", (*DeviceID != NULL) ? *DeviceID : L"NOT SET");
+    Trace("InstanceID = %ws\n", (*InstanceID != NULL) ? *InstanceID : L"NOT SET");
+
     return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
+
+    RegistryFreeSzValue(Ansi);
 
 fail3:
     Error("fail3\n");
 
+    __DriverFree(*DeviceID);
+    *DeviceID = NULL;
+
+    goto fail1;
+
 fail2:
     Error("fail2\n");
 
-    if (DeviceID != NULL)
-        ExFreePool(DeviceID);
+    RegistryFreeSzValue(Ansi);
 
 fail1:
-    if (ActiveDevice != NULL)
-        RegistryFreeSzValue(ActiveDevice);
-
     Error("fail1 (%08x)\n", status);
 
     return status;
 }
 
-DRIVER_DISPATCH Dispatch;
+DRIVER_ADD_DEVICE   DriverAddDevice;
+
+NTSTATUS
+#pragma prefast(suppress:28152) // Does not clear DO_DEVICE_INITIALIZING
+DriverAddDevice(
+    IN  PDRIVER_OBJECT  DriverObject,
+    IN  PDEVICE_OBJECT  DeviceObject
+    )
+{
+    PWCHAR              ActiveDeviceID;
+    PWCHAR              ActiveInstanceID;
+    PWCHAR              DeviceID;
+    PWCHAR              InstanceID;
+    BOOLEAN             Active;
+    NTSTATUS            status;
+
+    ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
+
+    Trace("====>\n");
+
+    status = DriverGetActiveDeviceInstance(&ActiveDeviceID, &ActiveInstanceID);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    Active = FALSE;
+
+    if (ActiveDeviceID == NULL) {
+        ASSERT3P(ActiveInstanceID, ==, NULL);
+        goto done;
+    }
+
+    status = DriverQueryId(DeviceObject, BusQueryDeviceID, &DeviceID);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Trace("DeviceID = %ws\n", DeviceID);
+
+    status = DriverQueryId(DeviceObject, BusQueryInstanceID, &InstanceID);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    Trace("InstanceID = %ws\n", InstanceID);
+
+    if (_wcsicmp(DeviceID, ActiveDeviceID) == 0 &&
+        _wcsicmp(InstanceID, ActiveInstanceID) == 0)
+        Active = TRUE;
+
+    ExFreePool(InstanceID);
+
+    ExFreePool(DeviceID);
+
+    __DriverFree(ActiveInstanceID);
+    __DriverFree(ActiveDeviceID);
+
+done:
+    status = FdoCreate(DeviceObject, Active);
+    if (!NT_SUCCESS(status))
+        goto fail4;
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
+
+    goto fail1;
+
+fail3:
+    Error("fail3\n");
+
+    ExFreePool(DeviceID);
+
+fail2:
+    Error("fail2\n");
+
+    __DriverFree(ActiveInstanceID);
+    __DriverFree(ActiveDeviceID);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+DRIVER_DISPATCH DriverDispatch;
 
 NTSTATUS 
-Dispatch(
+DriverDispatch(
     IN PDEVICE_OBJECT   DeviceObject,
     IN PIRP             Irp
     )
@@ -416,23 +532,30 @@ DriverEntry(
         goto fail2;
 
     status = RegistryOpenSubKey(ServiceKey, "Parameters", KEY_READ, &ParametersKey);
-    if (NT_SUCCESS(status))
-        __DriverSetParametersKey(ParametersKey);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    __DriverSetParametersKey(ParametersKey);
 
     RegistryCloseKey(ServiceKey);
 
-    DriverObject->DriverExtension->AddDevice = AddDevice;
+    DriverObject->DriverExtension->AddDevice = DriverAddDevice;
 
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; Index++) {
 #pragma prefast(suppress:28169) // No __drv_dispatchType annotation
 #pragma prefast(suppress:28168) // No matching __drv_dispatchType annotation for IRP_MJ_CREATE
-       DriverObject->MajorFunction[Index] = Dispatch;
+       DriverObject->MajorFunction[Index] = DriverDispatch;
     }
 
 done:
     Trace("<====\n");
 
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    RegistryCloseKey(ServiceKey);
 
 fail2:
     Error("fail2\n");

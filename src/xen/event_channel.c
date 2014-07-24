@@ -38,13 +38,13 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-static FORCEINLINE LONG_PTR
+static LONG_PTR
 EventChannelOp(
     IN  ULONG   Command,
     IN  PVOID   Argument
     )
 {
-    return Hypercall2(LONG_PTR, event_channel_op, Command, Argument);
+    return HYPERCALL(LONG_PTR, event_channel_op, 2, Command, Argument);
 }
 
 __checkReturn

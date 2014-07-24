@@ -39,23 +39,25 @@
 #include "assert.h"
 
 struct _XENBUS_SHARED_INFO_CONTEXT {
+    PXENBUS_FDO                 Fdo;
+    KSPIN_LOCK                  Lock;
     LONG                        References;
-    PFN_NUMBER                  Pfn;
+    PHYSICAL_ADDRESS            Address;
     shared_info_t               *Shared;
-    PXENBUS_SUSPEND_INTERFACE   SuspendInterface;
+    XENBUS_SUSPEND_INTERFACE    SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
-    PXENBUS_DEBUG_INTERFACE     DebugInterface;
+    XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
 };
 
-#define SHARED_INFO_TAG 'OFNI'
+#define XENBUS_SHARED_INFO_TAG 'OFNI'
 
 static FORCEINLINE PVOID
 __SharedInfoAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, SHARED_INFO_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_SHARED_INFO_TAG);
 }
 
 static FORCEINLINE VOID
@@ -63,11 +65,11 @@ __SharedInfoFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, SHARED_INFO_TAG);
+    ExFreePoolWithTag(Buffer, XENBUS_SHARED_INFO_TAG);
 }
 
-static FORCEINLINE BOOLEAN
-__SharedInfoSetBit(
+static BOOLEAN
+SharedInfoSetBit(
     IN  ULONG_PTR volatile  *Mask,
     IN  ULONG               Bit
     )
@@ -89,8 +91,8 @@ __SharedInfoSetBit(
     return (Old & ((ULONG_PTR)1 << Bit)) ? FALSE : TRUE;    // return TRUE if we set the bit
 }
 
-static FORCEINLINE BOOLEAN
-__SharedInfoClearBit(
+static BOOLEAN
+SharedInfoClearBit(
     IN  ULONG_PTR volatile  *Mask,
     IN  ULONG               Bit
     )
@@ -112,8 +114,8 @@ __SharedInfoClearBit(
     return (Old & ((ULONG_PTR)1 << Bit)) ? TRUE : FALSE;    // return TRUE if we cleared the bit
 }
 
-static FORCEINLINE BOOLEAN
-__SharedInfoClearBitUnlocked(
+static BOOLEAN
+SharedInfoClearBitUnlocked(
     IN  ULONG_PTR   *Mask,
     IN  ULONG       Bit
     )
@@ -130,8 +132,8 @@ __SharedInfoClearBitUnlocked(
     return (Old & ((ULONG_PTR)1 << Bit)) ? TRUE : FALSE;    // return TRUE if we cleared the bit
 }
 
-static FORCEINLINE BOOLEAN
-__SharedInfoTestBit(
+static BOOLEAN
+SharedInfoTestBit(
     IN  ULONG_PTR   *Mask,
     IN  ULONG       Bit
     )
@@ -143,8 +145,8 @@ __SharedInfoTestBit(
     return (*Mask & ((ULONG_PTR)1 << Bit)) ? TRUE : FALSE;    // return TRUE if the bit is set
 }
 
-static FORCEINLINE VOID
-__SharedInfoMaskAll(
+static VOID
+SharedInfoMaskAll(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
     )
 {
@@ -153,10 +155,12 @@ __SharedInfoMaskAll(
 
     Shared = Context->Shared;
 
-    for (Port = 0; Port < EVTCHN_SELECTOR_COUNT * EVTCHN_PER_SELECTOR; Port += EVTCHN_PER_SELECTOR) {
+    for (Port = 0;
+         Port < XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+         Port += XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) {
         ULONG SelectorBit;
 
-        SelectorBit = Port / EVTCHN_PER_SELECTOR;
+        SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
 
         Shared->evtchn_mask[SelectorBit] = (ULONG_PTR)-1;
     }
@@ -164,14 +168,15 @@ __SharedInfoMaskAll(
 
 static BOOLEAN
 SharedInfoEvtchnPoll(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context,
-    IN  BOOLEAN                     (*Function)(PVOID, ULONG),
-    IN  PVOID                       Argument
+    IN  PINTERFACE              Interface,
+    IN  BOOLEAN                 (*Function)(PVOID, ULONG),
+    IN  PVOID                   Argument OPTIONAL
     )
 {
-    shared_info_t                   *Shared;
-    static ULONG                    Port;
-    BOOLEAN                         DoneSomething;
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    shared_info_t               *Shared;
+    static ULONG                Port;
+    BOOLEAN                     DoneSomething;
 
     Shared = Context->Shared;
 
@@ -195,20 +200,20 @@ SharedInfoEvtchnPoll(
             ULONG   SelectorBit;
             ULONG   PortBit;
 
-            SelectorBit = Port / EVTCHN_PER_SELECTOR;
-            PortBit = Port % EVTCHN_PER_SELECTOR;
+            SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+            PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
 
-            if (__SharedInfoTestBit(&SelectorMask, SelectorBit)) {
+            if (SharedInfoTestBit(&SelectorMask, SelectorBit)) {
                 ULONG_PTR   PortMask;
 
                 PortMask = Shared->evtchn_pending[SelectorBit];
                 PortMask &= ~Shared->evtchn_mask[SelectorBit];
 
-                while (PortMask != 0 && PortBit < EVTCHN_PER_SELECTOR) {
-                    if (__SharedInfoTestBit(&PortMask, PortBit)) {
-                        DoneSomething |= Function(Argument, (SelectorBit * EVTCHN_PER_SELECTOR) + PortBit);
+                while (PortMask != 0 && PortBit < XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) {
+                    if (SharedInfoTestBit(&PortMask, PortBit)) {
+                        DoneSomething |= Function(Argument, (SelectorBit * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) + PortBit);
 
-                        (VOID) __SharedInfoClearBitUnlocked(&PortMask, PortBit);
+                        (VOID) SharedInfoClearBitUnlocked(&PortMask, PortBit);
                     }
 
                     PortBit++;
@@ -216,12 +221,12 @@ SharedInfoEvtchnPoll(
 
                 // Are we done with this selector?
                 if (PortMask == 0)
-                    (VOID) __SharedInfoClearBitUnlocked(&SelectorMask, SelectorBit);
+                    (VOID) SharedInfoClearBitUnlocked(&SelectorMask, SelectorBit);
             }
 
-            Port = (SelectorBit + 1) * EVTCHN_PER_SELECTOR;
+            Port = (SelectorBit + 1) * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
 
-            if (Port >= EVTCHN_SELECTOR_COUNT * EVTCHN_PER_SELECTOR)
+            if (Port >= XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR)
                 Port = 0;
         }
     }
@@ -231,63 +236,66 @@ SharedInfoEvtchnPoll(
 
 static VOID
 SharedInfoEvtchnAck(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context,
-    IN  ULONG                       Port
+    IN  PINTERFACE              Interface,
+    IN  ULONG                   Port
     )
 {
-    shared_info_t                   *Shared;
-    ULONG                           SelectorBit;
-    ULONG                           PortBit;
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    shared_info_t               *Shared;
+    ULONG                       SelectorBit;
+    ULONG                       PortBit;
 
     Shared = Context->Shared;
 
-    SelectorBit = Port / EVTCHN_PER_SELECTOR;
-    PortBit = Port % EVTCHN_PER_SELECTOR;
+    SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+    PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
 
-    (VOID) __SharedInfoClearBit(&Shared->evtchn_pending[SelectorBit], PortBit);
+    (VOID) SharedInfoClearBit(&Shared->evtchn_pending[SelectorBit], PortBit);
 }
 
 static VOID
 SharedInfoEvtchnMask(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context,
-    IN  ULONG                       Port
+    IN  PINTERFACE              Interface,
+    IN  ULONG                   Port
     )
 {
-    shared_info_t                   *Shared;
-    ULONG                           SelectorBit;
-    ULONG                           PortBit;
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    shared_info_t               *Shared;
+    ULONG                       SelectorBit;
+    ULONG                       PortBit;
 
     Shared = Context->Shared;
 
-    SelectorBit = Port / EVTCHN_PER_SELECTOR;
-    PortBit = Port % EVTCHN_PER_SELECTOR;
+    SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+    PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
 
-    (VOID) __SharedInfoSetBit(&Shared->evtchn_mask[SelectorBit], PortBit);
+    (VOID) SharedInfoSetBit(&Shared->evtchn_mask[SelectorBit], PortBit);
 }
 
 static BOOLEAN
 SharedInfoEvtchnUnmask(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context,
-    IN  ULONG                       Port
+    IN  PINTERFACE              Interface,
+    IN  ULONG                   Port
     )
 {
-    shared_info_t                   *Shared;
-    ULONG                           SelectorBit;
-    ULONG                           PortBit;
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    shared_info_t               *Shared;
+    ULONG                       SelectorBit;
+    ULONG                       PortBit;
 
     Shared = Context->Shared;
 
-    SelectorBit = Port / EVTCHN_PER_SELECTOR;
-    PortBit = Port % EVTCHN_PER_SELECTOR;
+    SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+    PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
 
     // Check whether the port is masked
-    if (!__SharedInfoClearBit(&Shared->evtchn_mask[SelectorBit], PortBit))
+    if (!SharedInfoClearBit(&Shared->evtchn_mask[SelectorBit], PortBit))
         return FALSE;
 
     KeMemoryBarrier();
 
     // If we cleared the mask then check whether something was pending
-    if (!__SharedInfoClearBit(&Shared->evtchn_pending[SelectorBit], PortBit))
+    if (!SharedInfoClearBit(&Shared->evtchn_pending[SelectorBit], PortBit))
         return FALSE;
 
     return TRUE;
@@ -295,17 +303,18 @@ SharedInfoEvtchnUnmask(
 
 static LARGE_INTEGER
 SharedInfoGetTime(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    IN  PINTERFACE              Interface
     )
 {
-    shared_info_t                   *Shared;
-    ULONG                           Version;
-    ULONGLONG                       Seconds;
-    ULONGLONG                       NanoSeconds;
-    LARGE_INTEGER                   Now;
-    TIME_FIELDS                     Time;
-    KIRQL                           Irql;
-    NTSTATUS                        status;
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    shared_info_t               *Shared;
+    ULONG                       Version;
+    ULONGLONG                   Seconds;
+    ULONGLONG                   NanoSeconds;
+    LARGE_INTEGER               Now;
+    TIME_FIELDS                 Time;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
 
     // Make sure we don't suspend
     KeRaiseIrql(DISPATCH_LEVEL, &Irql); 
@@ -360,33 +369,7 @@ SharedInfoGetTime(
 }
 
 static VOID
-SharedInfoAcquire(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-SharedInfoRelease(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define SHARED_INFO_OPERATION(_Type, _Name, _Arguments) \
-        SharedInfo ## _Name,
-
-static XENBUS_SHARED_INFO_OPERATIONS  Operations = {
-    DEFINE_SHARED_INFO_OPERATIONS
-};
-
-#undef SHARED_INFO_OPERATION
-
-static FORCEINLINE VOID
-__SharedInfoMap(
+SharedInfoMap(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
     )
 {
@@ -407,18 +390,26 @@ __SharedInfoMap(
 
 #undef  HVM_PARAM_32BIT
 
-    status = MemoryAddToPhysmap(Context->Pfn,
+    status = MemoryAddToPhysmap((PFN_NUMBER)(Context->Address.QuadPart >> PAGE_SHIFT),
                                 XENMAPSPACE_shared_info,
                                 0);
     ASSERT(NT_SUCCESS(status));
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "SHARED_INFO: MAP XENMAPSPACE_shared_info @ %08x.%08x\n",
+              Context->Address.HighPart,
+              Context->Address.LowPart);
 }
 
-static FORCEINLINE VOID
-__SharedInfoUnmap(
+static VOID
+SharedInfoUnmap(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
     )
 {
     UNREFERENCED_PARAMETER(Context);
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "SHARED_INFO: UNMAP XENMAPSPACE_shared_info\n");
 
     // Not clear what to do here
 }
@@ -430,8 +421,8 @@ SharedInfoSuspendCallbackEarly(
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Argument;
 
-    __SharedInfoMap(Context);
-    __SharedInfoMaskAll(Context);
+    SharedInfoMap(Context);
+    SharedInfoMaskAll(Context);
 }
 
 static VOID
@@ -442,11 +433,11 @@ SharedInfoDebugCallback(
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Argument;
 
-    DEBUG(Printf,
-          Context->DebugInterface,
-          Context->DebugCallback,
-          "Pfn = %p\n",
-          (PVOID)Context->Pfn);
+    XENBUS_DEBUG(Printf,
+                 &Context->DebugInterface,
+                 "Address = %08x.%08x\n",
+                 Context->Address.HighPart,
+                 Context->Address.LowPart);
 
     if (!Crashing) {
         shared_info_t   *Shared;
@@ -456,178 +447,300 @@ SharedInfoDebugCallback(
 
         KeMemoryBarrier();
 
-        DEBUG(Printf,
-              Context->DebugInterface,
-              Context->DebugCallback,
-              "PENDING: %s SELECTOR MASK: %p\n",
-              Shared->vcpu_info[0].evtchn_upcall_pending ? "TRUE" : "FALSE",
-              (PVOID)Shared->vcpu_info[0].evtchn_pending_sel);
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "CPU: PENDING: %s SELECTOR MASK: %p\n",
+                     Shared->vcpu_info[0].evtchn_upcall_pending ? "TRUE" : "FALSE",
+                     (PVOID)Shared->vcpu_info[0].evtchn_pending_sel);
 
-        for (Selector = 0; Selector < EVTCHN_SELECTOR_COUNT; Selector++) {
-            DEBUG(Printf,
-                  Context->DebugInterface,
-                  Context->DebugCallback,
-                  "PENDING: [%04x - %04x]: %p\n",
-                  Selector * EVTCHN_PER_SELECTOR,
-                  ((Selector + 1) * EVTCHN_PER_SELECTOR) - 1,
-                  (PVOID)Shared->evtchn_pending[Selector]);
+        for (Selector = 0; Selector < XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT; Selector += 4) {
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         " PENDING: [%04x - %04x]: %p %p %p %p\n",
+                         Selector * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR,
+                         ((Selector + 4) * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) - 1,
+                         (PVOID)Shared->evtchn_pending[Selector],
+                         (PVOID)Shared->evtchn_pending[Selector + 1],
+                         (PVOID)Shared->evtchn_pending[Selector + 2],
+                         (PVOID)Shared->evtchn_pending[Selector + 3]);
 
-            DEBUG(Printf,
-                  Context->DebugInterface,
-                  Context->DebugCallback,
-                  " MASKED: [%04x - %04x]: %p\n",
-                  Selector * EVTCHN_PER_SELECTOR,
-                  ((Selector + 1) * EVTCHN_PER_SELECTOR) - 1,
-                  (PVOID)Shared->evtchn_mask[Selector]);
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "UNMASKED: [%04x - %04x]: %p %p %p %p\n",
+                         Selector * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR,
+                         ((Selector + 4) * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) - 1,
+                         (PVOID)(~Shared->evtchn_mask[Selector]),
+                         (PVOID)(~Shared->evtchn_mask[Selector + 1]),
+                         (PVOID)(~Shared->evtchn_mask[Selector + 2]),
+                         (PVOID)(~Shared->evtchn_mask[Selector + 3]));
         }
     }
 }
 
-NTSTATUS
-SharedInfoInitialize(
-    IN  PXENBUS_FDO                     Fdo,
-    OUT PXENBUS_SHARED_INFO_INTERFACE   Interface
+static NTSTATUS
+SharedInfoAcquire(
+    IN  PINTERFACE              Interface
     )
 {
-    PXENBUS_RESOURCE                    Memory;
-    PHYSICAL_ADDRESS                    Address;
-    PXENBUS_SHARED_INFO_CONTEXT         Context;
-    NTSTATUS                            status;
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    PXENBUS_FDO                 Fdo = Context->Fdo;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
 
     Trace("====>\n");
 
-    Context = __SharedInfoAllocate(sizeof (XENBUS_SHARED_INFO_CONTEXT));
-
-    status = STATUS_NO_MEMORY;
-    if (Context == NULL)
+    status = FdoAllocateIoSpace(Fdo, PAGE_SIZE, &Context->Address);
+    if (!NT_SUCCESS(status))
         goto fail1;
 
-    Memory = FdoGetResource(Fdo, MEMORY_RESOURCE);
-    Context->Pfn = (PFN_NUMBER)(Memory->Translated.u.Memory.Start.QuadPart >> PAGE_SHIFT);
+    SharedInfoMap(Context);
 
-    __SharedInfoMap(Context);
-
-    Memory->Translated.u.Memory.Start.QuadPart += PAGE_SIZE;
-
-    ASSERT3U(Memory->Translated.u.Memory.Length, >=, PAGE_SIZE);
-    Memory->Translated.u.Memory.Length -= PAGE_SIZE;
-
-    Address.QuadPart = (ULONGLONG)Context->Pfn << PAGE_SHIFT;
-    Context->Shared = (shared_info_t *)MmMapIoSpace(Address, PAGE_SIZE, MmCached);
+    Context->Shared = (shared_info_t *)MmMapIoSpace(Context->Address,
+                                                    PAGE_SIZE,
+                                                    MmCached);
 
     status = STATUS_UNSUCCESSFUL;
     if (Context->Shared == NULL)
         goto fail2;
 
-    Info("shared_info_t *: %p\n", Context->Shared);
+    SharedInfoMaskAll(Context);
 
-    __SharedInfoMaskAll(Context);
-
-    Context->SuspendInterface = FdoGetSuspendInterface(Fdo);
-
-    SUSPEND(Acquire, Context->SuspendInterface);
-
-    status = SUSPEND(Register,
-                     Context->SuspendInterface,
-                     SUSPEND_CALLBACK_EARLY,
-                     SharedInfoSuspendCallbackEarly,
-                     Context,
-                     &Context->SuspendCallbackEarly);
+    status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail3;   
 
-    Context->DebugInterface = FdoGetDebugInterface(Fdo);
-
-    DEBUG(Acquire, Context->DebugInterface);
-
-    status = DEBUG(Register,
-                   Context->DebugInterface,
-                   __MODULE__ "|SHARED_INFO",
-                   SharedInfoDebugCallback,
-                   Context,
-                   &Context->DebugCallback);
+    status = XENBUS_SUSPEND(Register,
+                            &Context->SuspendInterface,
+                            SUSPEND_CALLBACK_EARLY,
+                            SharedInfoSuspendCallbackEarly,
+                            Context,
+                            &Context->SuspendCallbackEarly);
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
+    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
+    if (!NT_SUCCESS(status))
+        goto fail5;
+
+    status = XENBUS_DEBUG(Register,
+                          &Context->DebugInterface,
+                          __MODULE__ "|SHARED_INFO",
+                          SharedInfoDebugCallback,
+                          Context,
+                          &Context->DebugCallback);
+    if (!NT_SUCCESS(status))
+        goto fail6;
 
     Trace("<====\n");
 
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     return STATUS_SUCCESS;
+
+fail6:
+    Error("fail6\n");
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
+fail5:
+    Error("fail5\n");
+
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
+    Context->SuspendCallbackEarly = NULL;
 
 fail4:
     Error("fail4\n");
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
-
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
-    Context->SuspendCallbackEarly = NULL;
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
 fail3:
     Error("fail3\n");
 
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
-
+    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
     Context->Shared = NULL;
 
 fail2:
     Error("fail2\n");
 
-    __SharedInfoUnmap(Context);
+    SharedInfoUnmap(Context);
 
-    Context->Pfn = 0;
-
-    ASSERT(IsZeroMemory(Context, sizeof (XENBUS_SHARED_INFO_CONTEXT)));
-    __SharedInfoFree(Context);
+    FdoFreeIoSpace(Fdo, Context->Address, PAGE_SIZE);
+    Context->Address.QuadPart = 0;
 
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    RtlZeroMemory(Interface, sizeof (XENBUS_SHARED_INFO_INTERFACE));
+    --Context->References;
+    ASSERT3U(Context->References, ==, 0);
+    KeReleaseSpinLock(&Context->Lock, Irql);
 
     return status;
 }
 
-VOID
-SharedInfoTeardown(
-    IN OUT  PXENBUS_SHARED_INFO_INTERFACE   Interface
+static VOID
+SharedInfoRelease (
+    IN  PINTERFACE              Interface
     )
 {
-    PXENBUS_SHARED_INFO_CONTEXT             Context = Interface->Context;
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    PXENBUS_FDO                 Fdo = Context->Fdo;
+    KIRQL                       Irql;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
 
     Trace("====>\n");
 
-    DEBUG(Deregister,
-          Context->DebugInterface,
-          Context->DebugCallback);
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
     Context->DebugCallback = NULL;
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
+    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
     Context->Shared = NULL;
 
-    __SharedInfoUnmap(Context);
+    SharedInfoUnmap(Context);
 
-    Context->Pfn = 0;
+    FdoFreeIoSpace(Fdo, Context->Address, PAGE_SIZE);
+    Context->Address.QuadPart = 0;
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENBUS_SHARED_INFO_INTERFACE_V1 SharedInfoInterfaceVersion1 = {
+    { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V1), 1, NULL, NULL, NULL },
+    SharedInfoAcquire,
+    SharedInfoRelease,
+    SharedInfoEvtchnPoll,
+    SharedInfoEvtchnAck,
+    SharedInfoEvtchnMask,
+    SharedInfoEvtchnUnmask,
+    SharedInfoGetTime
+};
+                     
+NTSTATUS
+SharedInfoInitialize(
+    IN  PXENBUS_FDO                 Fdo,
+    OUT PXENBUS_SHARED_INFO_CONTEXT *Context
+    )
+{
+    NTSTATUS                        status;
+
+    Trace("====>\n");
+
+    *Context = __SharedInfoAllocate(sizeof (XENBUS_SHARED_INFO_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
+                                 XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
+                                 (PINTERFACE)&(*Context)->SuspendInterface,
+                                 sizeof ((*Context)->SuspendInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->SuspendInterface.Interface.Context != NULL);
+
+    status = DebugGetInterface(FdoGetDebugContext(Fdo),
+                               XENBUS_DEBUG_INTERFACE_VERSION_MAX,
+                               (PINTERFACE)&(*Context)->DebugInterface,
+                               sizeof ((*Context)->DebugInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
+
+    (*Context)->Fdo = Fdo;
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
+SharedInfoGetInterface(
+    IN      PXENBUS_SHARED_INFO_CONTEXT Context,
+    IN      ULONG                       Version,
+    IN OUT  PINTERFACE                  Interface,
+    IN      ULONG                       Size
+    )
+{
+    NTSTATUS                            status;
+
+    ASSERT(Context != NULL);
+
+    switch (Version) {
+    case 1: {
+        struct _XENBUS_SHARED_INFO_INTERFACE_V1 *SharedInfoInterface;
+
+        SharedInfoInterface = (struct _XENBUS_SHARED_INFO_INTERFACE_V1 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V1))
+            break;
+
+        *SharedInfoInterface = SharedInfoInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
+
+VOID
+SharedInfoTeardown(
+    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    )
+{
+    Trace("====>\n");
+
+    Context->Fdo = NULL;
+
+    RtlZeroMemory(&Context->DebugInterface,
+                  sizeof (XENBUS_DEBUG_INTERFACE));
+
+    RtlZeroMemory(&Context->SuspendInterface,
+                  sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_SHARED_INFO_CONTEXT)));
     __SharedInfoFree(Context);
-
-    RtlZeroMemory(Interface, sizeof (XENBUS_SHARED_INFO_INTERFACE));
 
     Trace("<====\n");
 }

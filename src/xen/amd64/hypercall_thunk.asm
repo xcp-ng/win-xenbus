@@ -1,13 +1,13 @@
                         page    ,132
-                        title   Hypercall Gates
+                        title   Hypercall Thunks
 
                         .code
 
                         extrn   Hypercall:qword
 
-                        ; uintptr_t __stdcall hypercall_gate_2(uint32_t ord, uintptr_t arg1, uintptr_t arg2);
-                        public hypercall_gate_2
-hypercall_gate_2        proc
+                        ; uintptr_t __stdcall hypercall2(uint32_t ord, uintptr_t arg1, uintptr_t arg2);
+                        public hypercall2
+hypercall2        	proc
 	                push rdi
 	                push rsi
 	                mov rdi, rdx                            ; arg1
@@ -19,11 +19,11 @@ hypercall_gate_2        proc
 	                pop rsi
 	                pop rdi
 	                ret
-hypercall_gate_2        endp
+hypercall2        	endp
 
-                        ; uintptr_t __stdcall hypercall_gate_3(uint32_t ord, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
-                        public hypercall_gate_3
-hypercall_gate_3 proc
+                        ; uintptr_t __stdcall hypercall3(uint32_t ord, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
+                        public hypercall3
+hypercall3 		proc
 	                push rdi
 	                push rsi
 	                mov rdi, rdx                            ; arg1
@@ -36,7 +36,7 @@ hypercall_gate_3 proc
 	                pop rsi
 	                pop rdi
 	                ret
-hypercall_gate_3 endp
+hypercall3 		endp
 
                         end
 

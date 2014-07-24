@@ -36,40 +36,32 @@
 #include <xen.h>
 #include <evtchn_interface.h>
 
+typedef struct _XENBUS_EVTCHN_CONTEXT  XENBUS_EVTCHN_CONTEXT, *PXENBUS_EVTCHN_CONTEXT;
+
 #include "fdo.h"
-
-struct _XENBUS_EVTCHN_INTERFACE {
-    PXENBUS_EVTCHN_OPERATIONS   Operations;
-    PXENBUS_EVTCHN_CONTEXT      Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENBUS_EVTCHN_INTERFACE, Operations) == (ULONG_PTR)EVTCHN_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENBUS_EVTCHN_INTERFACE, Context) == (ULONG_PTR)EVTCHN_CONTEXT(NULL));
 
 extern NTSTATUS
 EvtchnInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_EVTCHN_INTERFACE    Interface
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_EVTCHN_CONTEXT  *Context
     );
 
-extern BOOLEAN
-EvtchnInterrupt(
-    IN  PXENBUS_EVTCHN_INTERFACE    Interface
-    );
-
-extern VOID
-EvtchnEnable(
-    IN  PXENBUS_EVTCHN_INTERFACE    Interface
-    );
-
-extern VOID
-EvtchnDisable(
-    IN  PXENBUS_EVTCHN_INTERFACE    Interface
+extern NTSTATUS
+EvtchnGetInterface(
+    IN      PXENBUS_EVTCHN_CONTEXT  Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 EvtchnTeardown(
-    IN OUT  PXENBUS_EVTCHN_INTERFACE    Interface
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    );
+
+extern BOOLEAN
+EvtchnInterrupt(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
     );
 
 #endif  // _XENBUS_EVTCHN_H

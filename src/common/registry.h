@@ -109,6 +109,12 @@ RegistryEnumerateValues(
     );
 
 extern NTSTATUS
+RegistryDeleteValue(
+    IN  HANDLE      Key,
+    IN  PCHAR       Name
+    );
+
+extern NTSTATUS
 RegistryQueryDwordValue(
     IN  HANDLE          Key,
     IN  PCHAR           Name,
@@ -127,6 +133,12 @@ RegistryQuerySzValue(
     IN  HANDLE          Key,
     IN  PCHAR           Name,
     OUT PANSI_STRING    *Array
+    );
+
+extern NTSTATUS
+RegistryQueryKeyName(
+    IN  HANDLE              Key,
+    OUT PANSI_STRING        *Array
     );
 
 extern NTSTATUS

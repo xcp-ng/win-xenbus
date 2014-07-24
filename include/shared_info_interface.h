@@ -29,94 +29,117 @@
  * SUCH DAMAGE.
  */
 
+/*! \file shared_info_interface.h
+    \brief XENBUS SHARED_INFO Interface
+
+    This interface provides access to the hypervisor shared info
+*/
+
 #ifndef _XENBUS_SHARED_INFO_INTERFACE_H
 #define _XENBUS_SHARED_INFO_INTERFACE_H
 
-#define DEFINE_SHARED_INFO_OPERATIONS                                                    \
-        SHARED_INFO_OPERATION(VOID,                                                      \
-                              Acquire,                                                   \
-                              (                                                          \
-                              IN  PXENBUS_SHARED_INFO_CONTEXT Context                    \
-                              )                                                          \
-                              )                                                          \
-        SHARED_INFO_OPERATION(VOID,                                                      \
-                              Release,                                                   \
-                              (                                                          \
-                              IN  PXENBUS_SHARED_INFO_CONTEXT Context                    \
-                              )                                                          \
-                              )                                                          \
-        SHARED_INFO_OPERATION(BOOLEAN,                                                   \
-                              EvtchnPoll,                                                \
-                              (                                                          \
-                              IN  PXENBUS_SHARED_INFO_CONTEXT Context,                   \
-                              IN  BOOLEAN                     (*Function)(PVOID, ULONG), \
-                              IN  PVOID                       Argument                   \
-                              )                                                          \
-                              )                                                          \
-        SHARED_INFO_OPERATION(VOID,                                                      \
-                              EvtchnAck,                                                 \
-                              (                                                          \
-                              IN  PXENBUS_SHARED_INFO_CONTEXT Context,                   \
-                              IN  ULONG                       Port                       \
-                              )                                                          \
-                              )                                                          \
-        SHARED_INFO_OPERATION(VOID,                                                      \
-                              EvtchnMask,                                                \
-                              (                                                          \
-                              IN  PXENBUS_SHARED_INFO_CONTEXT Context,                   \
-                              IN  ULONG                       Port                       \
-                              )                                                          \
-                              )                                                          \
-        SHARED_INFO_OPERATION(BOOLEAN,                                                   \
-                              EvtchnUnmask,                                              \
-                              (                                                          \
-                              IN  PXENBUS_SHARED_INFO_CONTEXT Context,                   \
-                              IN  ULONG                       Port                       \
-                              )                                                          \
-                              )                                                          \
-        SHARED_INFO_OPERATION(LARGE_INTEGER,                                             \
-                              GetTime,                                                   \
-                              (                                                          \
-                              IN  PXENBUS_SHARED_INFO_CONTEXT Context                    \
-                              )                                                          \
-                              )
+#ifndef _WINDLL
 
-typedef struct _XENBUS_SHARED_INFO_CONTEXT  XENBUS_SHARED_INFO_CONTEXT, *PXENBUS_SHARED_INFO_CONTEXT;
+#define XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR     (sizeof (ULONG_PTR) * 8)
+#define XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT   (RTL_FIELD_SIZE(shared_info_t, evtchn_pending) / sizeof (ULONG_PTR))
 
-#define SHARED_INFO_OPERATION(_Type, _Name, _Arguments) \
-        _Type (*SHARED_INFO_ ## _Name) _Arguments;
+/*! \typedef XENBUS_SHARED_INFO_ACQUIRE
+    \brief Acquire a reference to the SHARED_INFO interface
 
-typedef struct _XENBUS_SHARED_INFO_OPERATIONS {
-    DEFINE_SHARED_INFO_OPERATIONS
-} XENBUS_SHARED_INFO_OPERATIONS, *PXENBUS_SHARED_INFO_OPERATIONS;
+    \param Interface The interface header
+*/  
+typedef NTSTATUS
+(*XENBUS_SHARED_INFO_ACQUIRE)(
+    IN  PINTERFACE  Interface
+    );
 
-#undef SHARED_INFO_OPERATION
+/*! \typedef XENBUS_SHARED_INFO_RELEASE
+    \brief Release a reference to the SHARED_INFO interface
 
-typedef struct _XENBUS_SHARED_INFO_INTERFACE XENBUS_SHARED_INFO_INTERFACE, *PXENBUS_SHARED_INFO_INTERFACE;
+    \param Interface The interface header
+*/  
+typedef VOID
+(*XENBUS_SHARED_INFO_RELEASE)(
+    IN  PINTERFACE  Interface
+    );
 
-// {05DC267C-36CA-44a3-A124-B9BA9FE3780B}
-DEFINE_GUID(GUID_SHARED_INFO_INTERFACE, 
-            0x5dc267c,
-            0x36ca,
-            0x44a3,
-            0xa1,
-            0x24,
-            0xb9,
-            0xba,
-            0x9f,
-            0xe3,
-            0x78,
-            0xb);
+/*! \typedef XENBUS_SHARED_INFO_EVTCHN_POLL
+    \brief Private method for EVTCHN inerface
+*/  
+typedef BOOLEAN
+(*XENBUS_SHARED_INFO_EVTCHN_POLL)(
+    IN  PINTERFACE  Interface,
+    IN  BOOLEAN     (*Function)(PVOID, ULONG),
+    IN  PVOID       Argument
+    );
 
-#define SHARED_INFO_INTERFACE_VERSION   4
+/*! \typedef XENBUS_SHARED_INFO_EVTCHN_ACK
+    \brief Private method for EVTCHN inerface
+*/  
+typedef VOID
+(*XENBUS_SHARED_INFO_EVTCHN_ACK)(
+    IN  PINTERFACE  Interface,
+    IN  ULONG       Port
+    );
 
-#define SHARED_INFO_OPERATIONS(_Interface) \
-        (PXENBUS_SHARED_INFO_OPERATIONS *)((ULONG_PTR)(_Interface))
+/*! \typedef XENBUS_SHARED_INFO_EVTCHN_MASK
+    \brief Private method for EVTCHN inerface
+*/  
+typedef VOID
+(*XENBUS_SHARED_INFO_EVTCHN_MASK)(
+    IN  PINTERFACE  Interface,
+    IN  ULONG       Port
+    );
 
-#define SHARED_INFO_CONTEXT(_Interface) \
-        (PXENBUS_SHARED_INFO_CONTEXT *)((ULONG_PTR)(_Interface) + sizeof (PVOID))
+/*! \typedef XENBUS_SHARED_INFO_EVTCHN_UNMASK
+    \brief Private method for EVTCHN inerface
+*/  
+typedef BOOLEAN
+(*XENBUS_SHARED_INFO_EVTCHN_UNMASK)(
+    IN  PINTERFACE  Interface,
+    IN  ULONG       Port
+    );
 
-#define SHARED_INFO(_Operation, _Interface, ...) \
-        (*SHARED_INFO_OPERATIONS(_Interface))->SHARED_INFO_ ## _Operation((*SHARED_INFO_CONTEXT(_Interface)), __VA_ARGS__)
+/*! \typedef XENBUS_SHARED_INFO_GET_TIME
+    \brief Return the wallclock time from the shared info
+
+    \param Interface The interface header
+    \return The wallclock time in units of 100ns
+*/  
+typedef LARGE_INTEGER
+(*XENBUS_SHARED_INFO_GET_TIME)(
+    IN  PINTERFACE  Interface
+    );
+
+// {7E73C34F-1640-4649-A8F3-263BC930A004}
+DEFINE_GUID(GUID_XENBUS_SHARED_INFO_INTERFACE, 
+0x7e73c34f, 0x1640, 0x4649, 0xa8, 0xf3, 0x26, 0x3b, 0xc9, 0x30, 0xa0, 0x4);
+
+/*! \struct _XENBUS_SHARED_INFO_INTERFACE_V1
+    \brief SHARED_INFO interface version 1
+*/
+struct _XENBUS_SHARED_INFO_INTERFACE_V1 {
+    INTERFACE                           Interface;
+    XENBUS_SHARED_INFO_ACQUIRE          SharedInfoAcquire;
+    XENBUS_SHARED_INFO_RELEASE          SharedInfoRelease;
+    XENBUS_SHARED_INFO_EVTCHN_POLL      SharedInfoEvtchnPoll;
+    XENBUS_SHARED_INFO_EVTCHN_ACK       SharedInfoEvtchnAck;
+    XENBUS_SHARED_INFO_EVTCHN_MASK      SharedInfoEvtchnMask;
+    XENBUS_SHARED_INFO_EVTCHN_UNMASK    SharedInfoEvtchnUnmask;
+    XENBUS_SHARED_INFO_GET_TIME         SharedInfoGetTime;
+};
+
+typedef struct _XENBUS_SHARED_INFO_INTERFACE_V1 XENBUS_SHARED_INFO_INTERFACE, *PXENBUS_SHARED_INFO_INTERFACE;
+
+/*! \def XENBUS_SHARED_INFO
+    \brief Macro at assist in method invocation
+*/
+#define XENBUS_SHARED_INFO(_Method, _Interface, ...)    \
+    (_Interface)->SharedInfo ## _Method((PINTERFACE)(_Interface), __VA_ARGS__)
+
+#endif  // _WINDLL
+
+#define XENBUS_SHARED_INFO_INTERFACE_VERSION_MIN    1
+#define XENBUS_SHARED_INFO_INTERFACE_VERSION_MAX    1
 
 #endif  // _XENBUS_SHARED_INFO_H

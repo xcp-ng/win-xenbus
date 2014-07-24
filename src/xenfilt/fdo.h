@@ -34,6 +34,7 @@
 
 #include <ntddk.h>
 
+#include "driver.h"
 #include "types.h"
 
 typedef struct _XENFILT_FDO XENFILT_FDO, *PXENFILT_FDO;
@@ -55,30 +56,16 @@ FdoGetPrefix(
     IN  PXENFILT_FDO    Fdo
     );
 
-#include "emulated.h"
-
-extern PXENFILT_EMULATED_INTERFACE
-FdoGetEmulatedInterface(
-    IN  PXENFILT_FDO    Fdo
-    );
-
-#include "unplug.h"
-
-extern PXENFILT_UNPLUG_INTERFACE
-FdoGetUnplugInterface(
-    IN  PXENFILT_FDO    Fdo
-    );
-
 extern VOID
 FdoAddPhysicalDeviceObject(
     IN  PXENFILT_FDO    Fdo,
-    IN  PDEVICE_OBJECT  DeviceObject
+    IN  PXENFILT_PDO    Pdo
     );
 
 extern VOID
 FdoRemovePhysicalDeviceObject(
     IN  PXENFILT_FDO    Fdo,
-    IN  PDEVICE_OBJECT  DeviceObject
+    IN  PXENFILT_PDO    Pdo
     );
 
 extern VOID
@@ -88,6 +75,16 @@ FdoAcquireMutex(
 
 extern VOID
 FdoReleaseMutex(
+    IN  PXENFILT_FDO    Fdo
+    );
+
+extern PDEVICE_OBJECT
+FdoGetDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    );
+
+extern BOOLEAN
+FdoHasEnumerated(
     IN  PXENFILT_FDO    Fdo
     );
 

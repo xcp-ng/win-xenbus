@@ -72,8 +72,8 @@ xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll
 CopyFiles=XenBus_Copyfiles
 
 [XenBus_Inst.Services] 
-AddService=xenbus,0x02,XenBus_Service,
 AddService=xenfilt,,XenFilt_Service,
+AddService=xenbus,0x02,XenBus_Service,
 
 [XenBus_Service] 
 DisplayName=%XenBusDesc%
@@ -82,12 +82,15 @@ StartType=%SERVICE_BOOT_START%
 ErrorControl=%SERVICE_ERROR_NORMAL% 
 ServiceBinary=%12%\xenbus.sys 
 LoadOrderGroup="Boot Bus Extender"
-AddReg = XenBus_Parameters
+AddReg = XenBus_Parameters, XenBus_Interfaces
 
 [XenBus_Parameters]
 HKR,"Parameters",,0x00000010
 HKR,"Parameters","SupportedClasses",0x00010000,"VIF","VBD","IFACE"
 HKR,"Parameters","SyntheticClasses",0x00010000,"IFACE"
+
+[XenBus_Interfaces]
+HKR,"Interfaces",,0x00000010
 
 [XenFilt_Service] 
 DisplayName=%XenFiltDesc%
@@ -96,7 +99,7 @@ StartType=%SERVICE_BOOT_START%
 ErrorControl=%SERVICE_ERROR_NORMAL% 
 ServiceBinary=%12%\xenfilt.sys 
 LoadOrderGroup="Boot Bus Extender"
-AddReg = XenFilt_Parameters, XenFilt_Unplug
+AddReg = XenFilt_Parameters, XenFilt_Unplug, XenFilt_Interfaces
 
 [XenFilt_Parameters]
 HKR,"Parameters",,0x00000010
@@ -105,6 +108,9 @@ HKR,"Parameters","PCIIDE\IDEChannel",0x00000000,"DISK"
 
 [XenFilt_Unplug]
 HKR,"Unplug",,0x00000010
+
+[XenFilt_Interfaces]
+HKR,"Interfaces",,0x00000010
 
 [XenBus_Inst.CoInstallers]
 CopyFiles=CoInst_CopyFiles

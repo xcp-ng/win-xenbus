@@ -44,22 +44,41 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-#pragma warning(push)
-#pragma warning(disable:28138)  // Constant argument should be variable
-
 struct _XENFILT_UNPLUG_CONTEXT {
+    KSPIN_LOCK  Lock;
     LONG        References;
-    HIGH_LOCK   Lock;
+    HIGH_LOCK   UnplugLock;
     BOOLEAN     BlackListed;
-    BOOLEAN     UnpluggedDisks;
-    BOOLEAN     UnpluggedNics;
+    BOOLEAN     UnplugDisks;
+    BOOLEAN     UnplugNics;
     BOOLEAN     BootEmulated;
 };
 
-static XENFILT_UNPLUG_CONTEXT   UnplugContext;
+typedef enum _XENFILT_UNPLUG_TYPE {
+    XENFILT_UNPLUG_DISKS = 0,
+    XENFILT_UNPLUG_NICS
+} XENFILT_UNPLUG_TYPE, *PXENFILT_UNPLUG_TYPE;
+
+#define XENFILT_UNPLUG_TAG  'LPNU'
+
+static FORCEINLINE PVOID
+__UnplugAllocate(
+    IN  ULONG   Length
+    )
+{
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENFILT_UNPLUG_TAG);
+}
 
 static FORCEINLINE VOID
-__UnplugGetFlags(
+__UnplugFree(
+    IN  PVOID   Buffer
+    )
+{
+    ExFreePoolWithTag(Buffer, XENFILT_UNPLUG_TAG);
+}
+
+static VOID
+UnplugGetFlags(
     IN  PXENFILT_UNPLUG_CONTEXT Context
     )
 {
@@ -70,6 +89,7 @@ __UnplugGetFlags(
     Context->BootEmulated = FALSE;
 
     Key = DriverGetParametersKey();
+
     status = RegistryQueryDwordValue(Key,
                                      "BootEmulated",
                                      &Value);
@@ -82,48 +102,50 @@ __UnplugGetFlags(
     }
 }
 
-static FORCEINLINE VOID
-__UnplugDisksLocked(
-    IN  PXENFILT_UNPLUG_CONTEXT Context
+static VOID
+UnplugRequest(
+    IN  PXENFILT_UNPLUG_CONTEXT Context,
+    IN  XENFILT_UNPLUG_TYPE     Type
     )
 {
-    if (Context->BootEmulated) {
-        WRITE_PORT_USHORT((PUSHORT)0x10, 0x0004);
+    switch (Type) {
+    case XENFILT_UNPLUG_DISKS:
+        if (Context->BootEmulated) {
+#pragma prefast(suppress:28138)
+            WRITE_PORT_USHORT((PUSHORT)0x10, 0x0004);
 
-        LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: AUX DISKS\n");
-    } else {
-        WRITE_PORT_USHORT((PUSHORT)0x10, 0x0001);
+            LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: AUX DISKS\n");
+        } else {
+#pragma prefast(suppress:28138)
+            WRITE_PORT_USHORT((PUSHORT)0x10, 0x0001);
 
-        LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: DISKS\n");
+            LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: DISKS\n");
+        }
+        break;
+    case XENFILT_UNPLUG_NICS:
+#pragma prefast(suppress:28138)
+        WRITE_PORT_USHORT((PUSHORT)0x10, 0x0002);
+
+        LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: NICS\n");
+        break;
+    default:
+        ASSERT(FALSE);
     }
 }
 
-static FORCEINLINE VOID
-__UnplugNicsLocked(
+static NTSTATUS
+UnplugPreamble(
+    IN  PXENFILT_UNPLUG_CONTEXT Context
     )
 {
-    WRITE_PORT_USHORT((PUSHORT)0x10, 0x0002);
-
-    LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: NICS\n");
-}
-
-static FORCEINLINE NTSTATUS
-__UnplugPreamble(
-    IN  PXENFILT_UNPLUG_CONTEXT Context,
-    IN  BOOLEAN                 Locked
-    )
-{
-    KIRQL                       Irql = PASSIVE_LEVEL;
     USHORT                      Magic;
     UCHAR                       Version;
     NTSTATUS                    status;
 
-    if (!Locked)
-        AcquireHighLock(&Context->Lock, &Irql);
-
     // See docs/misc/hvm-emulated-unplug.markdown for details of the
     // protocol in use here
 
+#pragma prefast(suppress:28138)
     Magic = READ_PORT_USHORT((PUSHORT)0x10);
     
     if (Magic == 0xd249) {
@@ -135,14 +157,19 @@ __UnplugPreamble(
     if (Magic != 0x49d2)
         goto fail1;
 
+#pragma prefast(suppress:28138)
     Version = READ_PORT_UCHAR((PUCHAR)0x12);
     if (Version != 0) {
+#pragma prefast(suppress:28138)
         WRITE_PORT_USHORT((PUSHORT)0x12, 0xFFFF);   // FIXME
+
+#pragma prefast(suppress:28138)
         WRITE_PORT_ULONG((PULONG)0x10, 
                          (MAJOR_VERSION << 16) |
                          (MINOR_VERSION << 8) |
                          MICRO_VERSION);
 
+#pragma prefast(suppress:28138)
         Magic = READ_PORT_USHORT((PUSHORT)0x10);
         if (Magic == 0xd249)
             Context->BlackListed = TRUE;
@@ -153,16 +180,10 @@ done:
               "UNPLUG: PRE-AMBLE (DRIVERS %s)\n",
               (Context->BlackListed) ? "BLACKLISTED" : "NOT BLACKLISTED");
 
-    if (!Locked)
-        ReleaseHighLock(&Context->Lock, Irql);
-
     return STATUS_SUCCESS;
 
 fail1:
     Error("fail1 (%08x)\n", status);
-
-    if (!Locked)
-        ReleaseHighLock(&Context->Lock, Irql);
 
     return status;
 }
@@ -170,21 +191,22 @@ fail1:
 #define HKEY_LOCAL_MACHINE  "\\Registry\\Machine"
 #define SERVICES_KEY        HKEY_LOCAL_MACHINE "\\SYSTEM\\CurrentControlSet\\Services"
 
-static FORCEINLINE VOID
-__UnplugDisks(
+static VOID
+UnplugCheckForPVDisks(
     IN  PXENFILT_UNPLUG_CONTEXT Context
     )
 {
     HANDLE                      UnplugKey;
     PANSI_STRING                ServiceNames;
+    ULONG                       Count;
     ULONG                       Index;
-    HANDLE                      ServiceKey;
     KIRQL                       Irql;
     NTSTATUS                    status;
 
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
     UnplugKey = DriverGetUnplugKey();
 
-    ServiceKey = NULL;
     ServiceNames = NULL;
 
     status = RegistryQuerySzValue(UnplugKey,
@@ -193,70 +215,41 @@ __UnplugDisks(
     if (!NT_SUCCESS(status))
         goto done;
 
-    for (Index = 0; ServiceNames[Index].Buffer != NULL; Index++) {
-        PANSI_STRING    ServiceName = &ServiceNames[Index];
-        CHAR            ServiceKeyName[sizeof (SERVICES_KEY "\\XXXXXXXX")];
-        ULONG           Count;
+    Count = 0;
+    for (Index = 0; ServiceNames[Index].Buffer != NULL; Index++)
+        if (_stricmp(ServiceNames[Index].Buffer, "XENVBD") == 0)
+            Count++;
 
-        status = RtlStringCbPrintfA(ServiceKeyName,
-                                    sizeof (ServiceKeyName),
-                                    SERVICES_KEY "\\%Z",
-                                    ServiceName);
-        ASSERT(NT_SUCCESS(status));
+    if (Count < 1)
+        goto done;
 
-        status = RegistryOpenSubKey(NULL,
-                                    ServiceKeyName,
-                                    KEY_READ,
-                                    &ServiceKey);
-        if (!NT_SUCCESS(status))
-            goto done;
-
-        status = RegistryQueryDwordValue(ServiceKey,
-                                         "Count",
-                                         &Count);
-        if (!NT_SUCCESS(status))
-            goto done;
-
-        if (Count == 0)
-            goto done;
-
-        RegistryCloseKey(ServiceKey);
-        ServiceKey = NULL;
-    }
-
-    AcquireHighLock(&Context->Lock, &Irql);
-
-    ASSERT(!Context->UnpluggedDisks);
-
-    __UnplugDisksLocked(Context);
-
-    Context->UnpluggedDisks = TRUE;
-
-    ReleaseHighLock(&Context->Lock, Irql);
+    AcquireHighLock(&Context->UnplugLock, &Irql);
+    Context->UnplugDisks = TRUE;
+    ReleaseHighLock(&Context->UnplugLock, Irql);
 
 done:
-    if (ServiceKey != NULL)
-        RegistryCloseKey(ServiceKey);
+    Info("%s\n", (Context->UnplugDisks) ? "PRESENT" : "NOT PRESENT");
 
     if (ServiceNames != NULL)
         RegistryFreeSzValue(ServiceNames);
 }
 
-static FORCEINLINE VOID
-__UnplugNics(
+static VOID
+UnplugCheckForPVNics(
     IN  PXENFILT_UNPLUG_CONTEXT Context
     )
 {
     HANDLE                      UnplugKey;
     PANSI_STRING                ServiceNames;
+    ULONG                       Count;
     ULONG                       Index;
-    HANDLE                      ServiceKey;
     KIRQL                       Irql;
     NTSTATUS                    status;
 
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
     UnplugKey = DriverGetUnplugKey();
 
-    ServiceKey = NULL;
     ServiceNames = NULL;
 
     status = RegistryQuerySzValue(UnplugKey,
@@ -265,50 +258,21 @@ __UnplugNics(
     if (!NT_SUCCESS(status))
         goto done;
 
-    for (Index = 0; ServiceNames[Index].Buffer != NULL; Index++) {
-        PANSI_STRING    ServiceName = &ServiceNames[Index];
-        CHAR            ServiceKeyName[sizeof (SERVICES_KEY "\\XXXXXXXX")];
-        ULONG           Count;
+    Count = 0;
+    for (Index = 0; ServiceNames[Index].Buffer != NULL; Index++)
+        if (_stricmp(ServiceNames[Index].Buffer, "XENVIF") == 0 ||
+            _stricmp(ServiceNames[Index].Buffer, "XENNET") == 0)
+            Count++;
 
-        status = RtlStringCbPrintfA(ServiceKeyName,
-                                    sizeof (ServiceKeyName),
-                                    SERVICES_KEY "\\%Z",
-                                    ServiceName);
-        ASSERT(NT_SUCCESS(status));
+    if (Count < 2)
+        goto done;
 
-        status = RegistryOpenSubKey(NULL,
-                                    ServiceKeyName,
-                                    KEY_READ,
-                                    &ServiceKey);
-        if (!NT_SUCCESS(status))
-            goto done;
-
-        status = RegistryQueryDwordValue(ServiceKey,
-                                         "Count",
-                                         &Count);
-        if (!NT_SUCCESS(status))
-            goto done;
-
-        if (Count == 0)
-            goto done;
-
-        RegistryCloseKey(ServiceKey);
-        ServiceKey = NULL;
-    }
-
-    AcquireHighLock(&Context->Lock, &Irql);
-
-    ASSERT(!Context->UnpluggedNics);
-
-    __UnplugNicsLocked();
-
-    Context->UnpluggedNics = TRUE;
-
-    ReleaseHighLock(&Context->Lock, Irql);
+    AcquireHighLock(&Context->UnplugLock, &Irql);
+    Context->UnplugNics = TRUE;
+    ReleaseHighLock(&Context->UnplugLock, Irql);
 
 done:
-    if (ServiceKey != NULL)
-        RegistryCloseKey(ServiceKey);
+    Info("%s\n", (Context->UnplugNics) ? "PRESENT" : "NOT PRESENT");
 
     if (ServiceNames != NULL)
         RegistryFreeSzValue(ServiceNames);
@@ -316,85 +280,125 @@ done:
 
 static VOID
 UnplugReplay(
-    IN  PXENFILT_UNPLUG_CONTEXT Context
+    IN  PINTERFACE          Interface
     )
 {
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    PXENFILT_UNPLUG_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+    NTSTATUS                status;
 
-    AcquireHighLock(&Context->Lock, &Irql);
+    AcquireHighLock(&Context->UnplugLock, &Irql);
 
-    status = __UnplugPreamble(Context, TRUE);
+    status = UnplugPreamble(Context);
     ASSERT(NT_SUCCESS(status));
 
-    if (Context->UnpluggedDisks) {
-        __UnplugDisksLocked(Context);
-    }
+    if (Context->UnplugDisks)
+        UnplugRequest(Context, XENFILT_UNPLUG_DISKS);
 
-    if (Context->UnpluggedNics) {
-        __UnplugNicsLocked();
-    }
+    if (Context->UnplugNics)
+        UnplugRequest(Context, XENFILT_UNPLUG_NICS);
     
-    ReleaseHighLock(&Context->Lock, Irql);
+    ReleaseHighLock(&Context->UnplugLock, Irql);
 }
-
-static VOID
-UnplugAcquire(
-    IN  PXENFILT_UNPLUG_CONTEXT Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-UnplugRelease(
-    IN  PXENFILT_UNPLUG_CONTEXT Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define UNPLUG_OPERATION(_Type, _Name, _Arguments) \
-        Unplug ## _Name,
-
-static XENFILT_UNPLUG_OPERATIONS  Operations = {
-    DEFINE_UNPLUG_OPERATIONS
-};
-
-#undef UNPLUG_OPERATION
 
 NTSTATUS
-UnplugInitialize(
-    OUT PXENFILT_UNPLUG_INTERFACE   Interface
+UnplugAcquire(
+    IN  PINTERFACE          Interface
     )
 {
-    PXENFILT_UNPLUG_CONTEXT         Context;
-    ULONG                           References;
-    NTSTATUS                        status;
+    PXENFILT_UNPLUG_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+    NTSTATUS                status;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
 
     Trace("====>\n");
 
-    Context = &UnplugContext;
+    (VOID)__AcquireHighLock(&Context->UnplugLock);
 
-    References = InterlockedIncrement(&Context->References);
-    if (References > 1)
-        goto done;
-
-    InitializeHighLock(&Context->Lock);
-
-    __UnplugGetFlags(Context);
-
-    status = __UnplugPreamble(Context, FALSE);
+    status = UnplugPreamble(Context);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    __UnplugDisks(Context);
-    __UnplugNics(Context);
+    if (Context->UnplugDisks)
+        UnplugRequest(Context, XENFILT_UNPLUG_DISKS);
+
+    if (Context->UnplugNics)
+        UnplugRequest(Context, XENFILT_UNPLUG_NICS);
+    
+    ReleaseHighLock(&Context->UnplugLock, DISPATCH_LEVEL);
+
+    Trace("<====\n");
 
 done:
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    ReleaseHighLock(&Context->UnplugLock, DISPATCH_LEVEL);
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return status;
+}
+
+VOID
+UnplugRelease(
+    IN  PINTERFACE              Interface
+    )
+{
+    PXENFILT_UNPLUG_CONTEXT     Context = Interface->Context;
+    KIRQL                       Irql;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
+
+    Trace("====>\n");
+
+    Context->BlackListed = FALSE;
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENFILT_UNPLUG_INTERFACE_V1 UnplugInterfaceVersion1 = {
+    { sizeof (struct _XENFILT_UNPLUG_INTERFACE_V1), 1, NULL, NULL, NULL },
+    UnplugAcquire,
+    UnplugRelease,
+    UnplugReplay
+};
+                     
+NTSTATUS
+UnplugInitialize(
+    OUT PXENFILT_UNPLUG_CONTEXT *Context
+    )
+{
+    NTSTATUS                    status;
+
+    Trace("====>\n");
+
+    *Context = __UnplugAllocate(sizeof (XENFILT_UNPLUG_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    UnplugCheckForPVDisks(*Context);
+    UnplugCheckForPVNics(*Context);
+    UnplugGetFlags(*Context);
+
+    KeInitializeSpinLock(&(*Context)->Lock);
+    InitializeHighLock(&(*Context)->UnplugLock);
 
     Trace("<====\n");
 
@@ -403,41 +407,63 @@ done:
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    RtlZeroMemory(&Context->Lock, sizeof (HIGH_LOCK));
-    Context->BootEmulated = FALSE;
-
-    (VOID) InterlockedDecrement(&Context->References);
-
     return status;
 }
 
-VOID
-UnplugTeardown(
-    IN OUT  PXENFILT_UNPLUG_INTERFACE Interface
+NTSTATUS
+UnplugGetInterface(
+    IN      PXENFILT_UNPLUG_CONTEXT Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     )
 {
-    PXENFILT_UNPLUG_CONTEXT           Context = Interface->Context;
-    ULONG                             References;
+    NTSTATUS                        status;
 
-    ASSERT3P(Context, ==, &UnplugContext);
+    ASSERT(Context != NULL);
 
+    switch (Version) {
+    case 1: {
+        struct _XENFILT_UNPLUG_INTERFACE_V1 *UnplugInterface;
+
+        UnplugInterface = (struct _XENFILT_UNPLUG_INTERFACE_V1 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENFILT_UNPLUG_INTERFACE_V1))
+            break;
+
+        *UnplugInterface = UnplugInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
+
+VOID
+UnplugTeardown(
+    IN  PXENFILT_UNPLUG_CONTEXT Context
+    )
+{
     Trace("====>\n");
 
-    References = InterlockedDecrement(&Context->References);
-    if (References > 0)
-        goto done;
-
-    Context->BlackListed = FALSE;
     Context->BootEmulated = FALSE;
+    Context->UnplugNics = FALSE;
+    Context->UnplugDisks = FALSE;
 
-    RtlZeroMemory(&Context->Lock, sizeof (HIGH_LOCK));
+    RtlZeroMemory(&Context->UnplugLock, sizeof (HIGH_LOCK));
+    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENFILT_UNPLUG_CONTEXT)));
-
-done:
-    RtlZeroMemory(Interface, sizeof (XENFILT_UNPLUG_INTERFACE));
+    __UnplugFree(Context);
 
     Trace("<====\n");
 }
-
-#pragma warning(pop)

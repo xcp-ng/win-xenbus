@@ -36,25 +36,27 @@
 #include <xen.h>
 #include <cache_interface.h>
 
+typedef struct _XENBUS_CACHE_CONTEXT  XENBUS_CACHE_CONTEXT, *PXENBUS_CACHE_CONTEXT;
+
 #include "fdo.h"
-
-struct _XENBUS_CACHE_INTERFACE {
-    PXENBUS_CACHE_OPERATIONS    Operations;
-    PXENBUS_CACHE_CONTEXT       Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENBUS_CACHE_INTERFACE, Operations) == (ULONG_PTR)CACHE_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENBUS_CACHE_INTERFACE, Context) == (ULONG_PTR)CACHE_CONTEXT(NULL));
 
 extern NTSTATUS
 CacheInitialize(
     IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_CACHE_INTERFACE Interface
+    OUT PXENBUS_CACHE_CONTEXT   *Context
+    );
+
+extern NTSTATUS
+CacheGetInterface(
+    IN      PXENBUS_CACHE_CONTEXT   Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 CacheTeardown(
-    IN OUT  PXENBUS_CACHE_INTERFACE Interface
+    IN  PXENBUS_CACHE_CONTEXT   Context
     );
 
 #endif  // _XENBUS_CACHE_H

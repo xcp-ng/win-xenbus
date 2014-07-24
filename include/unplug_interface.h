@@ -29,66 +29,75 @@
  * SUCH DAMAGE.
  */
 
+/*! \file unplug_interface.h
+    \brief XENFILT UNPLUG Interface
+
+    This interface provides a primitive to re-unplug emulated devices,
+    which is required on resume-from-suspend
+*/
+
 #ifndef _XENFILT_UNPLUG_INTERFACE_H
 #define _XENFILT_UNPLUG_INTERFACE_H
 
-#define DEFINE_UNPLUG_OPERATIONS                                \
-        UNPLUG_OPERATION(VOID,                                  \
-                         Acquire,                               \
-                         (                                      \
-                         IN  PXENFILT_UNPLUG_CONTEXT Context    \
-                         )                                      \
-                         )                                      \
-        UNPLUG_OPERATION(VOID,                                  \
-                         Release,                               \
-                         (                                      \
-                         IN  PXENFILT_UNPLUG_CONTEXT Context    \
-                         )                                      \
-                         )                                      \
-        UNPLUG_OPERATION(VOID,                                  \
-                         Replay,                                \
-                         (                                      \
-                         IN  PXENFILT_UNPLUG_CONTEXT Context    \
-                         )                                      \
-                         )
+#ifndef _WINDLL
 
-typedef struct _XENFILT_UNPLUG_CONTEXT  XENFILT_UNPLUG_CONTEXT, *PXENFILT_UNPLUG_CONTEXT;
+/*! \typedef XENFILT_UNPLUG_ACQUIRE
+    \brief Acquire a reference to the UNPLUG interface
 
-#define UNPLUG_OPERATION(_Type, _Name, _Arguments) \
-        _Type (*UNPLUG_ ## _Name) _Arguments;
+    \param Interface The interface header
+*/  
+typedef NTSTATUS
+(*XENFILT_UNPLUG_ACQUIRE)(
+    IN  PINTERFACE  Interface
+    );
 
-typedef struct _XENFILT_UNPLUG_OPERATIONS {
-    DEFINE_UNPLUG_OPERATIONS
-} XENFILT_UNPLUG_OPERATIONS, *PXENFILT_UNPLUG_OPERATIONS;
+/*! \typedef XENFILT_UNPLUG_RELEASE
+    \brief Release a reference to the UNPLUG interface
 
-#undef UNPLUG_OPERATION
+    \param Interface The interface header
+*/  
+typedef VOID
+(*XENFILT_UNPLUG_RELEASE)(
+    IN  PINTERFACE  Interface
+    );
 
-typedef struct _XENFILT_UNPLUG_INTERFACE    XENFILT_UNPLUG_INTERFACE, *PXENFILT_UNPLUG_INTERFACE;
+/*! \typedef XENFILT_UNPLUG_REPLAY
+    \brief Re-unplug emulated devices that were previously unplugged
+    at boot time
 
-// {201A139A-AD4D-4ECE-BA0B-7F7AAEA46029}
-DEFINE_GUID(GUID_UNPLUG_INTERFACE, 
-            0x201a139a,
-            0xad4d,
-            0x4ece,
-            0xba,
-            0xb,
-            0x7f,
-            0x7a,
-            0xae,
-            0xa4,
-            0x60,
-            0x29);
+    \param Interface The interface header
+*/  
+typedef VOID
+(*XENFILT_UNPLUG_REPLAY)(
+    IN  PINTERFACE  Interface
+    );
 
-#define UNPLUG_INTERFACE_VERSION    1
+// {D5657CFD-3DB5-4A23-A94F-61FD89247FE7}
+DEFINE_GUID(GUID_XENFILT_UNPLUG_INTERFACE,
+0xd5657cfd, 0x3db5, 0x4a23, 0xa9, 0x4f, 0x61, 0xfd, 0x89, 0x24, 0x7f, 0xe7);
 
-#define UNPLUG_OPERATIONS(_Interface) \
-        (PXENFILT_UNPLUG_OPERATIONS *)((ULONG_PTR)(_Interface))
+/*! \struct _XENFILT_UNPLUG_INTERFACE_V1
+    \brief UNPLUG interface version 1
+*/
+struct _XENFILT_UNPLUG_INTERFACE_V1 {
+    INTERFACE               Interface;
+    XENFILT_UNPLUG_ACQUIRE  Acquire;
+    XENFILT_UNPLUG_RELEASE  Release;
+    XENFILT_UNPLUG_REPLAY   Replay;
+};
 
-#define UNPLUG_CONTEXT(_Interface) \
-        (PXENFILT_UNPLUG_CONTEXT *)((ULONG_PTR)(_Interface) + sizeof (PVOID))
+typedef struct _XENFILT_UNPLUG_INTERFACE_V1 XENFILT_UNPLUG_INTERFACE, *PXENFILT_UNPLUG_INTERFACE;
 
-#define UNPLUG(_Operation, _Interface, ...) \
-        (*UNPLUG_OPERATIONS(_Interface))->UNPLUG_ ## _Operation((*UNPLUG_CONTEXT(_Interface)), __VA_ARGS__)
+/*! \def XENFILT_UNPLUG
+    \brief Macro at assist in method invocation
+*/
+#define XENFILT_UNPLUG(_Method, _Interface, ...)    \
+    (_Interface)-> ## _Method((PINTERFACE)(_Interface), __VA_ARGS__)
+
+#endif  // _WINDLL
+
+#define XENFILT_UNPLUG_INTERFACE_VERSION_MIN  1
+#define XENFILT_UNPLUG_INTERFACE_VERSION_MAX  1
 
 #endif  // _XENFILT_UNPLUG_INTERFACE_H
 

@@ -30,14 +30,13 @@
  */
 
 #include <ntddk.h>
+#include <ntstrsafe.h>
 #include <xen.h>
 #include <util.h>
 
 #include "range_set.h"
 #include "dbg_print.h"
 #include "assert.h"
-
-#define RANGE_SET_AUDIT DBG
 
 #define RANGE_SET_TAG   'GNAR'
 
@@ -47,7 +46,11 @@ typedef struct _RANGE {
     LONGLONG    End;
 } RANGE, *PRANGE;
 
+#define MAXNAMELEN  128
+
 struct _XENBUS_RANGE_SET {
+    LIST_ENTRY      ListEntry;
+    CHAR            Name[MAXNAMELEN];
     KSPIN_LOCK      Lock;
     LIST_ENTRY      List;
     PLIST_ENTRY     Cursor;
@@ -56,12 +59,21 @@ struct _XENBUS_RANGE_SET {
     PRANGE          Spare;
 };
 
+struct _XENBUS_RANGE_SET_CONTEXT {
+    PXENBUS_FDO             Fdo;
+    KSPIN_LOCK              Lock;
+    LONG                    References;
+    XENBUS_DEBUG_INTERFACE  DebugInterface;
+    PXENBUS_DEBUG_CALLBACK  DebugCallback;
+    LIST_ENTRY              List;
+};
+
 static FORCEINLINE PVOID
 __RangeSetAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, RANGE_SET_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, RANGE_SET_TAG);
 }
 
 static FORCEINLINE VOID
@@ -69,7 +81,7 @@ __RangeSetFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, RANGE_SET_TAG);
+    ExFreePoolWithTag(Buffer, RANGE_SET_TAG);
 }
 
 static FORCEINLINE BOOLEAN
@@ -80,77 +92,8 @@ __RangeSetIsEmpty(
     return IsListEmpty(&RangeSet->List);
 }
 
-BOOLEAN
-RangeSetIsEmpty(
-    IN  PXENBUS_RANGE_SET   RangeSet
-    )
-{
-    BOOLEAN                 IsEmpty;
-    KIRQL                   Irql;
-
-    KeAcquireSpinLock(&RangeSet->Lock, &Irql);
-    IsEmpty = __RangeSetIsEmpty(RangeSet);
-    KeReleaseSpinLock(&RangeSet->Lock, Irql);
-
-    return IsEmpty;
-}
-
-#if RANGE_SET_AUDIT
-static FORCEINLINE VOID
-__RangeSetAudit(
-    IN  PXENBUS_RANGE_SET   RangeSet
-    )
-{
-    if (__RangeSetIsEmpty(RangeSet)) {
-        ASSERT3P(RangeSet->Cursor, ==, &RangeSet->List);
-        ASSERT3U(RangeSet->RangeCount, ==, 0);
-        ASSERT3U(RangeSet->ItemCount, ==, 0);
-    } else {
-        BOOLEAN     FoundCursor;
-        ULONG       RangeCount;
-        ULONGLONG   ItemCount;
-        PLIST_ENTRY ListEntry;
-
-        ASSERT3P(RangeSet->Cursor, !=, &RangeSet->List);
-        ASSERT3U(RangeSet->RangeCount, !=, 0);
-        ASSERT3U(RangeSet->ItemCount, !=, 0);
-
-        FoundCursor = FALSE;
-        RangeCount = 0;
-        ItemCount = 0;
-
-        for (ListEntry = RangeSet->List.Flink;
-             ListEntry != &RangeSet->List;
-             ListEntry = ListEntry->Flink) {
-            PRANGE Range;
-
-            if (ListEntry == RangeSet->Cursor)
-                FoundCursor = TRUE;
-
-            Range = CONTAINING_RECORD(ListEntry, RANGE, ListEntry);
-
-            ASSERT3S(Range->Start, <=, Range->End);
-            RangeCount++;
-            ItemCount += Range->End + 1 - Range->Start;
-
-            if (ListEntry->Flink != &RangeSet->List) {
-                PRANGE Next;
-
-                Next = CONTAINING_RECORD(ListEntry->Flink, RANGE, ListEntry);
-
-                ASSERT3S(Range->End, <, Next->Start - 1);
-            }
-        }
-
-        ASSERT3U(RangeCount, ==, RangeSet->RangeCount);
-        ASSERT3U(ItemCount, ==, RangeSet->ItemCount);
-        ASSERT(FoundCursor);
-    }
-}
-#endif
-
-static FORCEINLINE VOID
-__RangeSetRemove(
+static VOID
+RangeSetRemove(
     IN  PXENBUS_RANGE_SET   RangeSet,
     IN  BOOLEAN             After
     )
@@ -184,8 +127,8 @@ __RangeSetRemove(
     }
 }
 
-static FORCEINLINE VOID
-__RangeSetMergeBackwards(
+static VOID
+RangeSetMergeBackwards(
     IN  PXENBUS_RANGE_SET   RangeSet
     )
 {
@@ -207,11 +150,11 @@ __RangeSetMergeBackwards(
 
     Previous->End = Range->End;
     Range->Start = Range->End + 1; // Invalidate
-    __RangeSetRemove(RangeSet, FALSE);
+    RangeSetRemove(RangeSet, FALSE);
 }
 
-static FORCEINLINE VOID
-__RangeSetMergeForwards(
+static VOID
+RangeSetMergeForwards(
     IN  PXENBUS_RANGE_SET   RangeSet
     )
 {
@@ -233,13 +176,15 @@ __RangeSetMergeForwards(
 
     Next->Start = Range->Start;
     Range->End = Range->Start - 1;  // Invalidate
-    __RangeSetRemove(RangeSet, TRUE);
+    RangeSetRemove(RangeSet, TRUE);
 }
 
-NTSTATUS
+static NTSTATUS
 RangeSetPop(
+    IN  PINTERFACE          Interface,
     IN  PXENBUS_RANGE_SET   RangeSet,
-    OUT PLONGLONG           Item
+    IN  ULONGLONG           Count,
+    OUT PLONGLONG           Start
     )
 {
     PLIST_ENTRY             Cursor;
@@ -247,36 +192,44 @@ RangeSetPop(
     KIRQL                   Irql;
     NTSTATUS                status;
 
+    UNREFERENCED_PARAMETER(Interface);
+
     KeAcquireSpinLock(&RangeSet->Lock, &Irql);
 
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
-
     status = STATUS_INSUFFICIENT_RESOURCES;
+
     if (__RangeSetIsEmpty(RangeSet))
         goto fail1;
 
-    Cursor = RangeSet->Cursor;
-    ASSERT(Cursor != &RangeSet->List);
+    Cursor = RangeSet->List.Flink;
 
-    Range = CONTAINING_RECORD(Cursor, RANGE, ListEntry);
+    while (Cursor != &RangeSet->List) {
+        Range = CONTAINING_RECORD(Cursor, RANGE, ListEntry);
 
-    *Item = Range->Start++;
+        if ((ULONGLONG)(Range->End + 1 - Range->Start) >= Count)
+            goto found;
+    }
 
-    ASSERT(RangeSet->ItemCount != 0);
-    --RangeSet->ItemCount;
+    goto fail2;
 
-    if (*Item == Range->End)    // Singleton
-        __RangeSetRemove(RangeSet, TRUE);
+found:
+    RangeSet->Cursor = Cursor;
 
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
+    *Start = Range->Start;
+    Range->Start += Count;
+
+    ASSERT3U(RangeSet->ItemCount, >=, Count);
+    RangeSet->ItemCount -= Count;
+
+    if (Range->Start > Range->End)    // Invalid
+        RangeSetRemove(RangeSet, TRUE);
 
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
 
     return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -286,8 +239,8 @@ fail1:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__RangeSetAdd(
+static NTSTATUS
+RangeSetAdd(
     IN  PXENBUS_RANGE_SET   RangeSet,
     IN  LONGLONG            Start,
     IN  LONGLONG            End,
@@ -343,8 +296,8 @@ __RangeSetAdd(
 
     RangeSet->Cursor = &Range->ListEntry;
 
-    __RangeSetMergeBackwards(RangeSet);
-    __RangeSetMergeForwards(RangeSet);
+    RangeSetMergeBackwards(RangeSet);
+    RangeSetMergeForwards(RangeSet);
 
     return STATUS_SUCCESS;
 
@@ -357,87 +310,84 @@ fail1:
 #undef  INSERT_BEFORE
 }
 
-NTSTATUS
+static NTSTATUS
 RangeSetGet(
+    IN  PINTERFACE          Interface,
     IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Item
+    IN  LONGLONG            Start,
+    IN  ULONGLONG           Count
     )
 {
+    LONGLONG                End = Start + Count - 1;
     PLIST_ENTRY             Cursor;
     PRANGE                  Range;
     KIRQL                   Irql;
     NTSTATUS                status;
 
-    KeAcquireSpinLock(&RangeSet->Lock, &Irql);
+    UNREFERENCED_PARAMETER(Interface);
 
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
+    KeAcquireSpinLock(&RangeSet->Lock, &Irql);
 
     Cursor = RangeSet->Cursor;
     ASSERT(Cursor != &RangeSet->List);
 
     Range = CONTAINING_RECORD(Cursor, RANGE, ListEntry);
 
-    if (Item < Range->Start) {
+    if (Start < Range->Start) {
         do {
             Cursor = Cursor->Blink;
             ASSERT(Cursor != &RangeSet->List);
 
             Range = CONTAINING_RECORD(Cursor, RANGE, ListEntry);
-        } while (Item < Range->Start);
+        } while (Start < Range->Start);
 
         RangeSet->Cursor = Cursor;
-    } else if (Item > Range->End) {
+    } else if (Start > Range->End) {
         do {
             Cursor = Cursor->Flink;
             ASSERT(Cursor != &RangeSet->List);
 
             Range = CONTAINING_RECORD(Cursor, RANGE, ListEntry);
-        } while (Item > Range->End);
+        } while (Start > Range->End);
 
         RangeSet->Cursor = Cursor;
     }
 
-    ASSERT3S(Item, >=, Range->Start);
-    ASSERT3S(Item, <=, Range->End);
+    ASSERT3S(Start, >=, Range->Start);
+    ASSERT3S(Start, <=, Range->End);
 
-    if (Item == Range->Start && Item == Range->End) {   // Singleton
-        Range->Start = Item + 1;    // Invalidate
-        __RangeSetRemove(RangeSet, TRUE);
+    if (Start == Range->Start && End == Range->End) {
+        Range->Start = End + 1;    // Invalidate
+        RangeSetRemove(RangeSet, TRUE);
         goto done;
     }
 
     ASSERT3S(Range->End, >, Range->Start);
 
-    if (Item == Range->Start) {
-        Range->Start = Item + 1;
+    if (Start == Range->Start) {
+        Range->Start = End + 1;
         goto done;
     }
 
-    ASSERT3S(Range->Start, <, Item);
+    ASSERT3S(Range->Start, <, Start);
 
-    if (Item == Range->End) {
-        Range->End = Item - 1;
+    if (End == Range->End) {
+        Range->End = Start - 1;
         goto done;
     }
 
-    ASSERT3S(Item, <, Range->End);
+    ASSERT3S(End, <, Range->End);
 
     // We need to split a range
-    status = __RangeSetAdd(RangeSet, Item + 1, Range->End, TRUE);
+    status = RangeSetAdd(RangeSet, End + 1, Range->End, TRUE);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    Range->End = Item - 1;
+    Range->End = Start - 1;
 
 done:
-    ASSERT(RangeSet->ItemCount != 0);
-    --RangeSet->ItemCount;
-
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
+    ASSERT3U(RangeSet->ItemCount, >=, Count);
+    RangeSet->ItemCount -= Count;
 
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
 
@@ -446,17 +396,13 @@ done:
 fail1:
     Error("fail1 (%08x)\n", status);
 
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
-
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
 
     return status;    
 }
 
-static FORCEINLINE NTSTATUS
-__RangeSetAddAfter(
+static NTSTATUS
+RangeSetAddAfter(
     IN  PXENBUS_RANGE_SET   RangeSet,
     IN  LONGLONG            Start,
     IN  LONGLONG            End
@@ -485,7 +431,7 @@ __RangeSetAddAfter(
     }
 
     RangeSet->Cursor = Cursor;
-    status = __RangeSetAdd(RangeSet, Start, End, FALSE);    
+    status = RangeSetAdd(RangeSet, Start, End, FALSE);    
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -497,8 +443,8 @@ fail1:
     return status;    
 }
 
-static FORCEINLINE NTSTATUS
-__RangeSetAddBefore(
+static NTSTATUS
+RangeSetAddBefore(
     IN  PXENBUS_RANGE_SET   RangeSet,
     IN  LONGLONG            Start,
     IN  LONGLONG            End
@@ -527,7 +473,7 @@ __RangeSetAddBefore(
     }
 
     RangeSet->Cursor = Cursor;
-    status = __RangeSetAdd(RangeSet, Start, End, TRUE);    
+    status = RangeSetAdd(RangeSet, Start, End, TRUE);    
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -539,50 +485,46 @@ fail1:
     return status;    
 }
 
-NTSTATUS
+static NTSTATUS
 RangeSetPut(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Start,
-    IN  LONGLONG            End
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_RANGE_SET       RangeSet,
+    IN  LONGLONG                Start,
+    IN  ULONGLONG               Count
     )
 {
-    PLIST_ENTRY             Cursor;
-    KIRQL                   Irql;
-    NTSTATUS                status;
+    LONGLONG                    End = Start + Count - 1;
+    PLIST_ENTRY                 Cursor;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
+
+    UNREFERENCED_PARAMETER(Interface);
 
     ASSERT3S(End, >=, Start);
 
     KeAcquireSpinLock(&RangeSet->Lock, &Irql);
 
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
-
     Cursor = RangeSet->Cursor;
 
     if (__RangeSetIsEmpty(RangeSet)) {
-        status = __RangeSetAdd(RangeSet, Start, End, TRUE);
+        status = RangeSetAdd(RangeSet, Start, End, TRUE);
     } else {
         PRANGE  Range;
 
         Range = CONTAINING_RECORD(Cursor, RANGE, ListEntry);
 
         if (Start > Range->End) {
-            status = __RangeSetAddAfter(RangeSet, Start, End);
+            status = RangeSetAddAfter(RangeSet, Start, End);
         } else {
             ASSERT3S(End, <, Range->Start);
-            status = __RangeSetAddBefore(RangeSet, Start, End);
+            status = RangeSetAddBefore(RangeSet, Start, End);
         }
     }
 
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    RangeSet->ItemCount += End + 1 - Start;
-
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
+    RangeSet->ItemCount += Count;
 
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
 
@@ -591,21 +533,23 @@ RangeSetPut(
 fail1:
     Error("fail1 (%08x)\n", status);
 
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(RangeSet);
-#endif
-
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
 
     return status;
 }
 
 NTSTATUS
-RangeSetInitialize(
-    OUT PXENBUS_RANGE_SET   *RangeSet
+RangeSetCreate(
+    IN  PINTERFACE              Interface,
+    IN  const CHAR              *Name,
+    OUT PXENBUS_RANGE_SET       *RangeSet
     )
 {
-    NTSTATUS                status;
+    PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
+
+    Trace("====> (%s)\n", Name);
 
     *RangeSet = __RangeSetAllocate(sizeof (XENBUS_RANGE_SET));
 
@@ -613,15 +557,32 @@ RangeSetInitialize(
     if (*RangeSet == NULL)
         goto fail1;
 
+    status = RtlStringCbPrintfA((*RangeSet)->Name,
+                                sizeof ((*RangeSet)->Name),
+                                "%s",
+                                Name);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
     KeInitializeSpinLock(&(*RangeSet)->Lock);
     InitializeListHead(&(*RangeSet)->List);
     (*RangeSet)->Cursor = &(*RangeSet)->List;
 
-#if RANGE_SET_AUDIT
-    __RangeSetAudit(*RangeSet);
-#endif
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+    InsertTailList(&Context->List, &(*RangeSet)->ListEntry);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    Trace("<====\n");
 
     return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    RtlZeroMemory((*RangeSet)->Name, sizeof ((*RangeSet)->Name));
+
+    ASSERT(IsZeroMemory(*RangeSet, sizeof (XENBUS_RANGE_SET)));
+    __RangeSetFree(*RangeSet);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -630,10 +591,22 @@ fail1:
 }
 
 VOID
-RangeSetTeardown(
-    IN  PXENBUS_RANGE_SET   RangeSet
+RangeSetDestroy(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_RANGE_SET       RangeSet
     )
 {
+    PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
+
+    Trace("====> (%s)\n", RangeSet->Name);
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+    RemoveEntryList(&RangeSet->ListEntry);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    RtlZeroMemory(&RangeSet->ListEntry, sizeof (LIST_ENTRY));
+
     if (RangeSet->Spare != NULL) {
         __RangeSetFree(RangeSet->Spare);
         RangeSet->Spare = NULL;
@@ -645,7 +618,276 @@ RangeSetTeardown(
 
     RangeSet->Cursor = NULL;
 
+    RtlZeroMemory(RangeSet->Name, sizeof (RangeSet->Name));
+
     ASSERT(IsZeroMemory(RangeSet, sizeof (XENBUS_RANGE_SET)));
     __RangeSetFree(RangeSet);
+
+    Trace("<====\n");
 }
+
+static VOID
+RangeSetDump(
+    IN  PXENBUS_RANGE_SET_CONTEXT   Context,
+    IN  PXENBUS_RANGE_SET           RangeSet
+    )
+{
+    XENBUS_DEBUG(Printf,
+                 &Context->DebugInterface,
+                 " - %s:\n",
+                 RangeSet->Name);
+
+    if (IsListEmpty(&RangeSet->List)) {
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "   EMPTY\n");
+    } else {
+        PLIST_ENTRY ListEntry;
+        ULONG       Count;
+
+        Count = 0;
+
+        for (ListEntry = RangeSet->List.Flink;
+             ListEntry != &RangeSet->List;
+             ListEntry = ListEntry->Flink) {
+            PRANGE Range;
+
+            Range = CONTAINING_RECORD(ListEntry, RANGE, ListEntry);
+
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "   {%llx - %llx}%s\n",
+                         Range->Start,
+                         Range->End,
+                         (ListEntry == RangeSet->Cursor) ? "*" : "");
+
+            if (++Count > 8) {
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "   ...\n");
+                break;
+            }
+        }
+    }
+}
+
+static VOID
+RangeSetDebugCallback(
+    IN  PVOID                   Argument,
+    IN  BOOLEAN                 Crashing
+    )
+{
+    PXENBUS_RANGE_SET_CONTEXT   Context = Argument;
+
+    UNREFERENCED_PARAMETER(Crashing);
+
+    if (!IsListEmpty(&Context->List)) {
+        PLIST_ENTRY ListEntry;
+
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "RANGE SETS:\n");
+
+        for (ListEntry = Context->List.Flink;
+             ListEntry != &Context->List;
+             ListEntry = ListEntry->Flink) {
+            PXENBUS_RANGE_SET   RangeSet;
+
+            RangeSet = CONTAINING_RECORD(ListEntry, XENBUS_RANGE_SET, ListEntry);
+
+            RangeSetDump(Context, RangeSet);
+        }
+    }
+}
+
+static NTSTATUS
+RangeSetAcquire(
+    IN  PINTERFACE              Interface
+    )
+{
+    PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
+
+    Trace("====>\n");
+
+    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = XENBUS_DEBUG(Register,
+                          &Context->DebugInterface,
+                          __MODULE__ "|RANGE_SET",
+                          RangeSetDebugCallback,
+                          Context,
+                          &Context->DebugCallback);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail3\n");
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    --Context->References;
+    ASSERT3U(Context->References, ==, 0);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return status;
+}
+
+static VOID
+RangeSetRelease(
+    IN  PINTERFACE              Interface
+    )
+{
+    PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
+
+    Trace("====>\n");
+
+    if (!IsListEmpty(&Context->List))
+        BUG("OUTSTANDING RANGE SETS");
+
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
+    Context->DebugCallback = NULL;
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENBUS_RANGE_SET_INTERFACE_V1 RangeSetInterfaceVersion1 = {
+    { sizeof (struct _XENBUS_RANGE_SET_INTERFACE_V1), 1, NULL, NULL, NULL },
+    RangeSetAcquire,
+    RangeSetRelease,
+    RangeSetCreate,
+    RangeSetPut,
+    RangeSetPop,
+    RangeSetGet,
+    RangeSetDestroy
+};
+                     
+NTSTATUS
+RangeSetInitialize(
+    IN  PXENBUS_FDO                 Fdo,
+    OUT PXENBUS_RANGE_SET_CONTEXT   *Context
+    )
+{
+    NTSTATUS                        status;
+
+    Trace("====>\n");
+
+    *Context = __RangeSetAllocate(sizeof (XENBUS_RANGE_SET_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    status = DebugGetInterface(FdoGetDebugContext(Fdo),
+                               XENBUS_DEBUG_INTERFACE_VERSION_MAX,
+                               (PINTERFACE)&(*Context)->DebugInterface,
+                               sizeof ((*Context)->DebugInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
+
+    InitializeListHead(&(*Context)->List);
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    (*Context)->Fdo = Fdo;
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
+RangeSetGetInterface(
+    IN      PXENBUS_RANGE_SET_CONTEXT   Context,
+    IN      ULONG                       Version,
+    IN OUT  PINTERFACE                  Interface,
+    IN      ULONG                       Size
+    )
+{
+    NTSTATUS                            status;
+
+    ASSERT(Context != NULL);
+
+    switch (Version) {
+    case 1: {
+        struct _XENBUS_RANGE_SET_INTERFACE_V1  *RangeSetInterface;
+
+        RangeSetInterface = (struct _XENBUS_RANGE_SET_INTERFACE_V1 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_RANGE_SET_INTERFACE_V1))
+            break;
+
+        *RangeSetInterface = RangeSetInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
+
+VOID
+RangeSetTeardown(
+    IN  PXENBUS_RANGE_SET_CONTEXT   Context
+    )
+{
+    Trace("====>\n");
+
+    Context->Fdo = NULL;
+
+    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
+    RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
+
+    RtlZeroMemory(&Context->DebugInterface,
+                  sizeof (XENBUS_DEBUG_INTERFACE));
+
+    ASSERT(IsZeroMemory(Context, sizeof (XENBUS_RANGE_SET_CONTEXT)));
+    __RangeSetFree(Context);
+
+    Trace("<====\n");
+}
+
 

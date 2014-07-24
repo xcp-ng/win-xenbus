@@ -56,7 +56,7 @@ BugCheckTeardown(
 #pragma warning(disable: 6320) // Exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER. This might mask exceptions that were not intended to be handled.
 #pragma warning(disable: 6322) // Empty _except block.
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckDumpExceptionRecord(
     IN  PEXCEPTION_RECORD   Exception
     )
@@ -99,7 +99,7 @@ BugCheckDumpExceptionRecord(
 #pragma warning(disable:6262) // Uses more than 1024 bytes of stack
 
 #if defined(__i386__)
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckDumpContext(
     IN  PCONTEXT    Context
     )
@@ -181,7 +181,7 @@ BugCheckDumpContext(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckStackDump(
     IN  PCONTEXT    Context
     )
@@ -260,7 +260,7 @@ BugCheckStackDump(
 #undef  PARAMETER_COUNT
 }
 #elif defined(__x86_64__)
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckDumpContext(
     IN  PCONTEXT    Context
     )
@@ -484,7 +484,7 @@ RtlVirtualUnwind(
     __inout_opt PKNONVOLATILE_CONTEXT_POINTERS ContextPointers OPTIONAL
     );
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckStackDump(
     IN  PCONTEXT    Context
     )
@@ -598,7 +598,7 @@ RtlCaptureContext(
     __out PCONTEXT    Context
     );
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckIrqlNotLessOrEqual(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -649,7 +649,7 @@ BugCheckIrqlNotLessOrEqual(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckDriverIrqlNotLessOrEqual(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -700,7 +700,7 @@ BugCheckDriverIrqlNotLessOrEqual(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckSystemServiceException(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -723,7 +723,7 @@ BugCheckSystemServiceException(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckSystemThreadExceptionNotHandled(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -764,7 +764,7 @@ BugCheckSystemThreadExceptionNotHandled(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckKernelModeExceptionNotHandled(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -811,7 +811,7 @@ BugCheckKernelModeExceptionNotHandled(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckCriticalObjectTermination(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -850,7 +850,7 @@ BugCheckCriticalObjectTermination(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckInaccessibleBootDevice(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -878,7 +878,7 @@ BugCheckInaccessibleBootDevice(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckDriverPowerStateFailure(
     IN  ULONG_PTR       Parameter1,
     IN  ULONG_PTR       Parameter2,
@@ -977,7 +977,7 @@ BugCheckDriverPowerStateFailure(
     }
 }
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckAssertionFailure(
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -1032,7 +1032,7 @@ struct _BUG_CODE_ENTRY   BugCodeTable[] = {
     { 0, NULL, NULL }
 };
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 BugCheckDefaultHandler(
     VOID
     )

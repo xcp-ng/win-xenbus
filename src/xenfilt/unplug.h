@@ -36,22 +36,24 @@
 #include <xen.h>
 #include <unplug_interface.h>
 
-struct _XENFILT_UNPLUG_INTERFACE {
-    PXENFILT_UNPLUG_OPERATIONS    Operations;
-    PXENFILT_UNPLUG_CONTEXT       Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENFILT_UNPLUG_INTERFACE, Operations) == (ULONG_PTR)UNPLUG_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENFILT_UNPLUG_INTERFACE, Context) == (ULONG_PTR)UNPLUG_CONTEXT(NULL));
+typedef struct _XENFILT_UNPLUG_CONTEXT  XENFILT_UNPLUG_CONTEXT, *PXENFILT_UNPLUG_CONTEXT;
 
 extern NTSTATUS
 UnplugInitialize(
-    OUT PXENFILT_UNPLUG_INTERFACE Interface
+    OUT PXENFILT_UNPLUG_CONTEXT *Context
+    );
+
+extern NTSTATUS
+UnplugGetInterface(
+    IN      PXENFILT_UNPLUG_CONTEXT Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 UnplugTeardown(
-    IN OUT  PXENFILT_UNPLUG_INTERFACE Interface
+    IN  PXENFILT_UNPLUG_CONTEXT Context
     );
 
 #endif  // _XENFILT_UNPLUG_H

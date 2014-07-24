@@ -35,7 +35,7 @@
 #include "registry.h"
 #include "assert.h"
 
-#define REGISTRY_POOL 'GERX'
+#define REGISTRY_TAG 'GERX'
 
 static UNICODE_STRING   RegistryPath;
 
@@ -44,7 +44,7 @@ __RegistryAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, REGISTRY_POOL);
+    return __AllocatePoolWithTag(NonPagedPool, Length, REGISTRY_TAG);
 }
 
 static FORCEINLINE VOID
@@ -52,7 +52,7 @@ __RegistryFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, REGISTRY_POOL);
+    ExFreePoolWithTag(Buffer, REGISTRY_TAG);
 }
 
 NTSTATUS
@@ -407,6 +407,10 @@ RegistryEnumerateSubKeys(
         Ansi.MaximumLength = (USHORT)((Basic->NameLength / sizeof (WCHAR)) + sizeof (CHAR));
         Ansi.Buffer = __RegistryAllocate(Ansi.MaximumLength);
 
+        status = STATUS_NO_MEMORY;
+        if (Ansi.Buffer == NULL)
+            goto fail6;
+
         status = RtlUnicodeStringToAnsiString(&Ansi, &Unicode, FALSE);
         ASSERT(NT_SUCCESS(status));
 
@@ -415,9 +419,10 @@ RegistryEnumerateSubKeys(
         status = Callback(Context, Key, Ansi.Buffer);
 
         __RegistryFree(Ansi.Buffer);
+        Ansi.Buffer = NULL;
 
         if (!NT_SUCCESS(status))
-            goto fail6;
+            goto fail7;
     }
 
     __RegistryFree(Basic);
@@ -426,6 +431,7 @@ RegistryEnumerateSubKeys(
 
     return STATUS_SUCCESS;
 
+fail7:
 fail6:
 fail5:
     __RegistryFree(Basic);
@@ -530,6 +536,37 @@ fail3:
     __RegistryFree(Full);
     
 fail2:
+fail1:
+    return status;
+}
+
+NTSTATUS
+RegistryDeleteValue(
+    IN  PHANDLE         Key,
+    IN  PCHAR           Name
+    )
+{
+    ANSI_STRING         Ansi;
+    UNICODE_STRING      Unicode;
+    NTSTATUS            status;
+
+    RtlInitAnsiString(&Ansi, Name);
+
+    status = RtlAnsiStringToUnicodeString(&Unicode, &Ansi, TRUE);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = ZwDeleteValueKey(Key, &Unicode);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    RtlFreeUnicodeString(&Unicode);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    RtlFreeUnicodeString(&Unicode);
+
 fail1:
     return status;
 }
@@ -836,6 +873,59 @@ fail3:
 fail2:
     RtlFreeUnicodeString(&Unicode);
 
+fail1:
+    return status;
+}
+
+NTSTATUS
+RegistryQueryKeyName(
+    IN  HANDLE              Key,
+    OUT PANSI_STRING        *Array
+    )
+{
+    PKEY_NAME_INFORMATION   Value;
+    ULONG                   Size;
+    NTSTATUS                status;
+
+    status = ZwQueryKey(Key,
+                        KeyNameInformation,
+                        NULL,
+                        0,
+                        &Size);
+    if (status != STATUS_BUFFER_TOO_SMALL)
+        goto fail1;
+
+    // Name information is not intrinsically NULL terminated
+    Value = __RegistryAllocate(Size + sizeof (WCHAR));
+
+    status = STATUS_NO_MEMORY;
+    if (Value == NULL)
+        goto fail2;
+
+    status = ZwQueryKey(Key,
+                        KeyNameInformation,
+                        Value,
+                        Size,
+                        &Size);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    Value->Name[Value->NameLength / sizeof (WCHAR)] = L'\0';
+    *Array = RegistrySzToAnsi((PWCHAR)Value->Name);
+
+    status = STATUS_NO_MEMORY;
+    if (*Array == NULL)
+        goto fail4;
+
+    __RegistryFree(Value);
+
+    return STATUS_SUCCESS;
+
+fail4:
+fail3:
+    __RegistryFree(Value);
+
+fail2:
 fail1:
     return status;
 }

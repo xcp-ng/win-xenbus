@@ -43,30 +43,14 @@ HypercallInitialize(
     );
 
 extern ULONG_PTR
-__Hypercall2(
+__Hypercall(
     ULONG       Ordinal,
-    ULONG_PTR   Argument1,
-    ULONG_PTR   Argument2
+    ULONG       Count,
+    ...
     );
 
-#define Hypercall2(_Type, _Name, _Argument1, _Argument2) \
-        ((_Type)__Hypercall2(__HYPERVISOR_##_Name,       \
-                             (ULONG_PTR)(_Argument1),    \
-                             (ULONG_PTR)(_Argument2)))
-
-extern ULONG_PTR
-__Hypercall3(
-    ULONG       Ordinal,
-    ULONG_PTR   Argument1,
-    ULONG_PTR   Argument2,
-    ULONG_PTR   Argument3
-    );
-
-#define Hypercall3(_Type, _Name, _Argument1, _Argument2, _Argument3)    \
-        ((_Type)__Hypercall3(__HYPERVISOR_##_Name,                      \
-                             (ULONG_PTR)(_Argument1),                   \
-                             (ULONG_PTR)(_Argument2),                   \
-                             (ULONG_PTR)(_Argument3)))
+#define HYPERCALL(_Type, _Name, _Count, ...) \
+        (_Type)__Hypercall(__HYPERVISOR_##_Name, (_Count), __VA_ARGS__)
 
 extern VOID
 HypercallTeardown(

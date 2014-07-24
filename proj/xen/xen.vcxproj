@@ -90,16 +90,10 @@
 		<ClCompile Include="..\..\src\xen\system.c" />
 	</ItemGroup>
 	<ItemGroup>
-		<MASM Include="..\..\src\xen\amd64\hypercall_gate.asm">
+		<MASM Include="..\..\src\xen\amd64\hypercall_thunk.asm">
 			<ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
 		</MASM>
-		<MASM Include="..\..\src\xen\i386\hypercall_gate.asm">
-			<ExcludedFromBuild Condition="'$(Platform)'=='x64'">true</ExcludedFromBuild>
-		</MASM>
-		<MASM Include="..\..\src\xen\amd64\util.asm">
-			<ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
-		</MASM>
-		<MASM Include="..\..\src\xen\i386\util.asm">
+		<MASM Include="..\..\src\xen\i386\hypercall_thunk.asm">
 			<ExcludedFromBuild Condition="'$(Platform)'=='x64'">true</ExcludedFromBuild>
 		</MASM>
 	</ItemGroup>

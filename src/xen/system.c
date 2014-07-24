@@ -130,8 +130,8 @@ __ProductTypeName(
 #undef  PRODUCT_TYPE_NAME
 }
 
-static FORCEINLINE NTSTATUS
-__SystemGetVersionInformation(
+static NTSTATUS
+SystemGetVersionInformation(
     VOID
     )
 {
@@ -191,8 +191,8 @@ fail1:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__SystemGetMemoryInformation(
+static NTSTATUS
+SystemGetMemoryInformation(
     VOID
     )
 {
@@ -278,8 +278,8 @@ SystemCpuInformation(
     KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
 }
 
-static FORCEINLINE VOID
-__SystemGetCpuInformation(
+static VOID
+SystemGetCpuInformation(
     VOID
     )
 {
@@ -319,8 +319,8 @@ __SystemGetCpuInformation(
                                     WaitBlock);
 }
 
-static FORCEINLINE NTSTATUS
-__SystemGetStartOptions(
+static NTSTATUS
+SystemGetStartOptions(
     VOID
     )
 {
@@ -366,8 +366,8 @@ fail1:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__SystemRegisterCallback(
+static NTSTATUS
+SystemRegisterCallback(
     IN  PWCHAR              Name,
     IN  PCALLBACK_FUNCTION  Function,
     IN  PVOID               Argument,
@@ -417,8 +417,8 @@ fail1:
     return status;
 }
 
-static FORCEINLINE VOID
-__SystemDeregisterCallback(
+static VOID
+SystemDeregisterCallback(
     IN  PVOID   Handle
     )
 {
@@ -462,24 +462,24 @@ SystemInitialize(
     if (References != 1)
         goto fail1;
 
-    status = __SystemGetStartOptions();
+    status = SystemGetStartOptions();
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = __SystemGetVersionInformation();
+    status = SystemGetVersionInformation();
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    status = __SystemGetMemoryInformation();
+    status = SystemGetMemoryInformation();
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    __SystemGetCpuInformation();
+    SystemGetCpuInformation();
 
-    status = __SystemRegisterCallback(L"\\Callback\\PowerState",
-                                      SystemPowerStateCallback,
-                                      NULL,
-                                      &Context->Handle);
+    status = SystemRegisterCallback(L"\\Callback\\PowerState",
+                                    SystemPowerStateCallback,
+                                    NULL,
+                                    &Context->Handle);
     if (!NT_SUCCESS(status))
         goto fail5;
 
@@ -510,7 +510,7 @@ SystemTeardown(
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
 
-    __SystemDeregisterCallback(Context->Handle);
+    SystemDeregisterCallback(Context->Handle);
     Context->Handle = NULL;
 
     RtlZeroMemory(Context->Cpu, sizeof (SYSTEM_CPU) * MAXIMUM_PROCESSORS);

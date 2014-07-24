@@ -35,7 +35,7 @@
 #include <ntddk.h>
 
 static FORCEINLINE const CHAR *
-PowerTypeName(
+PowerStateTypeName(
     IN  POWER_STATE_TYPE    Type
     )
 {
@@ -55,7 +55,7 @@ PowerTypeName(
 }
 
 static FORCEINLINE const CHAR *
-PowerSystemStateName(
+SystemPowerStateName(
     IN  SYSTEM_POWER_STATE State
     )
 {
@@ -81,7 +81,7 @@ PowerSystemStateName(
 }
 
 static FORCEINLINE const CHAR *
-PowerDeviceStateName(
+DevicePowerStateName(
     IN  DEVICE_POWER_STATE State
     )
 {
@@ -225,7 +225,7 @@ PartialResourceDescriptorTypeName(
 }
 
 static FORCEINLINE const CHAR *
-DeviceUsageTypeName(
+DeviceUsageNotificationTypeName(
     IN  DEVICE_USAGE_NOTIFICATION_TYPE  Type
     )
 {
@@ -331,6 +331,31 @@ DmaSpeedName(
     return "UNKNOWN";
 
 #undef  _DMA_SPEED_NAME
+}
+
+static FORCEINLINE const CHAR *
+BusQueryIdTypeName(
+    IN  BUS_QUERY_ID_TYPE   Type
+    )
+{
+#define _BUS_QUERY_ID_TYPE_NAME(_Type)  \
+    case BusQuery ## _Type:             \
+        return #_Type;
+
+    switch (Type) {
+    _BUS_QUERY_ID_TYPE_NAME(DeviceID);
+    _BUS_QUERY_ID_TYPE_NAME(HardwareIDs);
+    _BUS_QUERY_ID_TYPE_NAME(CompatibleIDs);
+    _BUS_QUERY_ID_TYPE_NAME(InstanceID);
+    _BUS_QUERY_ID_TYPE_NAME(DeviceSerialNumber);
+    _BUS_QUERY_ID_TYPE_NAME(ContainerID);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef  _BUS_QUERY_ID_TYPE_NAME
 }
 
 #endif // _COMMON_NAMES_H_

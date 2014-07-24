@@ -63,7 +63,7 @@ XEN_API
 NTSTATUS
 HvmSetParam(
     IN  ULONG       Parameter,
-    IN  ULONG_PTR   Value
+    IN  ULONGLONG   Value
     );
 
 __checkReturn
@@ -71,7 +71,7 @@ XEN_API
 NTSTATUS
 HvmGetParam(
     IN  ULONG       Parameter,
-    OUT PULONG_PTR  Value
+    OUT PULONGLONG  Value
     );
 
 __checkReturn

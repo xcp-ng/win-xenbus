@@ -32,9 +32,6 @@
 #ifndef _XENFILT_DRIVER_H
 #define _XENFILT_DRIVER_H
 
-#include "pdo.h"
-#include "fdo.h"
-
 extern PDRIVER_OBJECT
 DriverGetDriverObject(
     VOID
@@ -50,7 +47,63 @@ DriverGetUnplugKey(
     VOID
     );
 
+extern VOID
+DriverAcquireMutex(
+    VOID
+     );
+
+extern VOID
+DriverReleaseMutex(
+    VOID
+     );
+
+typedef enum _XENFILT_FILTER_STATE {
+    XENFILT_FILTER_ENABLED = 0,
+    XENFILT_FILTER_PENDING,
+    XENFILT_FILTER_DISABLED
+} XENFILT_FILTER_STATE, *PXENFILT_FILTER_STATE;
+
+VOID
+DriverSetFilterState(
+    VOID
+    );
+
+XENFILT_FILTER_STATE
+DriverGetFilterState(
+    VOID
+    );
+
+#include "emulated.h"
+
+PXENFILT_EMULATED_CONTEXT
+DriverGetEmulatedContext(
+    VOID
+    );
+
+#include "unplug.h"
+
+PXENFILT_UNPLUG_CONTEXT
+DriverGetUnplugContext(
+    VOID
+    );
+
+typedef struct _XENFILT_FDO XENFILT_FDO, *PXENFILT_FDO;
+typedef struct _XENFILT_PDO XENFILT_PDO, *PXENFILT_PDO;
+
+#include "pdo.h"
+#include "fdo.h"
+
 #define MAX_DEVICE_ID_LEN   200
+
+extern VOID
+DriverAddFunctionDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    );
+
+extern VOID
+DriverRemoveFunctionDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    );
 
 #pragma warning(push)
 #pragma warning(disable:4201) // nonstandard extension used : nameless struct/union

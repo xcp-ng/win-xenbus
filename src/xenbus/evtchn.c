@@ -39,75 +39,76 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-typedef struct _EVTCHN_FIXED_PARAMETERS {
+typedef struct _XENBUS_EVTCHN_FIXED_PARAMETERS {
     BOOLEAN Mask;
-} EVTCHN_FIXED_PARAMETERS, *PEVTCHN_FIXED_PARAMETERS;
+} XENBUS_EVTCHN_FIXED_PARAMETERS, *PXENBUS_EVTCHN_FIXED_PARAMETERS;
 
-typedef struct _EVTCHN_UNBOUND_PARAMETERS {
+typedef struct _XENBUS_EVTCHN_UNBOUND_PARAMETERS {
     USHORT  RemoteDomain;
     BOOLEAN Mask;
-} EVTCHN_UNBOUND_PARAMETERS, *PEVTCHN_UNBOUND_PARAMETERS;
+} XENBUS_EVTCHN_UNBOUND_PARAMETERS, *PXENBUS_EVTCHN_UNBOUND_PARAMETERS;
 
-typedef struct _EVTCHN_INTER_DOMAIN_PARAMETERS {
+typedef struct _XENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS {
     USHORT  RemoteDomain;
     ULONG   RemotePort;
     BOOLEAN Mask;
-} EVTCHN_INTER_DOMAIN_PARAMETERS, *PEVTCHN_INTER_DOMAIN_PARAMETERS;
+} XENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS, *PXENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS;
 
-typedef struct _EVTCHN_VIRQ_PARAMETERS {
+typedef struct _XENBUS_EVTCHN_VIRQ_PARAMETERS {
     ULONG   Index;
-} EVTCHN_VIRQ_PARAMETERS, *PEVTCHN_VIRQ_PARAMETERS;
+} XENBUS_EVTCHN_VIRQ_PARAMETERS, *PXENBUS_EVTCHN_VIRQ_PARAMETERS;
 
 #pragma warning(push)
 #pragma warning(disable:4201)   // nonstandard extension used : nameless struct/union
 
-typedef struct _EVTCHN_PARAMETERS {
+typedef struct _XENBUS_EVTCHN_PARAMETERS {
     union {
-        EVTCHN_FIXED_PARAMETERS         Fixed;
-        EVTCHN_UNBOUND_PARAMETERS       Unbound;
-        EVTCHN_INTER_DOMAIN_PARAMETERS  InterDomain;
-        EVTCHN_VIRQ_PARAMETERS          Virq;
+        XENBUS_EVTCHN_FIXED_PARAMETERS         Fixed;
+        XENBUS_EVTCHN_UNBOUND_PARAMETERS       Unbound;
+        XENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS  InterDomain;
+        XENBUS_EVTCHN_VIRQ_PARAMETERS          Virq;
     };
-} EVTCHN_PARAMETERS, *PEVTCHN_PARAMETERS;
+} XENBUS_EVTCHN_PARAMETERS, *PXENBUS_EVTCHN_PARAMETERS;
 
 #pragma warning(pop)
 
-#define EVTCHN_DESCRIPTOR_MAGIC 'DTVE'
+#define XENBUS_EVTCHN_CHANNEL_MAGIC 'NAHC'
 
-struct _XENBUS_EVTCHN_DESCRIPTOR {
-    ULONG                               Magic;
-    LIST_ENTRY                          ListEntry;
-    PVOID                               Caller;
-    PKSERVICE_ROUTINE                   Callback;
-    PVOID                               Argument;
-    BOOLEAN                             Active; // Must be tested at >= DISPATCH_LEVEL
-    XENBUS_EVTCHN_TYPE                  Type;
-    EVTCHN_PARAMETERS                   Parameters;
-    ULONG                               LocalPort;
+struct _XENBUS_EVTCHN_CHANNEL {
+    ULONG                       Magic;
+    LIST_ENTRY                  ListEntry;
+    PVOID                       Caller;
+    PKSERVICE_ROUTINE           Callback;
+    PVOID                       Argument;
+    BOOLEAN                     Active; // Must be tested at >= DISPATCH_LEVEL
+    XENBUS_EVTCHN_TYPE          Type;
+    XENBUS_EVTCHN_PARAMETERS    Parameters;
+    ULONG                       LocalPort;
 };
 
 struct _XENBUS_EVTCHN_CONTEXT {
+    PXENBUS_FDO                     Fdo;
+    KSPIN_LOCK                      Lock;
     LONG                            References;
-    PXENBUS_RESOURCE                Interrupt;
-    PKINTERRUPT                     InterruptObject;
+    ULONG                           Vector;
     BOOLEAN                         Enabled;
-    PXENBUS_SUSPEND_INTERFACE       SuspendInterface;
+    XENBUS_SUSPEND_INTERFACE        SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackEarly;
-    PXENBUS_DEBUG_INTERFACE         DebugInterface;
+    XENBUS_DEBUG_INTERFACE          DebugInterface;
     PXENBUS_DEBUG_CALLBACK          DebugCallback;
-    PXENBUS_SHARED_INFO_INTERFACE   SharedInfoInterface;
-    PXENBUS_EVTCHN_DESCRIPTOR       Descriptor[EVTCHN_SELECTOR_COUNT * EVTCHN_PER_SELECTOR];
+    XENBUS_SHARED_INFO_INTERFACE    SharedInfoInterface;
+    PXENBUS_EVTCHN_CHANNEL          Channel[XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR];
     LIST_ENTRY                      List;
 };
 
-#define EVTCHN_TAG  'CTVE'
+#define XENBUS_EVTCHN_TAG  'CTVE'
 
 static FORCEINLINE PVOID
 __EvtchnAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, EVTCHN_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_EVTCHN_TAG);
 }
 
 static FORCEINLINE VOID
@@ -115,66 +116,89 @@ __EvtchnFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, EVTCHN_TAG);
+    ExFreePoolWithTag(Buffer, XENBUS_EVTCHN_TAG);
 }
 
-#pragma warning(push)
-#pragma warning(disable: 28230)
-#pragma warning(disable: 28285)
+static VOID
+EvtchnInterruptEnable(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    )
+{
+    NTSTATUS                    status;
 
-_IRQL_requires_max_(HIGH_LEVEL) // HIGH_LEVEL is best approximation of DIRQL
+    Trace("<===>\n");
+
+    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, Context->Vector);
+    ASSERT(NT_SUCCESS(status));
+}
+
+static VOID
+EvtchnInterruptDisable(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    )
+{
+    NTSTATUS                    status;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    Trace("<===>\n");
+
+    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, 0);
+    ASSERT(NT_SUCCESS(status));
+}
+
+static FORCEINLINE
+_IRQL_requires_max_(HIGH_LEVEL)
 _IRQL_saves_
-_IRQL_raises_(HIGH_LEVEL) // HIGH_LEVEL is best approximation of DIRQL
-static FORCEINLINE KIRQL
-__AcquireInterruptLock(
-    _Inout_ PKINTERRUPT             Interrupt
+_IRQL_raises_(HIGH_LEVEL)
+KIRQL
+__EvtchnAcquireInterruptLock(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    return KeAcquireInterruptSpinLock(Interrupt);
+    return FdoAcquireInterruptLock(Context->Fdo);
 }
 
-_IRQL_requires_(HIGH_LEVEL) // HIGH_LEVEL is best approximation of DIRQL
-static FORCEINLINE VOID
-__ReleaseInterruptLock(
-    _Inout_ PKINTERRUPT             Interrupt,
-    _In_ _IRQL_restores_ KIRQL      Irql
+static FORCEINLINE
+__drv_requiresIRQL(HIGH_LEVEL)
+VOID
+__EvtchnReleaseInterruptLock(
+    IN  PXENBUS_EVTCHN_CONTEXT      Context,
+    IN  __drv_restoresIRQL KIRQL    Irql
     )
 {
-#pragma prefast(suppress:28121) // The function is not permitted to be called at the current IRQ level
-    KeReleaseInterruptSpinLock(Interrupt, Irql);
+    FdoReleaseInterruptLock(Context->Fdo, Irql);
 }
 
-#pragma warning(pop)
-
-static FORCEINLINE NTSTATUS
-__EvtchnOpenFixed(
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor,
-    IN  va_list                     Arguments
+static NTSTATUS
+EvtchnOpenFixed(
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  va_list                 Arguments
     )
 {
-    ULONG                           LocalPort;
-    BOOLEAN                         Mask;
+    ULONG                       LocalPort;
+    BOOLEAN                     Mask;
 
     LocalPort = va_arg(Arguments, ULONG);
     Mask = va_arg(Arguments, BOOLEAN);
 
-    Descriptor->Parameters.Fixed.Mask = Mask;
+    Channel->Parameters.Fixed.Mask = Mask;
 
-    Descriptor->LocalPort = LocalPort;
+    Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
 }
 
-static FORCEINLINE NTSTATUS
-__EvtchnOpenUnbound(
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor,
-    IN  va_list                     Arguments
+static NTSTATUS
+EvtchnOpenUnbound(
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  va_list                 Arguments
     )
 {
-    USHORT                          RemoteDomain;
-    BOOLEAN                         Mask;
-    ULONG                           LocalPort;
-    NTSTATUS                        status;
+    USHORT                      RemoteDomain;
+    BOOLEAN                     Mask;
+    ULONG                       LocalPort;
+    NTSTATUS                    status;
 
     RemoteDomain = va_arg(Arguments, USHORT);
     Mask = va_arg(Arguments, BOOLEAN);
@@ -183,10 +207,10 @@ __EvtchnOpenUnbound(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    Descriptor->Parameters.Unbound.RemoteDomain = RemoteDomain;
-    Descriptor->Parameters.Unbound.Mask = Mask;
+    Channel->Parameters.Unbound.RemoteDomain = RemoteDomain;
+    Channel->Parameters.Unbound.Mask = Mask;
 
-    Descriptor->LocalPort = LocalPort;
+    Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
 
@@ -196,17 +220,17 @@ fail1:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__EvtchnOpenInterDomain(
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor,
-    IN  va_list                     Arguments
+static NTSTATUS
+EvtchnOpenInterDomain(
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  va_list                 Arguments
     )
 {
-    USHORT                          RemoteDomain;
-    ULONG                           RemotePort;
-    BOOLEAN                         Mask;
-    ULONG                           LocalPort;
-    NTSTATUS                        status;
+    USHORT                      RemoteDomain;
+    ULONG                       RemotePort;
+    BOOLEAN                     Mask;
+    ULONG                       LocalPort;
+    NTSTATUS                    status;
 
     RemoteDomain = va_arg(Arguments, USHORT);
     RemotePort = va_arg(Arguments, ULONG);
@@ -216,11 +240,11 @@ __EvtchnOpenInterDomain(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    Descriptor->Parameters.InterDomain.RemoteDomain = RemoteDomain;
-    Descriptor->Parameters.InterDomain.RemotePort = RemotePort;
-    Descriptor->Parameters.InterDomain.Mask = Mask;
+    Channel->Parameters.InterDomain.RemoteDomain = RemoteDomain;
+    Channel->Parameters.InterDomain.RemotePort = RemotePort;
+    Channel->Parameters.InterDomain.Mask = Mask;
 
-    Descriptor->LocalPort = LocalPort;
+    Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
 
@@ -230,15 +254,15 @@ fail1:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__EvtchnOpenVirq(
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor,
-    IN  va_list                     Arguments
+static NTSTATUS
+EvtchnOpenVirq(
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  va_list                 Arguments
     )
 {
-    ULONG                           Index;
-    ULONG                           LocalPort;
-    NTSTATUS                        status;
+    ULONG                       Index;
+    ULONG                       LocalPort;
+    NTSTATUS                    status;
 
     Index = va_arg(Arguments, ULONG);
 
@@ -246,16 +270,16 @@ __EvtchnOpenVirq(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    Descriptor->Parameters.Virq.Index = Index;
+    Channel->Parameters.Virq.Index = Index;
 
-    Descriptor->LocalPort = LocalPort;
+    Channel->LocalPort = LocalPort;
 
-    return status;
+    return STATUS_SUCCESS;
 
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    return STATUS_SUCCESS;
+    return status;
 }
 
 extern USHORT
@@ -266,53 +290,54 @@ RtlCaptureStackBackTrace(
     __out_opt   PULONG  BackTraceHash
     );
 
-static PXENBUS_EVTCHN_DESCRIPTOR
+static PXENBUS_EVTCHN_CHANNEL
 EvtchnOpen(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  XENBUS_EVTCHN_TYPE      Type,
-    IN  PKSERVICE_ROUTINE       Callback,
-    IN  PVOID                   Argument OPTIONAL,
+    IN  PINTERFACE          Interface,
+    IN  XENBUS_EVTCHN_TYPE  Type,
+    IN  PKSERVICE_ROUTINE   Callback,
+    IN  PVOID               Argument OPTIONAL,
     ...
     )
 {
-    va_list                     Arguments;
-    PXENBUS_EVTCHN_DESCRIPTOR   Descriptor;
-    ULONG                       LocalPort;
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
+    va_list                 Arguments;
+    PXENBUS_EVTCHN_CHANNEL  Channel;
+    ULONG                   LocalPort;
+    KIRQL                   Irql;
+    NTSTATUS                status;
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Prevent suspend
 
-    Descriptor = __EvtchnAllocate(sizeof (XENBUS_EVTCHN_DESCRIPTOR));
+    Channel = __EvtchnAllocate(sizeof (XENBUS_EVTCHN_CHANNEL));
 
     status = STATUS_NO_MEMORY;
-    if (Descriptor == NULL)
+    if (Channel == NULL)
         goto fail1;
 
-    Descriptor->Magic = EVTCHN_DESCRIPTOR_MAGIC;
+    Channel->Magic = XENBUS_EVTCHN_CHANNEL_MAGIC;
 
-    (VOID) RtlCaptureStackBackTrace(1, 1, &Descriptor->Caller, NULL);    
+    (VOID) RtlCaptureStackBackTrace(1, 1, &Channel->Caller, NULL);    
 
-    Descriptor->Type = Type;
-    Descriptor->Callback = Callback;
-    Descriptor->Argument = Argument;
+    Channel->Type = Type;
+    Channel->Callback = Callback;
+    Channel->Argument = Argument;
 
     va_start(Arguments, Argument);
     switch (Type) {
-    case EVTCHN_FIXED:
-        status = __EvtchnOpenFixed(Descriptor, Arguments);
+    case XENBUS_EVTCHN_TYPE_FIXED:
+        status = EvtchnOpenFixed(Channel, Arguments);
         break;
 
-    case EVTCHN_UNBOUND:
-        status = __EvtchnOpenUnbound(Descriptor, Arguments);
+    case XENBUS_EVTCHN_TYPE_UNBOUND:
+        status = EvtchnOpenUnbound(Channel, Arguments);
         break;
 
-    case EVTCHN_INTER_DOMAIN:
-        status = __EvtchnOpenInterDomain(Descriptor, Arguments);
+    case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
+        status = EvtchnOpenInterDomain(Channel, Arguments);
         break;
 
-    case EVTCHN_VIRQ:
-        status = __EvtchnOpenVirq(Descriptor, Arguments);
+    case XENBUS_EVTCHN_TYPE_VIRQ:
+        status = EvtchnOpenVirq(Channel, Arguments);
         break;
 
     default:
@@ -324,37 +349,42 @@ EvtchnOpen(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    LocalPort = Descriptor->LocalPort;
+    LocalPort = Channel->LocalPort;
 
-    ASSERT3U(LocalPort, <, sizeof (Context->Descriptor) / sizeof (Context->Descriptor[0]));
+    ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
 
-    (VOID) __AcquireInterruptLock(Context->InterruptObject);
+    (VOID) __EvtchnAcquireInterruptLock(Context);
 
-    ASSERT3P(Context->Descriptor[LocalPort], ==, NULL);
-    Context->Descriptor[LocalPort] = Descriptor;
-    Descriptor->Active = TRUE;
+    ASSERT3P(Context->Channel[LocalPort], ==, NULL);
+    Context->Channel[LocalPort] = Channel;
+    Channel->Active = TRUE;
 
-    InsertTailList(&Context->List, &Descriptor->ListEntry);
+    if (!IsListEmpty(&Context->List) && !Context->Enabled) {
+        EvtchnInterruptEnable(Context);
+        Context->Enabled = TRUE;
+    }
 
-    __ReleaseInterruptLock(Context->InterruptObject, DISPATCH_LEVEL);
+    InsertTailList(&Context->List, &Channel->ListEntry);
+
+    __EvtchnReleaseInterruptLock(Context, DISPATCH_LEVEL);
 
     KeLowerIrql(Irql);
 
-    return Descriptor;
+    return Channel;
 
 fail2:
     Error("fail2\n");
 
-    Descriptor->Argument = NULL;
-    Descriptor->Callback = NULL;
-    Descriptor->Type = 0;
+    Channel->Argument = NULL;
+    Channel->Callback = NULL;
+    Channel->Type = 0;
 
-    Descriptor->Caller = NULL;
+    Channel->Caller = NULL;
 
-    Descriptor->Magic = 0;
+    Channel->Magic = 0;
 
-    ASSERT(IsZeroMemory(Descriptor, sizeof (XENBUS_EVTCHN_DESCRIPTOR)));
-    __EvtchnFree(Descriptor);
+    ASSERT(IsZeroMemory(Channel, sizeof (XENBUS_EVTCHN_CHANNEL)));
+    __EvtchnFree(Channel);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -364,47 +394,44 @@ fail1:
     return NULL;
 }
 
-#pragma warning(push)
-#pragma warning(disable:4701)
-
 static BOOLEAN
 EvtchnUnmask(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor,
-    IN  BOOLEAN                     Locked
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  BOOLEAN                 Locked
     )
 {
-    KIRQL                           Irql;
-    BOOLEAN                         Pending;
+    PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
+    KIRQL                       Irql = PASSIVE_LEVEL;
+    BOOLEAN                     Pending = FALSE;
 
-    ASSERT3U(Descriptor->Magic, ==, EVTCHN_DESCRIPTOR_MAGIC);
+    ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
     if (!Locked)
-        Irql = __AcquireInterruptLock(Context->InterruptObject);
+        Irql = __EvtchnAcquireInterruptLock(Context);
 
-    if (Descriptor->Active) {
-        Pending = SHARED_INFO(EvtchnUnmask,
-                              Context->SharedInfoInterface,
-                              Descriptor->LocalPort);
+    if (Channel->Active) {
+        Pending = XENBUS_SHARED_INFO(EvtchnUnmask,
+                                     &Context->SharedInfoInterface,
+                                     Channel->LocalPort);
 
         if (Pending) {
-            BOOLEAN Mask;
+            BOOLEAN Mask = FALSE;
 
-            switch (Descriptor->Type) {
-            case EVTCHN_FIXED:
-                Mask = Descriptor->Parameters.Fixed.Mask;
+            switch (Channel->Type) {
+            case XENBUS_EVTCHN_TYPE_FIXED:
+                Mask = Channel->Parameters.Fixed.Mask;
                 break;
 
-            case EVTCHN_UNBOUND:
-                Mask = Descriptor->Parameters.Unbound.Mask;
+            case XENBUS_EVTCHN_TYPE_UNBOUND:
+                Mask = Channel->Parameters.Unbound.Mask;
                 break;
 
-            case EVTCHN_INTER_DOMAIN:
-                Mask = Descriptor->Parameters.InterDomain.Mask;
+            case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
+                Mask = Channel->Parameters.InterDomain.Mask;
                 break;
 
-            case EVTCHN_VIRQ:
-                Mask = FALSE;
+            case XENBUS_EVTCHN_TYPE_VIRQ:
                 break;
 
             default:
@@ -413,42 +440,39 @@ EvtchnUnmask(
             }
 
             if (Mask)
-                SHARED_INFO(EvtchnMask,
-                            Context->SharedInfoInterface,
-                            Descriptor->LocalPort);
+                XENBUS_SHARED_INFO(EvtchnMask,
+                                   &Context->SharedInfoInterface,
+                                   Channel->LocalPort);
         }
     }
 
     if (!Locked)
-#pragma prefast(suppress:28121) // The function is not permitted to be called at the current IRQ level
-        __ReleaseInterruptLock(Context->InterruptObject, Irql);
+        __EvtchnReleaseInterruptLock(Context, Irql);
 
     return Pending;
 }
 
-#pragma warning(pop)
-
 static NTSTATUS
 EvtchnSend(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
-    KIRQL                           Irql;
-    NTSTATUS                        status;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
 
-    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Interface);
 
-    ASSERT3U(Descriptor->Magic, ==, EVTCHN_DESCRIPTOR_MAGIC);
+    ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
     // Make sure we don't suspend
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
     status = STATUS_UNSUCCESSFUL;
-    if (!Descriptor->Active)
+    if (!Channel->Active)
         goto done;
 
-    status = EventChannelSend(Descriptor->LocalPort);
+    status = EventChannelSend(Channel->LocalPort);
 
 done:
     KeLowerIrql(Irql);
@@ -456,163 +480,143 @@ done:
     return status;
 }
 
-static FORCEINLINE BOOLEAN
-__EvtchnCallback(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor
+static BOOLEAN
+EvtchnCallback(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
-    BOOLEAN                         DoneSomething;
+    BOOLEAN                     DoneSomething;
 
     UNREFERENCED_PARAMETER(Context);
 
-    ASSERT(Descriptor != NULL);
-    ASSERT(Descriptor->Active);
+    ASSERT(Channel != NULL);
+    ASSERT(Channel->Active);
 
-#pragma prefast(suppress:6387) // Param 1 could be NULL
-    DoneSomething = Descriptor->Callback(NULL, Descriptor->Argument);
+#pragma warning(suppress:6387)  // NULL argument
+    DoneSomething = Channel->Callback(NULL, Channel->Argument);
 
     return DoneSomething;
 }
 
 static BOOLEAN
 EvtchnTrigger(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
-    KIRQL                           Irql;
-    BOOLEAN                         DoneSomething;
+    PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
+    KIRQL                       Irql;
+    BOOLEAN                     DoneSomething;
 
-    ASSERT3U(Descriptor->Magic, ==, EVTCHN_DESCRIPTOR_MAGIC);
+    ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    Irql = __AcquireInterruptLock(Context->InterruptObject);
+    Irql = __EvtchnAcquireInterruptLock(Context);
 
-    if (Descriptor->Active) {
-        DoneSomething = __EvtchnCallback(Context, Descriptor);
+    if (Channel->Active) {
+        DoneSomething = EvtchnCallback(Context, Channel);
     } else {
-        Warning("[%d]: INVALID PORT\n", Descriptor->LocalPort);
+        Warning("[%d]: INVALID PORT\n", Channel->LocalPort);
         DoneSomething = FALSE;
     }
 
-#pragma prefast(suppress:28121) // The function is not permitted to be called at the current IRQ level
-    __ReleaseInterruptLock(Context->InterruptObject, Irql);
+    __EvtchnReleaseInterruptLock(Context, Irql);
 
     return DoneSomething;
 }
 
 static VOID
 EvtchnClose(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
-    KIRQL                           Irql;
+    PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
+    KIRQL                       Irql;
 
-    ASSERT3U(Descriptor->Magic, ==, EVTCHN_DESCRIPTOR_MAGIC);
+    ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    Irql = __AcquireInterruptLock(Context->InterruptObject);
+    Irql = __EvtchnAcquireInterruptLock(Context);
 
-    RemoveEntryList(&Descriptor->ListEntry);
-    RtlZeroMemory(&Descriptor->ListEntry, sizeof (LIST_ENTRY));
+    RemoveEntryList(&Channel->ListEntry);
 
-    if (Descriptor->Active) {
-        ULONG   LocalPort = Descriptor->LocalPort;
-
-        ASSERT3U(LocalPort, <, sizeof (Context->Descriptor) / sizeof (Context->Descriptor[0]));
-
-        Descriptor->Active = FALSE;
-
-        SHARED_INFO(EvtchnMask,
-                    Context->SharedInfoInterface,
-                    LocalPort);
-
-        if (Descriptor->Type != EVTCHN_FIXED)
-            (VOID) EventChannelClose(LocalPort);
-
-        ASSERT(Context->Descriptor[LocalPort] != NULL);
-        Context->Descriptor[LocalPort] = NULL;
+    if (IsListEmpty(&Context->List) && Context->Enabled) {
+        EvtchnInterruptDisable(Context);
+        Context->Enabled = FALSE;
     }
 
-#pragma prefast(suppress:28121) // The function is not permitted to be called at the current IRQ level
-    __ReleaseInterruptLock(Context->InterruptObject, Irql);
+    RtlZeroMemory(&Channel->ListEntry, sizeof (LIST_ENTRY));
 
-    Descriptor->LocalPort = 0;
-    RtlZeroMemory(&Descriptor->Parameters, sizeof (EVTCHN_PARAMETERS));
+    if (Channel->Active) {
+        ULONG   LocalPort = Channel->LocalPort;
 
-    Descriptor->Argument = NULL;
-    Descriptor->Callback = NULL;
-    Descriptor->Type = 0;
+        ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
 
-    Descriptor->Caller = NULL;
+        Channel->Active = FALSE;
 
-    Descriptor->Magic = 0;
+        XENBUS_SHARED_INFO(EvtchnMask,
+                           &Context->SharedInfoInterface,
+                           LocalPort);
 
-    ASSERT(IsZeroMemory(Descriptor, sizeof (XENBUS_EVTCHN_DESCRIPTOR)));
-    __EvtchnFree(Descriptor);
+        if (Channel->Type != XENBUS_EVTCHN_TYPE_FIXED)
+            (VOID) EventChannelClose(LocalPort);
+
+        ASSERT(Context->Channel[LocalPort] != NULL);
+        Context->Channel[LocalPort] = NULL;
+    }
+
+    __EvtchnReleaseInterruptLock(Context, Irql);
+
+    Channel->LocalPort = 0;
+    RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
+
+    Channel->Argument = NULL;
+    Channel->Callback = NULL;
+    Channel->Type = 0;
+
+    Channel->Caller = NULL;
+
+    Channel->Magic = 0;
+
+    ASSERT(IsZeroMemory(Channel, sizeof (XENBUS_EVTCHN_CHANNEL)));
+    __EvtchnFree(Channel);
 }
 
 static ULONG
-EvtchnPort(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  PXENBUS_EVTCHN_DESCRIPTOR   Descriptor
+EvtchnGetPort(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
-    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Interface);
 
-    ASSERT3U(Descriptor->Magic, ==, EVTCHN_DESCRIPTOR_MAGIC);
-    ASSERT(Descriptor->Active);
+    ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
+    ASSERT(Channel->Active);
 
-    return Descriptor->LocalPort;
+    return Channel->LocalPort;
 }
-
-static VOID
-EvtchnAcquire(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-EvtchnRelease(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define EVTCHN_OPERATION(_Type, _Name, _Arguments) \
-        Evtchn ## _Name,
-
-static XENBUS_EVTCHN_OPERATIONS  Operations = {
-    DEFINE_EVTCHN_OPERATIONS
-};
-
-#undef EVTCHN_OPERATION
 
 static BOOLEAN
 EvtchnPollCallback(
-    IN  PVOID                   _Context,
-    IN  ULONG                   LocalPort
+    IN  PVOID               Argument,
+    IN  ULONG               LocalPort
     )
 {
-    PXENBUS_EVTCHN_CONTEXT      Context = _Context;
-    PXENBUS_EVTCHN_DESCRIPTOR   Descriptor;
-    BOOLEAN                     Mask;
-    BOOLEAN                     DoneSomething;
+    PXENBUS_EVTCHN_CONTEXT  Context = Argument;
+    PXENBUS_EVTCHN_CHANNEL  Channel;
+    BOOLEAN                 Mask;
+    BOOLEAN                 DoneSomething;
 
-    ASSERT3U(LocalPort, <, sizeof (Context->Descriptor) / sizeof (Context->Descriptor[0]));
+    ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
 
-    Descriptor = Context->Descriptor[LocalPort];
+    Channel = Context->Channel[LocalPort];
 
-    if (Descriptor == NULL) {
+    if (Channel == NULL) {
         Warning("[%d]: INVALID PORT\n", LocalPort);
 
-        SHARED_INFO(EvtchnMask,
-                    Context->SharedInfoInterface,
-                    LocalPort);
+        XENBUS_SHARED_INFO(EvtchnMask,
+                           &Context->SharedInfoInterface,
+                           LocalPort);
 
         DoneSomething = FALSE;
         goto done;
@@ -620,20 +624,20 @@ EvtchnPollCallback(
 
     Mask = FALSE;
 
-    switch (Descriptor->Type) {
-    case EVTCHN_FIXED:
-        Mask = Descriptor->Parameters.Fixed.Mask;
+    switch (Channel->Type) {
+    case XENBUS_EVTCHN_TYPE_FIXED:
+        Mask = Channel->Parameters.Fixed.Mask;
         break;
 
-    case EVTCHN_UNBOUND:
-        Mask = Descriptor->Parameters.Unbound.Mask;
+    case XENBUS_EVTCHN_TYPE_UNBOUND:
+        Mask = Channel->Parameters.Unbound.Mask;
         break;
 
-    case EVTCHN_INTER_DOMAIN:
-        Mask = Descriptor->Parameters.InterDomain.Mask;
+    case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
+        Mask = Channel->Parameters.InterDomain.Mask;
         break;
 
-    case EVTCHN_VIRQ:
+    case XENBUS_EVTCHN_TYPE_VIRQ:
         break;
 
     default:
@@ -642,15 +646,15 @@ EvtchnPollCallback(
     }
 
     if (Mask)
-        SHARED_INFO(EvtchnMask,
-                    Context->SharedInfoInterface,
-                    LocalPort);
+        XENBUS_SHARED_INFO(EvtchnMask,
+                           &Context->SharedInfoInterface,
+                           LocalPort);
 
-    SHARED_INFO(EvtchnAck,
-                Context->SharedInfoInterface,
-                LocalPort);
+    XENBUS_SHARED_INFO(EvtchnAck,
+                       &Context->SharedInfoInterface,
+                       LocalPort);
 
-    DoneSomething = __EvtchnCallback(Context, Descriptor);
+    DoneSomething = EvtchnCallback(Context, Channel);
 
 done:
     return DoneSomething;
@@ -658,155 +662,121 @@ done:
 
 BOOLEAN
 EvtchnInterrupt(
-    IN  PXENBUS_EVTCHN_INTERFACE    Interface
-    )
-{
-    PXENBUS_EVTCHN_CONTEXT          Context = Interface->Context;
-
-    return SHARED_INFO(EvtchnPoll,
-                       Context->SharedInfoInterface,
-                       EvtchnPollCallback,
-                       Context);
-}
-
-static FORCEINLINE VOID
-__EvtchnInterruptEnable(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    NTSTATUS                    status;
-
-    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ,
-                         Context->Interrupt->Raw.u.Interrupt.Vector);
-    ASSERT(NT_SUCCESS(status));
-}
-
-static FORCEINLINE VOID
-__EvtchnInterruptDisable(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
-    )
-{
-    NTSTATUS                    status;
-
-    UNREFERENCED_PARAMETER(Context);
-
-    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, 0);
-    ASSERT(NT_SUCCESS(status));
+    return XENBUS_SHARED_INFO(EvtchnPoll,
+                              &Context->SharedInfoInterface,
+                              EvtchnPollCallback,
+                              Context);
 }
 
 static VOID
 EvtchnSuspendCallbackEarly(
-    IN  PVOID                   Argument
+    IN  PVOID               Argument
     )
 {
-    PXENBUS_EVTCHN_CONTEXT      Context = Argument;
-    PLIST_ENTRY                 ListEntry;
+    PXENBUS_EVTCHN_CONTEXT  Context = Argument;
+    PLIST_ENTRY             ListEntry;
 
     for (ListEntry = Context->List.Flink;
          ListEntry != &Context->List;
          ListEntry = ListEntry->Flink) {
-        PXENBUS_EVTCHN_DESCRIPTOR   Descriptor;
+        PXENBUS_EVTCHN_CHANNEL  Channel;
 
-        Descriptor = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_DESCRIPTOR, ListEntry);
+        Channel = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_CHANNEL, ListEntry);
 
-        if (Descriptor->Active) {
-            ULONG   LocalPort = Descriptor->LocalPort;
+        if (Channel->Active) {
+            ULONG   LocalPort = Channel->LocalPort;
 
-            ASSERT3U(LocalPort, <, sizeof (Context->Descriptor) / sizeof (Context->Descriptor[0]));
+            ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
 
-            Descriptor->Active = FALSE;
+            Channel->Active = FALSE;
 
-            ASSERT(Context->Descriptor[LocalPort] != NULL);
-            Context->Descriptor[LocalPort] = NULL;
+            ASSERT(Context->Channel[LocalPort] != NULL);
+            Context->Channel[LocalPort] = NULL;
         }
     }
 
     if (Context->Enabled)
-        __EvtchnInterruptEnable(Context);
+        EvtchnInterruptEnable(Context);
 }
 
 static VOID
 EvtchnDebugCallback(
-    IN  PVOID                   Argument,
-    IN  BOOLEAN                 Crashing
+    IN  PVOID               Argument,
+    IN  BOOLEAN             Crashing
     )
 {
-    PXENBUS_EVTCHN_CONTEXT      Context = Argument;
+    PXENBUS_EVTCHN_CONTEXT  Context = Argument;
 
     UNREFERENCED_PARAMETER(Crashing);
 
     if (!IsListEmpty(&Context->List)) {
         PLIST_ENTRY ListEntry;
 
-        DEBUG(Printf,
-              Context->DebugInterface,
-              Context->DebugCallback,
-              "EVENT CHANNELS:\n");
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "EVENT CHANNELS:\n");
 
         for (ListEntry = Context->List.Flink;
                 ListEntry != &Context->List;
                 ListEntry = ListEntry->Flink) {
-            PXENBUS_EVTCHN_DESCRIPTOR   Descriptor;
-            PCHAR                       Name;
-            ULONG_PTR                   Offset;
+            PXENBUS_EVTCHN_CHANNEL  Channel;
+            PCHAR                   Name;
+            ULONG_PTR               Offset;
 
-            Descriptor = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_DESCRIPTOR, ListEntry);
+            Channel = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_CHANNEL, ListEntry);
 
-            ModuleLookup((ULONG_PTR)Descriptor->Caller, &Name, &Offset);
+            ModuleLookup((ULONG_PTR)Channel->Caller, &Name, &Offset);
 
             if (Name != NULL) {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%04x) BY %s + %p [%s]\n",
-                      Descriptor->LocalPort,
-                      Name,
-                      (PVOID)Offset,
-                      (Descriptor->Active) ? "TRUE" : "FALSE");
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%04x) BY %s + %p [%s]\n",
+                             Channel->LocalPort,
+                             Name,
+                             (PVOID)Offset,
+                             (Channel->Active) ? "TRUE" : "FALSE");
             } else {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%04x) BY %p [%s]\n",
-                      Descriptor->LocalPort,
-                      (PVOID)Descriptor->Caller,
-                      (Descriptor->Active) ? "TRUE" : "FALSE");
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%04x) BY %p [%s]\n",
+                             Channel->LocalPort,
+                             (PVOID)Channel->Caller,
+                             (Channel->Active) ? "TRUE" : "FALSE");
             }
 
-            switch (Descriptor->Type) {
-            case EVTCHN_FIXED:
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "FIXED: Mask = %s\n",
-                      (Descriptor->Parameters.Fixed.Mask) ? "TRUE" : "FALSE");
+            switch (Channel->Type) {
+            case XENBUS_EVTCHN_TYPE_FIXED:
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "FIXED: Mask = %s\n",
+                             (Channel->Parameters.Fixed.Mask) ? "TRUE" : "FALSE");
                 break;
 
-            case EVTCHN_UNBOUND:
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "UNBOUND: RemoteDomain = %u Mask = %s\n",
-                      Descriptor->Parameters.Unbound.RemoteDomain,
-                      (Descriptor->Parameters.Unbound.Mask) ? "TRUE" : "FALSE");
+            case XENBUS_EVTCHN_TYPE_UNBOUND:
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "UNBOUND: RemoteDomain = %u Mask = %s\n",
+                             Channel->Parameters.Unbound.RemoteDomain,
+                             (Channel->Parameters.Unbound.Mask) ? "TRUE" : "FALSE");
                 break;
 
-            case EVTCHN_INTER_DOMAIN:
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "INTER_DOMAIN: RemoteDomain = %u RemotePort = %u Mask = %s\n",
-                      Descriptor->Parameters.InterDomain.RemoteDomain,
-                      Descriptor->Parameters.InterDomain.RemotePort,
-                      (Descriptor->Parameters.InterDomain.Mask) ? "TRUE" : "FALSE");
+            case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "INTER_DOMAIN: RemoteDomain = %u RemotePort = %u Mask = %s\n",
+                             Channel->Parameters.InterDomain.RemoteDomain,
+                             Channel->Parameters.InterDomain.RemotePort,
+                             (Channel->Parameters.InterDomain.Mask) ? "TRUE" : "FALSE");
                 break;
 
-            case EVTCHN_VIRQ:
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "VIRQ: Index = %u\n",
-                      Descriptor->Parameters.Virq.Index);
+            case XENBUS_EVTCHN_TYPE_VIRQ:
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "VIRQ: Index = %u\n",
+                             Channel->Parameters.Virq.Index);
                 break;
 
             default:
@@ -816,93 +786,197 @@ EvtchnDebugCallback(
     }
 }
 
-NTSTATUS
-EvtchnInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_EVTCHN_INTERFACE    Interface
+static NTSTATUS
+EvtchnAcquire(
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_EVTCHN_CONTEXT          Context;
-    NTSTATUS                        status;
+    PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
+    PXENBUS_FDO             Fdo = Context->Fdo;
+    KIRQL                   Irql;
+    NTSTATUS                status;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
 
     Trace("====>\n");
 
-    Context = __EvtchnAllocate(sizeof (XENBUS_EVTCHN_CONTEXT));
-
-    status = STATUS_NO_MEMORY;
-    if (Context == NULL)
+    status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
+    if (!NT_SUCCESS(status))
         goto fail1;
 
-    InitializeListHead(&Context->List);
-
-    Context->SharedInfoInterface = FdoGetSharedInfoInterface(Fdo);
-
-    SHARED_INFO(Acquire, Context->SharedInfoInterface);
-
-    Context->Interrupt = FdoGetResource(Fdo, INTERRUPT_RESOURCE);
-    Context->InterruptObject = FdoGetInterruptObject(Fdo);
-
-    Context->SuspendInterface = FdoGetSuspendInterface(Fdo);
-
-    SUSPEND(Acquire, Context->SuspendInterface);
-
-    status = SUSPEND(Register,
-                     Context->SuspendInterface,
-                     SUSPEND_CALLBACK_EARLY,
-                     EvtchnSuspendCallbackEarly,
-                     Context,
-                     &Context->SuspendCallbackEarly);
+    status = XENBUS_SUSPEND(Register,
+                            &Context->SuspendInterface,
+                            SUSPEND_CALLBACK_EARLY,
+                            EvtchnSuspendCallbackEarly,
+                            Context,
+                            &Context->SuspendCallbackEarly);
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Context->DebugInterface = FdoGetDebugInterface(Fdo);
-
-    DEBUG(Acquire, Context->DebugInterface);
-
-    status = DEBUG(Register,
-                   Context->DebugInterface,
-                   __MODULE__ "|EVTCHN",
-                   EvtchnDebugCallback,
-                   Context,
-                   &Context->DebugCallback);
+    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
+    status = XENBUS_DEBUG(Register,
+                          &Context->DebugInterface,
+                          __MODULE__ "|EVTCHN",
+                          EvtchnDebugCallback,
+                          Context,
+                          &Context->DebugCallback);
+    if (!NT_SUCCESS(status))
+        goto fail4;
+
+    status = XENBUS_SHARED_INFO(Acquire, &Context->SharedInfoInterface);
+    if (!NT_SUCCESS(status))
+        goto fail5;
+
+    Context->Vector = FdoGetInterruptVector(Fdo);
 
     Trace("<====\n");
 
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     return STATUS_SUCCESS;
+
+fail5:
+    Error("fail5\n");
+
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
+    Context->DebugCallback = NULL;
+
+fail4:
+    Error("fail4\n");
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
 
 fail3:
     Error("fail3\n");
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
-
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
 fail2:
     Error("fail2\n");
 
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-    (VOID) HvmSetParam(HVM_PARAM_CALLBACK_IRQ, 0);
-    Context->InterruptObject = NULL;
-    Context->Interrupt = NULL;
+fail1:
+    Error("fail1 (%08x)\n", status);
 
-    SHARED_INFO(Release, Context->SharedInfoInterface);
-    Context->SharedInfoInterface = NULL;
+    --Context->References;
+    ASSERT3U(Context->References, ==, 0);
+    KeReleaseSpinLock(&Context->Lock, Irql);
 
-    RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
+    return status;
+}
 
-    ASSERT(IsZeroMemory(Context, sizeof (XENBUS_EVTCHN_CONTEXT)));
-    __EvtchnFree(Context);
+VOID
+EvtchnRelease(
+    IN  PINTERFACE          Interface
+    )
+{
+    PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
+    KIRQL                   Irql;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
+
+    Trace("====>\n");
+
+    if (!IsListEmpty(&Context->List))
+        BUG("OUTSTANDING EVENT CHANNELS");
+
+    Context->Vector = 0;
+
+    XENBUS_SHARED_INFO(Release, &Context->SharedInfoInterface);
+
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
+    Context->DebugCallback = NULL;
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
+    Context->SuspendCallbackEarly = NULL;
+
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENBUS_EVTCHN_INTERFACE_V1 EvtchnInterfaceVersion1 = {
+    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V1), 1, NULL, NULL, NULL },
+    EvtchnAcquire,
+    EvtchnRelease,
+    EvtchnOpen,
+    EvtchnUnmask,
+    EvtchnSend,
+    EvtchnTrigger,
+    EvtchnGetPort,
+    EvtchnClose
+};
+                     
+NTSTATUS
+EvtchnInitialize(
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_EVTCHN_CONTEXT  *Context
+    )
+{
+    NTSTATUS                    status;
+
+    Trace("====>\n");
+
+    *Context = __EvtchnAllocate(sizeof (XENBUS_EVTCHN_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
+                                 XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
+                                 (PINTERFACE)&(*Context)->SuspendInterface,
+                                 sizeof ((*Context)->SuspendInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->SuspendInterface.Interface.Context != NULL);
+
+    status = DebugGetInterface(FdoGetDebugContext(Fdo),
+                               XENBUS_DEBUG_INTERFACE_VERSION_MAX,
+                               (PINTERFACE)&(*Context)->DebugInterface,
+                               sizeof ((*Context)->DebugInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
+
+    status = SharedInfoGetInterface(FdoGetSharedInfoContext(Fdo),
+                                    XENBUS_SHARED_INFO_INTERFACE_VERSION_MAX,
+                                    (PINTERFACE)&(*Context)->SharedInfoInterface,
+                                    sizeof ((*Context)->SharedInfoInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->SharedInfoInterface.Interface.Context != NULL);
+
+    InitializeListHead(&(*Context)->List);
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    (*Context)->Fdo = Fdo;
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -910,72 +984,67 @@ fail1:
     return status;
 }
 
-VOID
-EvtchnEnable(
-    IN PXENBUS_EVTCHN_INTERFACE Interface
+NTSTATUS
+EvtchnGetInterface(
+    IN      PXENBUS_EVTCHN_CONTEXT  Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     )
 {
-    PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
+    NTSTATUS                        status;
 
-    ASSERT(!Context->Enabled);
+    ASSERT(Context != NULL);
 
-    __EvtchnInterruptEnable(Context);
-    Context->Enabled = TRUE;
-}
+    switch (Version) {
+    case 1: {
+        struct _XENBUS_EVTCHN_INTERFACE_V1  *EvtchnInterface;
 
-VOID
-EvtchnDisable(
-    IN PXENBUS_EVTCHN_INTERFACE Interface
-    )
-{
-    PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
+        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V1 *)Interface;
 
-    ASSERT(Context->Enabled);
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V1))
+            break;
 
-    Context->Enabled = FALSE;
-    __EvtchnInterruptDisable(Context);
-}
+        *EvtchnInterface = EvtchnInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
 
 VOID
 EvtchnTeardown(
-    IN OUT  PXENBUS_EVTCHN_INTERFACE    Interface
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    PXENBUS_EVTCHN_CONTEXT              Context = Interface->Context;
-
     Trace("====>\n");
 
-    if (!IsListEmpty(&Context->List))
-        BUG("OUTSTANDING EVENT CHANNELS");
+    Context->Fdo = NULL;
 
-    DEBUG(Deregister,
-          Context->DebugInterface,
-          Context->DebugCallback);
-    Context->DebugCallback = NULL;
-
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
-
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
-    Context->SuspendCallbackEarly = NULL;
-
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
-
-    Context->InterruptObject = NULL;
-    Context->Interrupt = NULL;
-
-    SHARED_INFO(Release, Context->SharedInfoInterface);
-    Context->SharedInfoInterface = NULL;
-
+    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
+
+    RtlZeroMemory(&Context->SharedInfoInterface,
+                  sizeof (XENBUS_SHARED_INFO_INTERFACE));
+
+    RtlZeroMemory(&Context->DebugInterface,
+                  sizeof (XENBUS_DEBUG_INTERFACE));
+
+    RtlZeroMemory(&Context->SuspendInterface,
+                  sizeof (XENBUS_SUSPEND_INTERFACE));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_EVTCHN_CONTEXT)));
     __EvtchnFree(Context);
-
-    RtlZeroMemory(Interface, sizeof (XENBUS_EVTCHN_INTERFACE));
 
     Trace("<====\n");
 }

@@ -36,7 +36,7 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-#define THREAD_POOL 'ERHT'
+#define THREAD_TAG 'ERHT'
 
 struct _XENBUS_THREAD {
     XENBUS_THREAD_FUNCTION  Function;
@@ -52,7 +52,7 @@ __ThreadAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, THREAD_POOL);
+    return __AllocatePoolWithTag(NonPagedPool, Length, THREAD_TAG);
 }
 
 static FORCEINLINE VOID
@@ -60,7 +60,7 @@ __ThreadFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, THREAD_POOL);
+    ExFreePoolWithTag(Buffer, THREAD_TAG);
 }
 
 static FORCEINLINE VOID

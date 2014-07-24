@@ -127,29 +127,45 @@ fail1:
     return status;
 }
 
-extern uintptr_t __stdcall hypercall_gate_2(uint32_t ord, uintptr_t arg1, uintptr_t arg2);
+extern uintptr_t __stdcall hypercall2(uint32_t ord, uintptr_t arg1, uintptr_t arg2);
+extern uintptr_t __stdcall hypercall3(uint32_t ord, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
 
 ULONG_PTR
-__Hypercall2(
+__Hypercall(
     ULONG       Ordinal,
-    ULONG_PTR   Argument1,
-    ULONG_PTR   Argument2
+    ULONG       Count,
+    ...
     )
 {
-    return hypercall_gate_2(Ordinal, Argument1, Argument2);
-}
+    va_list     Arguments;
+    ULONG_PTR   Value;
 
-extern uintptr_t __stdcall hypercall_gate_3(uint32_t ord, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
+    va_start(Arguments, Count);
+    switch (Count) {
+    case 2: {
+        uint32_t   ord = Ordinal;
+        uintptr_t  arg1 = va_arg(Arguments, ULONG_PTR);
+        uintptr_t  arg2 = va_arg(Arguments, ULONG_PTR);
 
-ULONG_PTR
-__Hypercall3(
-    ULONG       Ordinal,
-    ULONG_PTR   Argument1,
-    ULONG_PTR   Argument2,
-    ULONG_PTR   Argument3
-    )
-{
-    return hypercall_gate_3(Ordinal, Argument1, Argument2, Argument3);
+        Value = hypercall2(ord, arg1, arg2);
+        break;
+    }
+    case 3: {
+        uint32_t   ord = Ordinal;
+        uintptr_t  arg1 = va_arg(Arguments, ULONG_PTR);
+        uintptr_t  arg2 = va_arg(Arguments, ULONG_PTR);
+        uintptr_t  arg3 = va_arg(Arguments, ULONG_PTR);
+
+        Value = hypercall3(ord, arg1, arg2, arg3);
+        break;
+    }
+    default:
+        ASSERT(FALSE);
+        Value = 0;
+    }
+    va_end(Arguments);
+
+    return Value;
 }
 
 VOID

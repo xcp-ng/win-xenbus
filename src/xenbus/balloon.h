@@ -33,30 +33,30 @@
 #define _XENBUS_BALLOON_H
 
 #include <ntddk.h>
+#include <xen.h>
+#include <balloon_interface.h>
 
-typedef struct _XENBUS_BALLOON XENBUS_BALLOON, *PXENBUS_BALLOON;
+typedef struct _XENBUS_BALLOON_CONTEXT  XENBUS_BALLOON_CONTEXT, *PXENBUS_BALLOON_CONTEXT;
 
-extern NTSTATUS
-BalloonAdjust(
-    IN  PXENBUS_BALLOON Balloon,
-    IN  ULONGLONG       Target,
-    IN  BOOLEAN         AllowInflation,
-    IN  BOOLEAN         AllowDeflation
-    );
-
-extern ULONGLONG
-BalloonGetSize(
-    IN  PXENBUS_BALLOON Balloon
-    );
+#include "fdo.h"
 
 extern NTSTATUS
 BalloonInitialize(
-    OUT PXENBUS_BALLOON  *Balloon
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_BALLOON_CONTEXT *Context
+    );
+
+extern NTSTATUS
+BalloonGetInterface(
+    IN      PXENBUS_BALLOON_CONTEXT Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 BalloonTeardown(
-    IN  PXENBUS_BALLOON  Balloon
+    IN  PXENBUS_BALLOON_CONTEXT Context
     );
 
 #endif  // _XENBUS_BALLOON_H

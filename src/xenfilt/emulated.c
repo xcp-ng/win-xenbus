@@ -67,21 +67,19 @@ struct _XENFILT_EMULATED_OBJECT {
 };
 
 struct _XENFILT_EMULATED_CONTEXT {
+    KSPIN_LOCK          Lock;
     LONG                References;
     LIST_ENTRY          List;
-    KSPIN_LOCK          Lock;
 };
 
-static XENFILT_EMULATED_CONTEXT EmulatedContext;
-
-#define EMULATED_TAG    'LUME'
+#define XENFILT_EMULATED_TAG    'LUME'
 
 static FORCEINLINE PVOID
 __EmulatedAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, EMULATED_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENFILT_EMULATED_TAG);
 }
 
 static FORCEINLINE VOID
@@ -89,7 +87,7 @@ __EmulatedFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, EMULATED_TAG);
+    ExFreePoolWithTag(Buffer, XENFILT_EMULATED_TAG);
 }
 
 __drv_functionClass(IO_COMPLETION_ROUTINE)
@@ -111,7 +109,7 @@ EmulatedQueryIdCompletion(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 EmulatedQueryId(
     IN  PDEVICE_OBJECT      DeviceObject,
     IN  BUS_QUERY_ID_TYPE   IdType,
@@ -180,10 +178,9 @@ fail1:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__EmulatedSetObjectDeviceData(
+static NTSTATUS
+EmulatedSetObjectDeviceData(
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PCHAR                       Prefix,
     IN  PDEVICE_OBJECT              DeviceObject
     )
 {
@@ -213,18 +210,10 @@ __EmulatedSetObjectDeviceData(
                              BusQueryInstanceID,
                              &InstanceID);
     if (NT_SUCCESS(status)) {
-        if (strlen(Prefix) != 0)
-            status = RtlStringCbPrintfA(EmulatedObject->Data.Device.InstanceID,
-                                        MAXNAMELEN,
-                                        "%s&%ws",
-                                        Prefix,
-                                        InstanceID);
-        else
-            status = RtlStringCbPrintfA(EmulatedObject->Data.Device.InstanceID,
-                                        MAXNAMELEN,
-                                        "%ws",
-                                        InstanceID);
-
+        status = RtlStringCbPrintfA(EmulatedObject->Data.Device.InstanceID,
+                                    MAXNAMELEN,
+                                    "%ws",
+                                    InstanceID);
         ASSERT(NT_SUCCESS(status));
 
         ExFreePool(InstanceID);
@@ -245,10 +234,9 @@ __EmulatedSetObjectDeviceData(
     return STATUS_SUCCESS;
 }
 
-static FORCEINLINE NTSTATUS
-__EmulatedSetObjectDiskData(
+static NTSTATUS
+EmulatedSetObjectDiskData(
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PCHAR                       Prefix,
     IN  PDEVICE_OBJECT              DeviceObject
     )
 {
@@ -260,8 +248,6 @@ __EmulatedSetObjectDiskData(
     ULONG                           Target;
     ULONG                           Lun;
     NTSTATUS                        status;
-
-    UNREFERENCED_PARAMETER(Prefix);
 
     status = EmulatedQueryId(DeviceObject,
                              BusQueryInstanceID,
@@ -338,16 +324,16 @@ fail1:
 
 NTSTATUS
 EmulatedAddObject(
-    IN  PXENFILT_EMULATED_INTERFACE     Interface,
+    IN  PXENFILT_EMULATED_CONTEXT       Context,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
-    IN  PCHAR                           Prefix,
     IN  PDEVICE_OBJECT                  DeviceObject,
     OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
     )
 {
-    PXENFILT_EMULATED_CONTEXT           Context = Interface->Context;
     KIRQL                               Irql;
     NTSTATUS                            status;
+
+    Trace("====>\n");
 
     *EmulatedObject = __EmulatedAllocate(sizeof (XENFILT_EMULATED_OBJECT));
 
@@ -357,15 +343,13 @@ EmulatedAddObject(
 
     switch (Type) {
     case XENFILT_EMULATED_OBJECT_TYPE_DEVICE:
-        status = __EmulatedSetObjectDeviceData(*EmulatedObject,
-                                               Prefix,
-                                               DeviceObject);
+        status = EmulatedSetObjectDeviceData(*EmulatedObject,
+                                             DeviceObject);
         break;
 
     case XENFILT_EMULATED_OBJECT_TYPE_DISK:
-        status = __EmulatedSetObjectDiskData(*EmulatedObject,
-                                             Prefix,
-                                             DeviceObject);
+        status = EmulatedSetObjectDiskData(*EmulatedObject,
+                                           DeviceObject);
         break;
 
     default:
@@ -378,9 +362,13 @@ EmulatedAddObject(
 
     (*EmulatedObject)->Type = Type;
 
+    Info("%s\n", (*EmulatedObject)->Text);
+
     KeAcquireSpinLock(&Context->Lock, &Irql);
     InsertTailList(&Context->List, &(*EmulatedObject)->ListEntry);
     KeReleaseSpinLock(&Context->Lock, Irql);
+
+    Trace("<====\n");
 
     return STATUS_SUCCESS;
 
@@ -397,35 +385,44 @@ fail1:
 
 VOID
 EmulatedRemoveObject(
-    IN  PXENFILT_EMULATED_INTERFACE     Interface,
-    IN  PXENFILT_EMULATED_OBJECT        EmulatedObject
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
     )
 {
-    PXENFILT_EMULATED_CONTEXT           Context = Interface->Context;
-    KIRQL                               Irql;
+    KIRQL                           Irql;
+
+    Info("%s\n", EmulatedObject->Text);
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     RemoveEntryList(&EmulatedObject->ListEntry);
     KeReleaseSpinLock(&Context->Lock, Irql);
+
+    __EmulatedFree(EmulatedObject);
 }
 
 const CHAR *
-EmulatedGetObjectText(
+EmulatedGetText(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
     )
 {
+    UNREFERENCED_PARAMETER(Context);
+
     return (const CHAR *)(EmulatedObject->Text);
 }
 
 static BOOLEAN
 EmulatedIsDevicePresent(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PCHAR                       DeviceID,
-    IN  PCHAR                       InstanceID
+    IN  PINTERFACE              Interface,
+    IN  PCHAR                   DeviceID,
+    IN  PCHAR                   InstanceID
     )
 {
-    KIRQL                           Irql;
-    PLIST_ENTRY                     ListEntry;
+    PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
+    PLIST_ENTRY                 ListEntry;
+
+    Trace("====> (%s %s)\n", DeviceID, InstanceID);
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -433,31 +430,40 @@ EmulatedIsDevicePresent(
     while (ListEntry != &Context->List) {
         PXENFILT_EMULATED_OBJECT    EmulatedObject;
 
-        EmulatedObject = CONTAINING_RECORD(ListEntry, XENFILT_EMULATED_OBJECT, ListEntry);
+        EmulatedObject = CONTAINING_RECORD(ListEntry,
+                                           XENFILT_EMULATED_OBJECT,
+                                           ListEntry);
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_DEVICE &&
             _stricmp(DeviceID, EmulatedObject->Data.Device.DeviceID) == 0 &&
-            _stricmp(InstanceID, EmulatedObject->Data.Device.InstanceID) == 0)
+            _stricmp(InstanceID, EmulatedObject->Data.Device.InstanceID) == 0) {
+            Trace("FOUND\n");
             break;
+        }
 
         ListEntry = ListEntry->Flink;
     }
 
     KeReleaseSpinLock(&Context->Lock, Irql);
+
+    Trace("<====\n");
 
     return (ListEntry != &Context->List) ? TRUE : FALSE;
 }
 
 static BOOLEAN
 EmulatedIsDiskPresent(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  ULONG                       Controller,
-    IN  ULONG                       Target,
-    IN  ULONG                       Lun
+    IN  PINTERFACE              Interface,
+    IN  ULONG                   Controller,
+    IN  ULONG                   Target,
+    IN  ULONG                   Lun
     )
 {
-    KIRQL                           Irql;
-    PLIST_ENTRY                     ListEntry;
+    PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
+    PLIST_ENTRY                 ListEntry;
+
+    Trace("====> (%02X:%02X:%02X)\n", Controller, Target, Lun);
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -465,99 +471,157 @@ EmulatedIsDiskPresent(
     while (ListEntry != &Context->List) {
         PXENFILT_EMULATED_OBJECT    EmulatedObject;
 
-        EmulatedObject = CONTAINING_RECORD(ListEntry, XENFILT_EMULATED_OBJECT, ListEntry);
+        EmulatedObject = CONTAINING_RECORD(ListEntry,
+                                           XENFILT_EMULATED_OBJECT,
+                                           ListEntry);
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_DISK &&
             Controller == EmulatedObject->Data.Disk.Controller &&
             Target == EmulatedObject->Data.Disk.Target &&
-            Lun == EmulatedObject->Data.Disk.Lun)
+            Lun == EmulatedObject->Data.Disk.Lun) {
+            Trace("FOUND");
             break;
+        }
 
         ListEntry = ListEntry->Flink;
     }
 
     KeReleaseSpinLock(&Context->Lock, Irql);
 
+    Trace("<====\n");
+
     return (ListEntry != &Context->List) ? TRUE : FALSE;
 }
 
-static VOID
-EmulatedAcquire(
-    IN  PXENFILT_EMULATED_CONTEXT   Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-EmulatedRelease(
-    IN  PXENFILT_EMULATED_CONTEXT   Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define EMULATED_OPERATION(_Type, _Name, _Arguments) \
-        Emulated ## _Name,
-
-static XENFILT_EMULATED_OPERATIONS  Operations = {
-    DEFINE_EMULATED_OPERATIONS
-};
-
-#undef EMULATED_OPERATION
-
 NTSTATUS
-EmulatedInitialize(
-    OUT PXENFILT_EMULATED_INTERFACE Interface
+EmulatedAcquire(
+    IN  PINTERFACE              Interface
     )
 {
-    PXENFILT_EMULATED_CONTEXT       Context;
-    ULONG                           References;
+    PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
 
-    Trace("====>\n");
+    KeAcquireSpinLock(&Context->Lock, &Irql);
 
-    Context = &EmulatedContext;
-
-    References = InterlockedIncrement(&Context->References);
-    if (References > 1)
+    if (Context->References++ != 0)
         goto done;
 
-    InitializeListHead(&Context->List);
-    KeInitializeSpinLock(&Context->Lock);
+    Trace("<===>\n");
 
 done:
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
-
-    Trace("<====\n");
+    KeReleaseSpinLock(&Context->Lock, Irql);
 
     return STATUS_SUCCESS;
 }
 
 VOID
-EmulatedTeardown(
-    IN OUT  PXENFILT_EMULATED_INTERFACE Interface
+EmulatedRelease(
+    IN  PINTERFACE              Interface
     )
 {
-    PXENFILT_EMULATED_CONTEXT           Context = Interface->Context;
-    ULONG                               References;
+    PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
+    KIRQL                       Irql;
 
-    ASSERT3P(Context, ==, &EmulatedContext);
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
+
+    Trace("<===>\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENFILT_EMULATED_INTERFACE_V1 EmulatedInterfaceVersion1 = {
+    { sizeof (struct _XENFILT_EMULATED_INTERFACE_V1), 1, NULL, NULL, NULL },
+    EmulatedAcquire,
+    EmulatedRelease,
+    EmulatedIsDevicePresent,
+    EmulatedIsDiskPresent
+};
+                     
+NTSTATUS
+EmulatedInitialize(
+    OUT PXENFILT_EMULATED_CONTEXT   *Context
+    )
+{
+    NTSTATUS                        status;
 
     Trace("====>\n");
 
-    References = InterlockedDecrement(&Context->References);
-    if (References > 0)
-        goto done;
+    *Context = __EmulatedAllocate(sizeof (XENFILT_EMULATED_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    InitializeListHead(&(*Context)->List);
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
+EmulatedGetInterface(
+    IN      PXENFILT_EMULATED_CONTEXT   Context,
+    IN      ULONG                       Version,
+    IN OUT  PINTERFACE                  Interface,
+    IN      ULONG                       Size
+    )
+{
+    NTSTATUS                            status;
+
+    ASSERT(Context != NULL);
+
+    switch (Version) {
+    case 1: {
+        struct _XENFILT_EMULATED_INTERFACE_V1   *EmulatedInterface;
+
+        EmulatedInterface = (struct _XENFILT_EMULATED_INTERFACE_V1 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENFILT_EMULATED_INTERFACE_V1))
+            break;
+
+        *EmulatedInterface = EmulatedInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
+
+VOID
+EmulatedTeardown(
+    IN  PXENFILT_EMULATED_CONTEXT   Context
+    )
+{
+    Trace("====>\n");
+
+    if (!IsListEmpty(&Context->List))
+        BUG("OUTSTANDING OBJECTS");
 
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENFILT_EMULATED_CONTEXT)));
-
-done:
-    RtlZeroMemory(Interface, sizeof (XENFILT_EMULATED_INTERFACE));
+    __EmulatedFree(Context);
 
     Trace("<====\n");
 }

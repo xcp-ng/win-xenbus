@@ -41,14 +41,14 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-#define GNTTAB_MAXIMUM_FRAME_COUNT  32
-#define GNTTAB_ENTRY_PER_FRAME      (PAGE_SIZE / sizeof (grant_entry_v1_t))
+#define XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT  32
+#define XENBUS_GNTTAB_ENTRY_PER_FRAME      (PAGE_SIZE / sizeof (grant_entry_v1_t))
 
 // Xen requires that we avoid the first 8 entries of the table and
 // we also reserve 1 entry for the crash kernel
-#define GNTTAB_RESERVED_ENTRY_COUNT 9
+#define XENBUS_GNTTAB_RESERVED_ENTRY_COUNT 9
 
-#define GNTTAB_DESCRIPTOR_MAGIC 'DTNG'
+#define XENBUS_GNTTAB_ENTRY_MAGIC 'DTNG'
 
 #define MAXNAMELEN  128
 
@@ -61,33 +61,36 @@ struct _XENBUS_GNTTAB_CACHE {
     PXENBUS_CACHE           Cache;
 };
 
-struct _XENBUS_GNTTAB_DESCRIPTOR {
+struct _XENBUS_GNTTAB_ENTRY {
     ULONG               Magic;
     ULONG               Reference;
     grant_entry_v1_t    Entry;
 };
 
 struct _XENBUS_GNTTAB_CONTEXT {
+    PXENBUS_FDO                 Fdo;
+    KSPIN_LOCK                  Lock;
     LONG                        References;
-    PFN_NUMBER                  Pfn;
+    PHYSICAL_ADDRESS            Address;
     LONG                        FrameIndex;
-    grant_entry_v1_t            *Entry;
+    grant_entry_v1_t            *Table;
+    XENBUS_RANGE_SET_INTERFACE  RangeSetInterface;
     PXENBUS_RANGE_SET           RangeSet;
-    PXENBUS_CACHE_INTERFACE     CacheInterface;
-    PXENBUS_SUSPEND_INTERFACE   SuspendInterface;
+    XENBUS_CACHE_INTERFACE      CacheInterface;
+    XENBUS_SUSPEND_INTERFACE    SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
-    PXENBUS_DEBUG_INTERFACE     DebugInterface;
+    XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
 };
 
-#define GNTTAB_TAG  'TTNG'
+#define XENBUS_GNTTAB_TAG   'TTNG'
 
 static FORCEINLINE PVOID
 __GnttabAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, GNTTAB_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_GNTTAB_TAG);
 }
 
 static FORCEINLINE VOID
@@ -95,100 +98,172 @@ __GnttabFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, GNTTAB_TAG);
+    ExFreePoolWithTag(Buffer, XENBUS_GNTTAB_TAG);
 }
 
-static FORCEINLINE NTSTATUS
-__GnttabExpand(
+static NTSTATUS
+GnttabExpand(
     IN  PXENBUS_GNTTAB_CONTEXT  Context
     )
 {
-    LONG                        FrameIndex;
-    PFN_NUMBER                  Pfn;
+    ULONG                       Index;
+    PHYSICAL_ADDRESS            Address;
     LONGLONG                    Start;
     LONGLONG                    End;
     NTSTATUS                    status;
 
-    FrameIndex = InterlockedIncrement(&Context->FrameIndex);
+    Index = InterlockedIncrement(&Context->FrameIndex);
 
     status = STATUS_INSUFFICIENT_RESOURCES;
-    ASSERT3U(FrameIndex, <=, GNTTAB_MAXIMUM_FRAME_COUNT);
-    if (FrameIndex == GNTTAB_MAXIMUM_FRAME_COUNT)
+    ASSERT3U(Index, <=, XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT);
+    if (Index == XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT)
         goto fail1;
 
-    Pfn = Context->Pfn + FrameIndex;
+    Address = Context->Address;
+    Address.QuadPart += (ULONGLONG)Index << PAGE_SHIFT;
 
-    status = MemoryAddToPhysmap(Pfn,
+    status = MemoryAddToPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT),
                                 XENMAPSPACE_grant_table,
-                                FrameIndex);
+                                Index);
     ASSERT(NT_SUCCESS(status));
 
-    Start = __max(GNTTAB_RESERVED_ENTRY_COUNT, FrameIndex * GNTTAB_ENTRY_PER_FRAME);
-    End = ((FrameIndex + 1) * GNTTAB_ENTRY_PER_FRAME) - 1;
+    LogPrintf(LOG_LEVEL_INFO,
+              "GNTTAB: MAP XENMAPSPACE_grant_table[%d] @ %08x.%08x\n",
+              Index,
+              Address.HighPart,
+              Address.LowPart);
 
-    Info("adding refrences [%08llx - %08llx]\n", Start, End);
+    Start = __max(XENBUS_GNTTAB_RESERVED_ENTRY_COUNT,
+                  Index * XENBUS_GNTTAB_ENTRY_PER_FRAME);
+    End = ((Index + 1) * XENBUS_GNTTAB_ENTRY_PER_FRAME) - 1;
 
-    RangeSetPut(Context->RangeSet, Start, End);
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
-}
-
-static FORCEINLINE VOID
-__GnttabShrink(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
-    )
-{
-    LONGLONG                    Entry;
-
-    for (Entry = GNTTAB_RESERVED_ENTRY_COUNT;
-         Entry < (LONGLONG)((Context->FrameIndex + 1) * GNTTAB_ENTRY_PER_FRAME);
-         Entry++) {
-        NTSTATUS    status;
-
-        status = RangeSetGet(Context->RangeSet, Entry);
-        ASSERT(NT_SUCCESS(status));
-    }
-
-    Context->FrameIndex = -1;
-}
-
-static NTSTATUS
-GnttabDescriptorCtor(
-    IN  PVOID                   Argument,
-    IN  PVOID                   Object
-    )
-{
-    PXENBUS_GNTTAB_CACHE        Cache = Argument;
-    PXENBUS_GNTTAB_CONTEXT      Context = Cache->Context;
-    PXENBUS_GNTTAB_DESCRIPTOR   Descriptor = Object;
-    LONGLONG                    Reference;
-    NTSTATUS                    status;
-
-    if (!RangeSetIsEmpty(Context->RangeSet))
-        goto done;
-
-    status = __GnttabExpand(Context);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-done:
-    status = RangeSetPop(Context->RangeSet, &Reference);
+    status = XENBUS_RANGE_SET(Put,
+                              &Context->RangeSetInterface,
+                              Context->RangeSet,
+                              Start,
+                              End + 1 - Start);
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Descriptor->Magic = GNTTAB_DESCRIPTOR_MAGIC;
-    Descriptor->Reference = (ULONG)Reference;
+    Info("added references [%08llx - %08llx]\n", Start, End);
 
     return STATUS_SUCCESS;
 
 fail2:
     Error("fail2\n");
 
+    // Not clear what to do here
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    (VOID) InterlockedDecrement(&Context->FrameIndex);
+
+    return status;
+}
+
+static VOID
+GnttabMap(
+    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    )
+{
+    LONG                        Index;
+    PHYSICAL_ADDRESS            Address;
+    NTSTATUS                    status;
+
+    Address = Context->Address;
+
+    for (Index = 0; Index <= Context->FrameIndex; Index++) {
+        status = MemoryAddToPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT),
+                                    XENMAPSPACE_grant_table,
+                                    Index);
+        ASSERT(NT_SUCCESS(status));
+
+        LogPrintf(LOG_LEVEL_INFO,
+                  "GNTTAB: MAP XENMAPSPACE_grant_table[%d] @ %08x.%08x\n",
+                  Index,
+                  Address.HighPart,
+                  Address.LowPart);
+
+        Address.QuadPart += PAGE_SIZE;
+    }
+}
+
+static VOID
+GnttabUnmap(
+    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    )
+{
+    LONG                        Index;
+
+    // Not clear what to do here
+
+    for (Index = Context->FrameIndex; Index >= 0; --Index)
+        LogPrintf(LOG_LEVEL_INFO,
+                  "GNTTAB: UNMAP XENMAPSPACE_grant_table[%d]\n",
+                  Index);
+}
+
+static VOID
+GnttabContract(
+    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    )
+{
+    NTSTATUS                    status;
+
+    GnttabUnmap(Context);
+
+    if (Context->FrameIndex >= 0) {
+        LONGLONG    Start;
+        LONGLONG    End;
+
+        Start = XENBUS_GNTTAB_RESERVED_ENTRY_COUNT;
+        End = ((Context->FrameIndex + 1) * XENBUS_GNTTAB_ENTRY_PER_FRAME) - 1;
+
+        status = XENBUS_RANGE_SET(Get,
+                                  &Context->RangeSetInterface,
+                                  Context->RangeSet,
+                                  Start,
+                                  End + 1 - Start);
+        ASSERT(NT_SUCCESS(status));
+
+        Info("removed refrences [%08llx - %08llx]\n", Start, End);
+    }
+
+    Context->FrameIndex = -1;
+}
+
+static NTSTATUS
+GnttabEntryCtor(
+    IN  PVOID               Argument,
+    IN  PVOID               Object
+    )
+{
+    PXENBUS_GNTTAB_CACHE    Cache = Argument;
+    PXENBUS_GNTTAB_CONTEXT  Context = Cache->Context;
+    PXENBUS_GNTTAB_ENTRY    Entry = Object;
+    LONGLONG                Reference;
+    NTSTATUS                status;
+
+again:
+    status = XENBUS_RANGE_SET(Pop,
+                              &Context->RangeSetInterface,
+                              Context->RangeSet,
+                              1,
+                              &Reference);
+    if (!NT_SUCCESS(status)) {
+        status = GnttabExpand(Context);
+        if (!NT_SUCCESS(status))
+            goto fail1;
+
+        goto again;
+    }
+
+    Entry->Magic = XENBUS_GNTTAB_ENTRY_MAGIC;
+    Entry->Reference = (ULONG)Reference;
+
+    return STATUS_SUCCESS;
+
 fail1:
     Error("fail1 (%08x)\n", status);
 
@@ -196,45 +271,47 @@ fail1:
 }
 
 static VOID
-GnttabDescriptorDtor(
-    IN  PVOID                   Argument,
-    IN  PVOID                   Object
+GnttabEntryDtor(
+    IN  PVOID               Argument,
+    IN  PVOID               Object
     )
 {
-    PXENBUS_GNTTAB_CACHE        Cache = Argument;
-    PXENBUS_GNTTAB_CONTEXT      Context = Cache->Context;
-    PXENBUS_GNTTAB_DESCRIPTOR   Descriptor = Object;
-    NTSTATUS                    status;
+    PXENBUS_GNTTAB_CACHE    Cache = Argument;
+    PXENBUS_GNTTAB_CONTEXT  Context = Cache->Context;
+    PXENBUS_GNTTAB_ENTRY    Entry = Object;
+    NTSTATUS                status;
 
-    status = RangeSetPut(Context->RangeSet,
-                         (LONGLONG)Descriptor->Reference,
-                         (LONGLONG)Descriptor->Reference);
+    status = XENBUS_RANGE_SET(Put,
+                              &Context->RangeSetInterface,
+                              Context->RangeSet,
+                              (LONGLONG)Entry->Reference,
+                              1);
     ASSERT(NT_SUCCESS(status));
 }
 
 static VOID
 GnttabAcquireLock(
-    IN  PVOID                   Argument
+    IN  PVOID               Argument
     )
 {
-    PXENBUS_GNTTAB_CACHE        Cache = Argument;
+    PXENBUS_GNTTAB_CACHE    Cache = Argument;
 
     Cache->AcquireLock(Cache->Argument);
 }
 
 static VOID
 GnttabReleaseLock(
-    IN  PVOID                   Argument
+    IN  PVOID               Argument
     )
 {
-    PXENBUS_GNTTAB_CACHE        Cache = Argument;
+    PXENBUS_GNTTAB_CACHE    Cache = Argument;
 
     Cache->ReleaseLock(Cache->Argument);
 }
 
 static NTSTATUS
 GnttabCreateCache(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context,
+    IN  PINTERFACE              Interface,
     IN  const CHAR              *Name,
     IN  ULONG                   Reservation,
     IN  VOID                    (*AcquireLock)(PVOID),
@@ -243,6 +320,7 @@ GnttabCreateCache(
     OUT PXENBUS_GNTTAB_CACHE    *Cache
     )
 {
+    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
     NTSTATUS                    status;
 
     *Cache = __GnttabAllocate(sizeof (XENBUS_GNTTAB_CACHE));
@@ -264,17 +342,17 @@ GnttabCreateCache(
     (*Cache)->ReleaseLock = ReleaseLock;
     (*Cache)->Argument = Argument;
 
-    status = CACHE(Create,
-                   Context->CacheInterface,
-                   (*Cache)->Name,
-                   sizeof (XENBUS_GNTTAB_DESCRIPTOR),
-                   Reservation,
-                   GnttabDescriptorCtor,
-                   GnttabDescriptorDtor,
-                   GnttabAcquireLock,
-                   GnttabReleaseLock,
-                   *Cache,
-                   &(*Cache)->Cache);
+    status = XENBUS_CACHE(Create,
+                          &Context->CacheInterface,
+                          (*Cache)->Name,
+                          sizeof (XENBUS_GNTTAB_ENTRY),
+                          Reservation,
+                          GnttabEntryCtor,
+                          GnttabEntryDtor,
+                          GnttabAcquireLock,
+                          GnttabReleaseLock,
+                          *Cache,
+                          &(*Cache)->Cache);
     if (!NT_SUCCESS(status))
         goto fail3;
 
@@ -305,13 +383,15 @@ fail1:
 
 static VOID
 GnttabDestroyCache(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context,
+    IN  PINTERFACE              Interface,
     IN  PXENBUS_GNTTAB_CACHE    Cache
     )
 {
-    CACHE(Destroy,
-          Context->CacheInterface,
-          Cache->Cache);
+    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
+
+    XENBUS_CACHE(Destroy,
+                 &Context->CacheInterface,
+                 Cache->Cache);
     Cache->Cache = NULL;
 
     Cache->Argument = NULL;
@@ -328,39 +408,37 @@ GnttabDestroyCache(
 
 static NTSTATUS
 GnttabPermitForeignAccess( 
-    IN  PXENBUS_GNTTAB_CONTEXT      Context,
-    IN  PXENBUS_GNTTAB_CACHE        Cache,
-    IN  BOOLEAN                     Locked,
-    IN  USHORT                      Domain,
-    IN  PFN_NUMBER                  Pfn,
-    IN  BOOLEAN                     ReadOnly,
-    OUT PXENBUS_GNTTAB_DESCRIPTOR   *Descriptor
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_GNTTAB_CACHE    Cache,
+    IN  BOOLEAN                 Locked,
+    IN  USHORT                  Domain,
+    IN  PFN_NUMBER              Pfn,
+    IN  BOOLEAN                 ReadOnly,
+    OUT PXENBUS_GNTTAB_ENTRY    *Entry
     )
 {
-    grant_entry_v1_t                *Entry;
-    NTSTATUS                        status;
+    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
+    NTSTATUS                    status;
 
-    *Descriptor = CACHE(Get,
-                        Context->CacheInterface,
-                        Cache->Cache,
-                        Locked);
+    *Entry = XENBUS_CACHE(Get,
+                          &Context->CacheInterface,
+                          Cache->Cache,
+                          Locked);
 
     status = STATUS_INSUFFICIENT_RESOURCES;
-    if (*Descriptor == NULL)
+    if (*Entry == NULL)
         goto fail1;
 
-    (*Descriptor)->Entry.flags = (ReadOnly) ? GTF_readonly : 0;
-    (*Descriptor)->Entry.domid = Domain;
+    (*Entry)->Entry.flags = (ReadOnly) ? GTF_readonly : 0;
+    (*Entry)->Entry.domid = Domain;
 
-    (*Descriptor)->Entry.frame = (uint32_t)Pfn;
-    ASSERT3U((*Descriptor)->Entry.frame, ==, Pfn);
+    (*Entry)->Entry.frame = (uint32_t)Pfn;
+    ASSERT3U((*Entry)->Entry.frame, ==, Pfn);
 
-    Entry = &Context->Entry[(*Descriptor)->Reference];
-
-    *Entry = (*Descriptor)->Entry;
+    Context->Table[(*Entry)->Reference] = (*Entry)->Entry;
     KeMemoryBarrier();
 
-    Entry->flags |= GTF_permit_access;
+    Context->Table[(*Entry)->Reference].flags |= GTF_permit_access;
     KeMemoryBarrier();
 
     return STATUS_SUCCESS;
@@ -373,35 +451,34 @@ fail1:
 
 static NTSTATUS
 GnttabRevokeForeignAccess(
-    IN  PXENBUS_GNTTAB_CONTEXT      Context,
-    IN  PXENBUS_GNTTAB_CACHE        Cache,
-    IN  BOOLEAN                     Locked,
-    IN  PXENBUS_GNTTAB_DESCRIPTOR   Descriptor
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_GNTTAB_CACHE    Cache,
+    IN  BOOLEAN                 Locked,
+    IN  PXENBUS_GNTTAB_ENTRY    Entry
     )
 {
-    grant_entry_v1_t                *Entry;
-    volatile SHORT                  *Flags;
-    ULONG                           Attempt;
-    NTSTATUS                        status;
+    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
+    volatile SHORT              *flags;
+    ULONG                       Attempt;
+    NTSTATUS                    status;
 
-    ASSERT3U(Descriptor->Magic, ==, GNTTAB_DESCRIPTOR_MAGIC);
-    ASSERT3U(Descriptor->Reference, >=, GNTTAB_RESERVED_ENTRY_COUNT);
-    ASSERT3U(Descriptor->Reference, <, (Context->FrameIndex + 1) * GNTTAB_ENTRY_PER_FRAME);
+    ASSERT3U(Entry->Magic, ==, XENBUS_GNTTAB_ENTRY_MAGIC);
+    ASSERT3U(Entry->Reference, >=, XENBUS_GNTTAB_RESERVED_ENTRY_COUNT);
+    ASSERT3U(Entry->Reference, <, (Context->FrameIndex + 1) * XENBUS_GNTTAB_ENTRY_PER_FRAME);
 
-    Entry = &Context->Entry[Descriptor->Reference];
-    Flags = (volatile SHORT *)&Entry->flags;
+    flags = (volatile SHORT *)&Context->Table[Entry->Reference].flags;
 
     Attempt = 0;
     while (Attempt++ < 100) {
         uint16_t    Old;
         uint16_t    New;
 
-        Old = *Flags;
+        Old = *flags;
         Old &= ~(GTF_reading | GTF_writing);
 
         New = Old & ~GTF_permit_access;
 
-        if (InterlockedCompareExchange16(Flags, New, Old) == Old)
+        if (InterlockedCompareExchange16(flags, New, Old) == Old)
             break;
 
         SchedYield();
@@ -411,14 +488,16 @@ GnttabRevokeForeignAccess(
     if (Attempt == 100)
         goto fail1;
 
-    RtlZeroMemory(Entry, sizeof (grant_entry_v1_t));
-    RtlZeroMemory(&Descriptor->Entry, sizeof (grant_entry_v1_t));
+    RtlZeroMemory(&Context->Table[Entry->Reference],
+                  sizeof (grant_entry_v1_t));
+    RtlZeroMemory(&Entry->Entry,
+                  sizeof (grant_entry_v1_t));
 
-    CACHE(Put,
-          Context->CacheInterface,
-          Cache->Cache,
-          Descriptor,
-          Locked);
+    XENBUS_CACHE(Put,
+                 &Context->CacheInterface,
+                 Cache->Cache,
+                 Entry,
+                 Locked);
 
     return STATUS_SUCCESS;
 
@@ -429,73 +508,16 @@ fail1:
 }
 
 static ULONG
-GnttabReference(
-    IN  PXENBUS_GNTTAB_CONTEXT      Context,
-    IN  PXENBUS_GNTTAB_DESCRIPTOR   Descriptor
+GnttabGetReference(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_GNTTAB_ENTRY    Entry
     )
 {
-    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Interface);
 
-    ASSERT3U(Descriptor->Magic, ==, GNTTAB_DESCRIPTOR_MAGIC);
+    ASSERT3U(Entry->Magic, ==, XENBUS_GNTTAB_ENTRY_MAGIC);
 
-    return (ULONG)Descriptor->Reference;
-}
-
-static VOID
-GnttabAcquire(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-GnttabRelease(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define GNTTAB_OPERATION(_Type, _Name, _Arguments) \
-        Gnttab ## _Name,
-
-static XENBUS_GNTTAB_OPERATIONS  Operations = {
-    DEFINE_GNTTAB_OPERATIONS
-};
-
-#undef GNTTAB_OPERATION
-
-static FORCEINLINE VOID
-__GnttabMap(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
-    )
-{
-    LONG                        Index;
-    PFN_NUMBER                  Pfn;
-    NTSTATUS                    status;
-
-    Pfn = Context->Pfn;
-
-    for (Index = 0; Index <= Context->FrameIndex; Index++) {
-        status = MemoryAddToPhysmap(Pfn,
-                                    XENMAPSPACE_grant_table,
-                                    Index);
-        ASSERT(NT_SUCCESS(status));
-
-        Pfn++;
-    }
-}
-
-static FORCEINLINE VOID
-__GnttabUnmap(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
-    )
-{
-    ASSERT3S(Context->FrameIndex, ==, -1);
-
-    // Not clear what to do here
+    return (ULONG)Entry->Reference;
 }
 
 static VOID
@@ -505,7 +527,7 @@ GnttabSuspendCallbackEarly(
 {
     PXENBUS_GNTTAB_CONTEXT  Context = Argument;
 
-    __GnttabMap(Context);
+    GnttabMap(Context);
 }
                      
 static VOID
@@ -518,193 +540,359 @@ GnttabDebugCallback(
 
     UNREFERENCED_PARAMETER(Crashing);
 
-    DEBUG(Printf,
-          Context->DebugInterface,
-          Context->DebugCallback,
-          "Pfn = %p\n",
-          (PVOID)Context->Pfn);
+    XENBUS_DEBUG(Printf,
+                 &Context->DebugInterface,
+                 "Address = %08x.%08x\n",
+                 Context->Address.HighPart,
+                 Context->Address.LowPart);
     
-    DEBUG(Printf,
-          Context->DebugInterface,
-          Context->DebugCallback,
-          "FrameIndex = %d\n",
-          Context->FrameIndex);
+    XENBUS_DEBUG(Printf,
+                 &Context->DebugInterface,
+                 "FrameIndex = %d\n",
+                 Context->FrameIndex);
 }
                      
 NTSTATUS
-GnttabInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_GNTTAB_INTERFACE    Interface
+GnttabAcquire(
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_RESOURCE                Memory;
-    PHYSICAL_ADDRESS                Address;
-    PXENBUS_GNTTAB_CONTEXT          Context;
-    NTSTATUS                        status;
+    PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
+    PXENBUS_FDO             Fdo = Context->Fdo;
+    KIRQL                   Irql;
+    ULONG                   Size;
+    NTSTATUS                status;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
 
     Trace("====>\n");
 
-    Context = __GnttabAllocate(sizeof (XENBUS_GNTTAB_CONTEXT));
+    Size = XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE;
 
-    status = STATUS_NO_MEMORY;
-    if (Context == NULL)
+    status = FdoAllocateIoSpace(Fdo,
+                                Size,
+                                &Context->Address);
+    if (!NT_SUCCESS(status))
         goto fail1;
 
-    Memory = FdoGetResource(Fdo, MEMORY_RESOURCE);
-    Context->Pfn = (PFN_NUMBER)(Memory->Translated.u.Memory.Start.QuadPart >> PAGE_SHIFT);
-    Context->FrameIndex = -1;
-
-    __GnttabMap(Context);
-
-    Memory->Translated.u.Memory.Start.QuadPart += (GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE);
-
-    ASSERT3U(Memory->Translated.u.Memory.Length, >=, (GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE));
-    Memory->Translated.u.Memory.Length -= (GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE);
-
-    Address.QuadPart = (ULONGLONG)Context->Pfn << PAGE_SHIFT;
-    Context->Entry = (grant_entry_v1_t *)MmMapIoSpace(Address,
-                                                      GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE,
+    Context->Table = (grant_entry_v1_t *)MmMapIoSpace(Context->Address,
+                                                      Size,
                                                       MmCached);
     status = STATUS_UNSUCCESSFUL;
-    if (Context->Entry == NULL)
+    if (Context->Table == NULL)
         goto fail2;
 
-    Info("grant_entry_v1_t *: %p\n", Context->Entry);
+    Context->FrameIndex = -1;
 
-    status = RangeSetInitialize(&Context->RangeSet);
+    status = XENBUS_RANGE_SET(Acquire, &Context->RangeSetInterface);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    Context->CacheInterface = FdoGetCacheInterface(Fdo);
-
-    CACHE(Acquire, Context->CacheInterface);
-
-    Context->SuspendInterface = FdoGetSuspendInterface(Fdo);
-
-    SUSPEND(Acquire, Context->SuspendInterface);
-
-    status = SUSPEND(Register,
-                     Context->SuspendInterface,
-                     SUSPEND_CALLBACK_EARLY,
-                     GnttabSuspendCallbackEarly,
-                     Context,
-                     &Context->SuspendCallbackEarly);
+    status = XENBUS_RANGE_SET(Create,
+                              &Context->RangeSetInterface,
+                              "gnttab",
+                              &Context->RangeSet);
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    Context->DebugInterface = FdoGetDebugInterface(Fdo);
-
-    DEBUG(Acquire, Context->DebugInterface);
-
-    status = DEBUG(Register,
-                   Context->DebugInterface,
-                   __MODULE__ "|GNTTAB",
-                   GnttabDebugCallback,
-                   Context,
-                   &Context->DebugCallback);
+    status = XENBUS_CACHE(Acquire, &Context->CacheInterface);
     if (!NT_SUCCESS(status))
         goto fail5;
+    
+    status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
+    if (!NT_SUCCESS(status))
+        goto fail6;
 
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
+    status = XENBUS_SUSPEND(Register,
+                            &Context->SuspendInterface,
+                            SUSPEND_CALLBACK_EARLY,
+                            GnttabSuspendCallbackEarly,
+                            Context,
+                            &Context->SuspendCallbackEarly);
+    if (!NT_SUCCESS(status))
+        goto fail7;
+
+    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
+    if (!NT_SUCCESS(status))
+        goto fail8;
+
+    status = XENBUS_DEBUG(Register,
+                          &Context->DebugInterface,
+                          __MODULE__ "|GNTTAB",
+                          GnttabDebugCallback,
+                          Context,
+                          &Context->DebugCallback);
+    if (!NT_SUCCESS(status))
+        goto fail9;
 
     Trace("<====\n");
 
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     return STATUS_SUCCESS;
+
+fail9:
+    Error("fail9\n");
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
+fail8:
+    Error("fail8\n");
+
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
+    Context->SuspendCallbackEarly = NULL;
+
+fail7:
+    Error("fail7\n");
+
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
+
+fail6:
+    Error("fail6\n");
+
+    XENBUS_CACHE(Release, &Context->CacheInterface);
 
 fail5:
     Error("fail5\n");
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
+    GnttabContract(Context);
+    ASSERT3S(Context->FrameIndex, ==, -1);
 
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
-    Context->SuspendCallbackEarly = NULL;
+    XENBUS_RANGE_SET(Destroy,
+                     &Context->RangeSetInterface,
+                     Context->RangeSet);
+    Context->RangeSet = NULL;
+
+    Context->FrameIndex = 0;
 
 fail4:
     Error("fail4\n");
 
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
-
-    CACHE(Release, Context->CacheInterface);
-    Context->CacheInterface = NULL;
-
-    RangeSetTeardown(Context->RangeSet);
-    Context->RangeSet = NULL;
+    XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
 
 fail3:
     Error("fail3\n");
 
-    Context->Entry = NULL;
+    MmUnmapIoSpace(Context->Table, Size);
+    Context->Table = NULL;
 
 fail2:
     Error("fail2\n");
 
-    __GnttabUnmap(Context);
-
-    ASSERT3S(Context->FrameIndex, ==, -1);
-    Context->FrameIndex = 0;
-    Context->Pfn = 0;
-
-    ASSERT(IsZeroMemory(Context, sizeof (XENBUS_GNTTAB_CONTEXT)));
-    __GnttabFree(Context);
+    FdoFreeIoSpace(Fdo,
+                   Context->Address,
+                   Size);
+    Context->Address.QuadPart = 0;
 
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    RtlZeroMemory(Interface, sizeof (XENBUS_GNTTAB_INTERFACE));
+    --Context->References;
+    ASSERT3U(Context->References, ==, 0);
+    KeReleaseSpinLock(&Context->Lock, Irql);
 
     return status;
 }
 
 VOID
-GnttabTeardown(
-    IN OUT  PXENBUS_GNTTAB_INTERFACE    Interface
+GnttabRelease(
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_GNTTAB_CONTEXT              Context = Interface->Context;
+    PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
+    PXENBUS_FDO             Fdo = Context->Fdo;
+    KIRQL                   Irql;
+    ULONG                   Size;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
 
     Trace("====>\n");
 
-    DEBUG(Deregister,
-          Context->DebugInterface,
-          Context->DebugCallback);
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
     Context->DebugCallback = NULL;
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-    CACHE(Release, Context->CacheInterface);
-    Context->CacheInterface = NULL;
+    XENBUS_CACHE(Release, &Context->CacheInterface);
 
-    __GnttabShrink(Context);
+    GnttabContract(Context);
+    ASSERT3S(Context->FrameIndex, ==, -1);
 
-    RangeSetTeardown(Context->RangeSet);
+    XENBUS_RANGE_SET(Destroy,
+                     &Context->RangeSetInterface,
+                     Context->RangeSet);
     Context->RangeSet = NULL;
 
-    Context->Entry = NULL;
-
-    __GnttabUnmap(Context);
-
-    ASSERT3S(Context->FrameIndex, ==, -1);
     Context->FrameIndex = 0;
-    Context->Pfn = 0;
+
+    XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
+
+    Size = XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE;
+
+    MmUnmapIoSpace(Context->Table, Size);
+    Context->Table = NULL;
+
+    FdoFreeIoSpace(Fdo,
+                   Context->Address,
+                   Size);
+    Context->Address.QuadPart = 0;
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENBUS_GNTTAB_INTERFACE_V1   GnttabInterfaceVersion1 = {
+    { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V1), 1, NULL, NULL, NULL },
+    GnttabAcquire,
+    GnttabRelease,
+    GnttabCreateCache,
+    GnttabPermitForeignAccess,
+    GnttabRevokeForeignAccess,
+    GnttabGetReference,
+    GnttabDestroyCache
+};
+                     
+NTSTATUS
+GnttabInitialize(
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_GNTTAB_CONTEXT  *Context
+    )
+{
+    NTSTATUS                    status;
+
+    Trace("====>\n");
+
+    *Context = __GnttabAllocate(sizeof (XENBUS_GNTTAB_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    status = RangeSetGetInterface(FdoGetRangeSetContext(Fdo),
+                                  XENBUS_RANGE_SET_INTERFACE_VERSION_MAX,
+                                  (PINTERFACE)&(*Context)->RangeSetInterface,
+                                  sizeof ((*Context)->RangeSetInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->RangeSetInterface.Interface.Context != NULL);
+
+    status = CacheGetInterface(FdoGetCacheContext(Fdo),
+                               XENBUS_CACHE_INTERFACE_VERSION_MAX,
+                               (PINTERFACE)&(*Context)->CacheInterface,
+                               sizeof ((*Context)->CacheInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->CacheInterface.Interface.Context != NULL);
+
+    status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
+                                 XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
+                                 (PINTERFACE)&(*Context)->SuspendInterface,
+                                 sizeof ((*Context)->SuspendInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->SuspendInterface.Interface.Context != NULL);
+
+    status = DebugGetInterface(FdoGetDebugContext(Fdo),
+                               XENBUS_DEBUG_INTERFACE_VERSION_MAX,
+                               (PINTERFACE)&(*Context)->DebugInterface,
+                               sizeof ((*Context)->DebugInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
+
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    (*Context)->Fdo = Fdo;
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
+GnttabGetInterface(
+    IN      PXENBUS_GNTTAB_CONTEXT  Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
+    )
+{
+    NTSTATUS                        status;
+
+    ASSERT(Context != NULL);
+
+    switch (Version) {
+    case 1: {
+        struct _XENBUS_GNTTAB_INTERFACE_V1  *GnttabInterface;
+
+        GnttabInterface = (struct _XENBUS_GNTTAB_INTERFACE_V1 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_GNTTAB_INTERFACE_V1))
+            break;
+
+        *GnttabInterface = GnttabInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
+
+VOID
+GnttabTeardown(
+    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    )
+{
+    Trace("====>\n");
+
+    Context->Fdo = NULL;
+
+    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
+
+    RtlZeroMemory(&Context->DebugInterface,
+                  sizeof (XENBUS_DEBUG_INTERFACE));
+
+    RtlZeroMemory(&Context->SuspendInterface,
+                  sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    RtlZeroMemory(&Context->CacheInterface,
+                  sizeof (XENBUS_CACHE_INTERFACE));
+
+    RtlZeroMemory(&Context->RangeSetInterface,
+                  sizeof (XENBUS_RANGE_SET_INTERFACE));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_GNTTAB_CONTEXT)));
     __GnttabFree(Context);
-
-    RtlZeroMemory(Interface, sizeof (XENBUS_GNTTAB_INTERFACE));
 
     Trace("<====\n");
 }

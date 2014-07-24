@@ -36,30 +36,27 @@
 #include <xen.h>
 #include <debug_interface.h>
 
+typedef struct _XENBUS_DEBUG_CONTEXT  XENBUS_DEBUG_CONTEXT, *PXENBUS_DEBUG_CONTEXT;
+
 #include "fdo.h"
-
-struct _XENBUS_DEBUG_INTERFACE {
-    PXENBUS_DEBUG_OPERATIONS    Operations;
-    PXENBUS_DEBUG_CONTEXT       Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENBUS_DEBUG_INTERFACE, Operations) == (ULONG_PTR)DEBUG_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENBUS_DEBUG_INTERFACE, Context) == (ULONG_PTR)DEBUG_CONTEXT(NULL));
 
 extern NTSTATUS
 DebugInitialize(
     IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_DEBUG_INTERFACE Interface
+    OUT PXENBUS_DEBUG_CONTEXT   *Context
     );
 
-extern VOID
-DebugTrigger(
-    IN  PXENBUS_DEBUG_INTERFACE Interface
+extern NTSTATUS
+DebugGetInterface(
+    IN      PXENBUS_DEBUG_CONTEXT   Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 DebugTeardown(
-    IN OUT  PXENBUS_DEBUG_INTERFACE Interface
+    IN  PXENBUS_DEBUG_CONTEXT   Context
     );
 
 #endif  // _XENBUS_DEBUG_H

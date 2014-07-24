@@ -42,6 +42,12 @@
 #include "dbg_print.h"
 #include "assert.h"
 
+extern ULONG
+NTAPI
+RtlRandomEx (
+    __inout PULONG Seed
+    );
+
 #define STORE_TRANSACTION_MAGIC 'NART'
 
 struct _XENBUS_STORE_TRANSACTION {
@@ -64,58 +70,59 @@ struct _XENBUS_STORE_WATCH {
     BOOLEAN     Active; // Must be tested at >= DISPATCH_LEVEL
 };
 
-typedef enum _STORE_REQUEST_STATE {
-    REQUEST_INVALID = 0,
-    REQUEST_PREPARED,
-    REQUEST_SUBMITTED,
-    REQUEST_PENDING,
-    REQUEST_COMPLETED
-} STORE_REQUEST_STATE, *PSTORE_REQUEST_STATE;
+typedef enum _XENBUS_STORE_REQUEST_STATE {
+    XENBUS_STORE_REQUEST_INVALID = 0,
+    XENBUS_STORE_REQUEST_PREPARED,
+    XENBUS_STORE_REQUEST_SUBMITTED,
+    XENBUS_STORE_REQUEST_PENDING,
+    XENBUS_STORE_REQUEST_COMPLETED
+} XENBUS_STORE_REQUEST_STATE, *PXENBUS_STORE_REQUEST_STATE;
 
-typedef struct _STORE_SEGMENT {
+typedef struct _XENBUS_STORE_SEGMENT {
     PCHAR   Data;
     ULONG   Offset;
     ULONG   Length;
-} STORE_SEGMENT, *PSTORE_SEGMENT;
+} XENBUS_STORE_SEGMENT, *PXENBUS_STORE_SEGMENT;
 
 enum {
-    RESPONSE_HEADER_SEGMENT = 0,
-    RESPONSE_PAYLOAD_SEGMENT,
-    RESPONSE_SEGMENT_COUNT
+    XENBUS_STORE_RESPONSE_HEADER_SEGMENT = 0,
+    XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT,
+    XENBUS_STORE_RESPONSE_SEGMENT_COUNT
 };
 
-typedef struct _STORE_RESPONSE {
-    struct xsd_sockmsg  Header;
-    CHAR                Data[XENSTORE_PAYLOAD_MAX];
-    STORE_SEGMENT       Segment[RESPONSE_SEGMENT_COUNT];
-    ULONG               Index;
-} STORE_RESPONSE, *PSTORE_RESPONSE;
+typedef struct _XENBUS_STORE_RESPONSE {
+    struct xsd_sockmsg      Header;
+    CHAR                    Data[XENSTORE_PAYLOAD_MAX];
+    XENBUS_STORE_SEGMENT    Segment[XENBUS_STORE_RESPONSE_SEGMENT_COUNT];
+    ULONG                   Index;
+} XENBUS_STORE_RESPONSE, *PXENBUS_STORE_RESPONSE;
 
-#define REQUEST_SEGMENT_COUNT   8
+#define XENBUS_STORE_REQUEST_SEGMENT_COUNT  8
 
-typedef struct _STORE_REQUEST {
-    volatile STORE_REQUEST_STATE State;
-    struct xsd_sockmsg  Header;
-    STORE_SEGMENT       Segment[REQUEST_SEGMENT_COUNT];
-    ULONG               Count;
-    ULONG               Index;
-    LIST_ENTRY          ListEntry;
-    PSTORE_RESPONSE     Response;
-} STORE_REQUEST, *PSTORE_REQUEST;
+typedef struct _XENBUS_STORE_REQUEST {
+    volatile XENBUS_STORE_REQUEST_STATE State;
+    struct xsd_sockmsg                  Header;
+    XENBUS_STORE_SEGMENT                Segment[XENBUS_STORE_REQUEST_SEGMENT_COUNT];
+    ULONG                               Count;
+    ULONG                               Index;
+    LIST_ENTRY                          ListEntry;
+    PXENBUS_STORE_RESPONSE              Response;
+} XENBUS_STORE_REQUEST, *PXENBUS_STORE_REQUEST;
 
-#define STORE_BUFFER_MAGIC 'FFUB'
+#define XENBUS_STORE_BUFFER_MAGIC   'FFUB'
 
-typedef struct _STORE_BUFFER {
+typedef struct _XENBUS_STORE_BUFFER {
     LIST_ENTRY  ListEntry;
     ULONG       Magic;
     PVOID       Caller;
     CHAR        Data[1];
-} STORE_BUFFER, *PSTORE_BUFFER;
+} XENBUS_STORE_BUFFER, *PXENBUS_STORE_BUFFER;
 
 struct _XENBUS_STORE_CONTEXT {
+    PXENBUS_FDO                         Fdo;
+    KSPIN_LOCK                          Lock;
     LONG                                References;
     struct xenstore_domain_interface    *Shared;
-    KSPIN_LOCK                          Lock;
     USHORT                              RequestId;
     LIST_ENTRY                          SubmittedList;
     LIST_ENTRY                          PendingList;
@@ -124,12 +131,12 @@ struct _XENBUS_STORE_CONTEXT {
     LIST_ENTRY                          WatchList;
     LIST_ENTRY                          BufferList;
     KDPC                                Dpc;
-    STORE_RESPONSE                      Response;
-    PXENBUS_EVTCHN_INTERFACE            EvtchnInterface;
-    PFN_NUMBER                          Pfn;
-    PXENBUS_EVTCHN_DESCRIPTOR           Evtchn;
-    PXENBUS_SUSPEND_INTERFACE           SuspendInterface;
-    PXENBUS_DEBUG_INTERFACE             DebugInterface;
+    XENBUS_STORE_RESPONSE               Response;
+    XENBUS_EVTCHN_INTERFACE             EvtchnInterface;
+    PHYSICAL_ADDRESS                    Address;
+    PXENBUS_EVTCHN_CHANNEL              Channel;
+    XENBUS_SUSPEND_INTERFACE            SuspendInterface;
+    XENBUS_DEBUG_INTERFACE              DebugInterface;
     PXENBUS_SUSPEND_CALLBACK            SuspendCallbackEarly;
     PXENBUS_SUSPEND_CALLBACK            SuspendCallbackLate;
     PXENBUS_DEBUG_CALLBACK              DebugCallback;
@@ -137,14 +144,14 @@ struct _XENBUS_STORE_CONTEXT {
 
 C_ASSERT(sizeof (struct xenstore_domain_interface) <= PAGE_SIZE);
 
-#define STORE_TAG   'ROTS'
+#define XENBUS_STORE_TAG    'ROTS'
 
 static FORCEINLINE PVOID
 __StoreAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, STORE_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_STORE_TAG);
 }
 
 static FORCEINLINE VOID
@@ -152,13 +159,13 @@ __StoreFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, STORE_TAG);
+    ExFreePoolWithTag(Buffer, XENBUS_STORE_TAG);
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 StorePrepareRequest(
     IN  PXENBUS_STORE_CONTEXT       Context,
-    OUT PSTORE_REQUEST              Request,
+    OUT PXENBUS_STORE_REQUEST       Request,
     IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
     IN  enum xsd_sockmsg_type       Type,
     IN  ...
@@ -166,11 +173,11 @@ StorePrepareRequest(
 {
     ULONG                           Id;
     KIRQL                           Irql;
-    PSTORE_SEGMENT                  Segment;
+    PXENBUS_STORE_SEGMENT           Segment;
     va_list                         Arguments;
     NTSTATUS                        status;
 
-    ASSERT(IsZeroMemory(Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(Request, sizeof (XENBUS_STORE_REQUEST)));
 
     if (Transaction != NULL) {
         status = STATUS_UNSUCCESSFUL;
@@ -211,7 +218,7 @@ StorePrepareRequest(
         }
 
         Segment = &Request->Segment[Request->Count++];
-        ASSERT3U(Request->Count, <, REQUEST_SEGMENT_COUNT);
+        ASSERT3U(Request->Count, <, XENBUS_STORE_REQUEST_SEGMENT_COUNT);
 
         Segment->Data = Data;
         Segment->Offset = 0;
@@ -221,7 +228,7 @@ StorePrepareRequest(
     }
     va_end(Arguments);
 
-    Request->State = REQUEST_PREPARED;
+    Request->State = XENBUS_STORE_REQUEST_PREPARED;
 
     return STATUS_SUCCESS;
 
@@ -229,8 +236,8 @@ fail1:
     return status;
 }
 
-static FORCEINLINE ULONG
-__StoreCopyToRing(
+static ULONG
+StoreCopyToRing(
     IN  PXENBUS_STORE_CONTEXT           Context,
     IN  PCHAR                           Data,
     IN  ULONG                           Length
@@ -283,18 +290,18 @@ __StoreCopyToRing(
     return Offset;    
 }
 
-static FORCEINLINE NTSTATUS
-__StoreSendSegment(
+static NTSTATUS
+StoreSendSegment(
     IN      PXENBUS_STORE_CONTEXT   Context,
-    IN OUT  PSTORE_SEGMENT          Segment,
+    IN OUT  PXENBUS_STORE_SEGMENT   Segment,
     IN OUT  PULONG                  Written
     )
 {
     ULONG                           Copied;
 
-    Copied = __StoreCopyToRing(Context,
-                               Segment->Data + Segment->Offset,
-                               Segment->Length - Segment->Offset);
+    Copied = StoreCopyToRing(Context,
+                             Segment->Data + Segment->Offset,
+                             Segment->Length - Segment->Offset);
 
     Segment->Offset += Copied;
     *Written += Copied;
@@ -313,22 +320,22 @@ StoreSendRequests(
         return;
 
     while (!IsListEmpty(&Context->SubmittedList)) {
-        PLIST_ENTRY      ListEntry;
-        PSTORE_REQUEST   Request;
+        PLIST_ENTRY             ListEntry;
+        PXENBUS_STORE_REQUEST   Request;
 
         ListEntry = Context->SubmittedList.Flink;
         ASSERT3P(ListEntry, !=, &Context->SubmittedList);
 
-        Request = CONTAINING_RECORD(ListEntry, STORE_REQUEST, ListEntry);
+        Request = CONTAINING_RECORD(ListEntry, XENBUS_STORE_REQUEST, ListEntry);
 
-        ASSERT3U(Request->State, ==, REQUEST_SUBMITTED);
+        ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_SUBMITTED);
 
         while (Request->Index < Request->Count) {
             NTSTATUS    status;
 
-            status = __StoreSendSegment(Context,
-                                        &Request->Segment[Request->Index],
-                                        Written);
+            status = StoreSendSegment(Context,
+                                      &Request->Segment[Request->Index],
+                                      Written);
             if (!NT_SUCCESS(status))
                 break;
 
@@ -342,12 +349,12 @@ StoreSendRequests(
         ASSERT3P(ListEntry, ==, &Request->ListEntry);
 
         InsertTailList(&Context->PendingList, &Request->ListEntry);
-        Request->State = REQUEST_PENDING;
+        Request->State = XENBUS_STORE_REQUEST_PENDING;
     }
 }
 
-static FORCEINLINE ULONG
-__StoreCopyFromRing(
+static ULONG
+StoreCopyFromRing(
     IN  PXENBUS_STORE_CONTEXT           Context,
     IN  PCHAR                           Data,
     IN  ULONG                           Length
@@ -400,18 +407,18 @@ __StoreCopyFromRing(
     return Offset;    
 }
 
-static FORCEINLINE NTSTATUS
-__StoreReceiveSegment(
+static NTSTATUS
+StoreReceiveSegment(
     IN      PXENBUS_STORE_CONTEXT   Context,
-    IN OUT  PSTORE_SEGMENT          Segment,
+    IN OUT  PXENBUS_STORE_SEGMENT   Segment,
     IN OUT  PULONG                  Read
     )
 {
     ULONG                           Copied;
 
-    Copied = __StoreCopyFromRing(Context,
-                                 Segment->Data + Segment->Offset,
-                                 Segment->Length - Segment->Offset);
+    Copied = StoreCopyFromRing(Context,
+                               Segment->Data + Segment->Offset,
+                               Segment->Length - Segment->Offset);
 
     Segment->Offset += Copied;
     *Read += Copied;
@@ -420,8 +427,8 @@ __StoreReceiveSegment(
     return (Segment->Offset == Segment->Length) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
 }
 
-static FORCEINLINE BOOLEAN
-__StoreIgnoreHeaderType(
+static BOOLEAN
+StoreIgnoreHeaderType(
     IN  ULONG   Type
     )
 {
@@ -443,8 +450,8 @@ __StoreIgnoreHeaderType(
     }
 }
 
-static FORCEINLINE BOOLEAN
-__StoreVerifyHeader(
+static BOOLEAN
+StoreVerifyHeader(
     struct xsd_sockmsg  *Header
     )
 {
@@ -462,7 +469,7 @@ __StoreVerifyHeader(
         Header->type != XS_RM &&
         Header->type != XS_WATCH_EVENT &&
         Header->type != XS_ERROR &&
-        !__StoreIgnoreHeaderType(Header->type)) {
+        !StoreIgnoreHeaderType(Header->type)) {
         Error("UNRECOGNIZED TYPE 0x%08x\n", Header->type);
         Valid = FALSE;
     }
@@ -475,52 +482,56 @@ __StoreVerifyHeader(
     return Valid;    
 }
 
-static FORCEINLINE NTSTATUS
-__StoreReceiveResponse(
+static NTSTATUS
+StoreReceiveResponse(
     IN      PXENBUS_STORE_CONTEXT   Context,
     IN OUT  PULONG                  Read
     )
 {
-    PSTORE_RESPONSE                 Response = &Context->Response;
+    PXENBUS_STORE_RESPONSE          Response = &Context->Response;
     NTSTATUS                        status;
 
-    if (Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Data != NULL)
+    if (Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Data != NULL)
         goto payload;
 
-    status = __StoreReceiveSegment(Context, &Response->Segment[RESPONSE_HEADER_SEGMENT], Read);
+    status = StoreReceiveSegment(Context,
+                                 &Response->Segment[XENBUS_STORE_RESPONSE_HEADER_SEGMENT],
+                                 Read);
     if (!NT_SUCCESS(status))
         goto done;
 
-    ASSERT(__StoreVerifyHeader(&Response->Header));
+    ASSERT(StoreVerifyHeader(&Response->Header));
 
     if (Response->Header.len == 0)
         goto done;
 
-    Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Length = Response->Header.len;
-    Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Data = Response->Data;
+    Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Length = Response->Header.len;
+    Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Data = Response->Data;
 
 payload:
-    status = __StoreReceiveSegment(Context, &Response->Segment[RESPONSE_PAYLOAD_SEGMENT], Read);
+    status = StoreReceiveSegment(Context,
+                                 &Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT],
+                                 Read);
 
 done:
     return status;    
 }
 
-static FORCEINLINE PSTORE_REQUEST
-__StoreFindRequest(
+static PXENBUS_STORE_REQUEST
+StoreFindRequest(
     IN  PXENBUS_STORE_CONTEXT   Context,
     IN  uint32_t                req_id
     )
 {
     PLIST_ENTRY                 ListEntry;
-    PSTORE_REQUEST              Request;
+    PXENBUS_STORE_REQUEST       Request;
 
     Request = NULL;
     for (ListEntry = Context->PendingList.Flink;
          ListEntry != &Context->PendingList;
          ListEntry = ListEntry->Flink) {
 
-        Request = CONTAINING_RECORD(ListEntry, STORE_REQUEST, ListEntry);
+        Request = CONTAINING_RECORD(ListEntry, XENBUS_STORE_REQUEST, ListEntry);
 
         if (Request->Header.req_id == req_id)
             break;
@@ -531,8 +542,8 @@ __StoreFindRequest(
     return Request;
 }
 
-static FORCEINLINE PXENBUS_STORE_WATCH
-__StoreFindWatch(
+static PXENBUS_STORE_WATCH
+StoreFindWatch(
     IN  PXENBUS_STORE_CONTEXT   Context,
     IN  USHORT                  Id
     )
@@ -556,8 +567,8 @@ __StoreFindWatch(
     return Watch;
 }
 
-static FORCEINLINE USHORT
-__StoreNextWatchId(
+static USHORT
+StoreNextWatchId(
     IN  PXENBUS_STORE_CONTEXT   Context
     )
 {
@@ -566,7 +577,7 @@ __StoreNextWatchId(
 
     do {
         Id = Context->WatchId++;
-        Watch = __StoreFindWatch(Context, Id);
+        Watch = StoreFindWatch(Context, Id);
     } while (Watch != NULL);
 
     return Id;
@@ -580,16 +591,16 @@ __StoreNextWatchId(
 #error 'Unrecognised architecture'
 #endif
 
-static FORCEINLINE NTSTATUS
-__StoreParseWatchEvent(
-    IN  PCHAR       Data,
-    IN  ULONG       Length,
-    OUT PCHAR       *Path,
-    OUT PVOID       *Caller,
-    OUT PUSHORT     Id
+static NTSTATUS
+StoreParseWatchEvent(
+    IN  PCHAR   Data,
+    IN  ULONG   Length,
+    OUT PCHAR   *Path,
+    OUT PVOID   *Caller,
+    OUT PUSHORT Id
     )
 {
-    PCHAR           End;
+    PCHAR       End;
 
     *Path = Data;
     while (*Data != '\0' && Length != 0) {
@@ -649,12 +660,12 @@ fail1:
     return STATUS_UNSUCCESSFUL;
 }
 
-static FORCEINLINE VOID
-__StoreProcessWatchEvent(
+static VOID
+StoreProcessWatchEvent(
     IN  PXENBUS_STORE_CONTEXT   Context
     )
 {
-    PSTORE_RESPONSE             Response;
+    PXENBUS_STORE_RESPONSE      Response;
     PCHAR                       Path;
     PVOID                       Caller;
     USHORT                      Id;
@@ -665,17 +676,17 @@ __StoreProcessWatchEvent(
 
     ASSERT3U(Response->Header.req_id, ==, 0);
 
-    status = __StoreParseWatchEvent(Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Data,
-                                    Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Length,
-                                    &Path,
-                                    &Caller,
-                                    &Id);
+    status = StoreParseWatchEvent(Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Data,
+                                  Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Length,
+                                  &Path,
+                                  &Caller,
+                                  &Id);
     if (!NT_SUCCESS(status))
         return;
 
     Trace("%04x (%s)\n", Id, Path);
 
-    Watch = __StoreFindWatch(Context, Id);
+    Watch = StoreFindWatch(Context, Id);
 
     if (Watch == NULL) {
         PCHAR       Name;
@@ -701,35 +712,35 @@ __StoreProcessWatchEvent(
         KeSetEvent(Watch->Event, 0, FALSE);
 }
 
-static FORCEINLINE VOID
-__StoreResetResponse(
+static VOID
+StoreResetResponse(
     IN  PXENBUS_STORE_CONTEXT   Context
     )
 {
-    PSTORE_RESPONSE             Response;
-    PSTORE_SEGMENT              Segment;
+    PXENBUS_STORE_RESPONSE      Response;
+    PXENBUS_STORE_SEGMENT       Segment;
 
     Response = &Context->Response;
 
-    RtlZeroMemory(Response, sizeof (STORE_RESPONSE));
+    RtlZeroMemory(Response, sizeof (XENBUS_STORE_RESPONSE));
 
-    Segment = &Response->Segment[RESPONSE_HEADER_SEGMENT];
+    Segment = &Response->Segment[XENBUS_STORE_RESPONSE_HEADER_SEGMENT];
 
     Segment->Data = (PCHAR)&Response->Header;
     Segment->Offset = 0;
     Segment->Length = sizeof (struct xsd_sockmsg);
 }
 
-static FORCEINLINE PSTORE_RESPONSE
-__StoreCopyResponse(
+static PXENBUS_STORE_RESPONSE
+StoreCopyResponse(
     IN  PXENBUS_STORE_CONTEXT   Context
     )
 {
-    PSTORE_RESPONSE             Response;
-    PSTORE_SEGMENT              Segment;
+    PXENBUS_STORE_RESPONSE      Response;
+    PXENBUS_STORE_SEGMENT       Segment;
     NTSTATUS                    status;
 
-    Response = __StoreAllocate(sizeof (STORE_RESPONSE));
+    Response = __StoreAllocate(sizeof (XENBUS_STORE_RESPONSE));
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
@@ -737,11 +748,11 @@ __StoreCopyResponse(
 
     *Response = Context->Response;
 
-    Segment = &Response->Segment[RESPONSE_HEADER_SEGMENT];
+    Segment = &Response->Segment[XENBUS_STORE_RESPONSE_HEADER_SEGMENT];
     ASSERT3P(Segment->Data, ==, (PCHAR)&Context->Response.Header);
     Segment->Data = (PCHAR)&Response->Header;
 
-    Segment = &Response->Segment[RESPONSE_PAYLOAD_SEGMENT];
+    Segment = &Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT];
     if (Segment->Length != 0) {
         ASSERT3P(Segment->Data, ==, Context->Response.Data);
         Segment->Data = Response->Data;
@@ -757,57 +768,57 @@ fail1:
     return NULL;
 }
 
-static FORCEINLINE VOID
-__StoreFreeResponse(
-    IN  PSTORE_RESPONSE Response
+static VOID
+StoreFreeResponse(
+    IN  PXENBUS_STORE_RESPONSE  Response
     )
 {
     __StoreFree(Response);    
 }
 
-static FORCEINLINE VOID
-__StoreProcessResponse(
+static VOID
+StoreProcessResponse(
     IN  PXENBUS_STORE_CONTEXT   Context
     )
 {
-    PSTORE_RESPONSE             Response;
-    PSTORE_REQUEST              Request;
+    PXENBUS_STORE_RESPONSE      Response;
+    PXENBUS_STORE_REQUEST       Request;
 
     Response = &Context->Response;
 
-    if (__StoreIgnoreHeaderType(Response->Header.type)) {
+    if (StoreIgnoreHeaderType(Response->Header.type)) {
         Warning("IGNORING RESPONSE TYPE %08X\n", Response->Header.type);
-        __StoreResetResponse(Context);
+        StoreResetResponse(Context);
         return;
     }
 
     if (Response->Header.type == XS_WATCH_EVENT) {
-        __StoreProcessWatchEvent(Context);
-        __StoreResetResponse(Context);
+        StoreProcessWatchEvent(Context);
+        StoreResetResponse(Context);
         return;
     }
 
-    Request = __StoreFindRequest(Context, Response->Header.req_id);
+    Request = StoreFindRequest(Context, Response->Header.req_id);
     if (Request == NULL) {
         Warning("SPURIOUS RESPONSE ID %08X\n", Response->Header.req_id);
-        __StoreResetResponse(Context);
+        StoreResetResponse(Context);
         return;
     }
 
-    ASSERT3U(Request->State, ==, REQUEST_PENDING);
+    ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_PENDING);
 
     RemoveEntryList(&Request->ListEntry);
 
-    Request->Response = __StoreCopyResponse(Context);
-    __StoreResetResponse(Context);
+    Request->Response = StoreCopyResponse(Context);
+    StoreResetResponse(Context);
 
-    Request->State = REQUEST_COMPLETED;
+    Request->State = XENBUS_STORE_REQUEST_COMPLETED;
 
     KeMemoryBarrier();
 }
 
-static FORCEINLINE VOID
-__StorePoll(
+static VOID
+StorePollLocked(
     IN  PXENBUS_STORE_CONTEXT   Context
     )
 {
@@ -822,27 +833,28 @@ __StorePoll(
 
         StoreSendRequests(Context, &Written);
         if (Written != 0)
-            (VOID) EVTCHN(Send,
-                          Context->EvtchnInterface,
-                          Context->Evtchn);
+            (VOID) XENBUS_EVTCHN(Send,
+                                 &Context->EvtchnInterface,
+                                 Context->Channel);
 
-        status = __StoreReceiveResponse(Context, &Read);
+        status = StoreReceiveResponse(Context, &Read);
         if (NT_SUCCESS(status))
-            __StoreProcessResponse(Context);
+            StoreProcessResponse(Context);
 
         if (Read != 0)
-            (VOID) EVTCHN(Send,
-                          Context->EvtchnInterface,
-                          Context->Evtchn);
+            (VOID) XENBUS_EVTCHN(Send,
+                                 &Context->EvtchnInterface,
+                                 Context->Channel);
 
     } while (Written != 0 || Read != 0);
 }
 
-#pragma warning(push)
-#pragma warning(disable:6011)   // dereferencing NULL pointer
-
-KDEFERRED_ROUTINE   StoreDpc;
-
+static
+_Function_class_(KDEFERRED_ROUTINE)
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_requires_min_(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
+_IRQL_requires_same_
 VOID
 StoreDpc(
     IN  PKDPC               Dpc,
@@ -860,22 +872,21 @@ StoreDpc(
     ASSERT(Context != NULL);
 
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-    __StorePoll(Context);
+    if (Context->References != 0)
+        StorePollLocked(Context);
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
-#pragma warning(pop)
-
-static PSTORE_RESPONSE
+static PXENBUS_STORE_RESPONSE
 StoreSubmitRequest(
     IN  PXENBUS_STORE_CONTEXT   Context,
-    IN  PSTORE_REQUEST          Request
+    IN  PXENBUS_STORE_REQUEST   Request
     )
 {
-    PSTORE_RESPONSE             Response;
+    PXENBUS_STORE_RESPONSE      Response;
     KIRQL                       Irql;
 
-    ASSERT3U(Request->State, ==, REQUEST_PREPARED);
+    ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_PREPARED);
 
     // Make sure we don't suspend
     ASSERT3U(KeGetCurrentIrql(), <=, DISPATCH_LEVEL);
@@ -884,10 +895,10 @@ StoreSubmitRequest(
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
 
     InsertTailList(&Context->SubmittedList, &Request->ListEntry);
-    Request->State = REQUEST_SUBMITTED;
+    Request->State = XENBUS_STORE_REQUEST_SUBMITTED;
 
-    while (Request->State != REQUEST_COMPLETED) {
-        __StorePoll(Context);
+    while (Request->State != XENBUS_STORE_REQUEST_COMPLETED) {
+        StorePollLocked(Context);
         SchedYield();
     }
 
@@ -898,26 +909,29 @@ StoreSubmitRequest(
            Response->Header.type == XS_ERROR ||
            Response->Header.type == Request->Header.type);
 
-    RtlZeroMemory(Request, sizeof(STORE_REQUEST));
+    RtlZeroMemory(Request, sizeof(XENBUS_STORE_REQUEST));
 
     KeLowerIrql(Irql);
 
     return Response;
 }
 
-static FORCEINLINE NTSTATUS
-__StoreCheckResponse(
-    IN  PSTORE_RESPONSE Response
+static NTSTATUS
+StoreCheckResponse(
+    IN  PXENBUS_STORE_RESPONSE  Response
     )
 {
-    NTSTATUS            status;
+    NTSTATUS                    status;
 
     status = STATUS_SUCCESS;
 
     if (Response->Header.type == XS_ERROR) {
-        PCHAR   Error = Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Data;
-        ULONG   Length = Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Length;
+        PCHAR   Error;
+        ULONG   Length;
         ULONG   Index;
+
+        Error = Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Data;
+        Length = Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Length;
 
         if (strncmp(Error, "EQUOTA", Length) == 0) {
             status = STATUS_QUOTA_EXCEEDED;
@@ -942,20 +956,23 @@ done:
     return status;
 }
 
-static FORCEINLINE PSTORE_BUFFER
-__StoreCopyPayload(
+static PXENBUS_STORE_BUFFER
+StoreCopyPayload(
     IN  PXENBUS_STORE_CONTEXT   Context,
-    IN  PSTORE_RESPONSE         Response,
+    IN  PXENBUS_STORE_RESPONSE  Response,
     IN  PVOID                   Caller
     )
 {
-    PCHAR                       Data = Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Data;
-    ULONG                       Length = Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Length;
-    PSTORE_BUFFER               Buffer;
+    PCHAR                       Data;
+    ULONG                       Length;
+    PXENBUS_STORE_BUFFER        Buffer;
     KIRQL                       Irql;
     NTSTATUS                    status;
 
-    Buffer = __StoreAllocate(FIELD_OFFSET(STORE_BUFFER, Data) +
+    Data = Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Data;
+    Length = Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Length;
+
+    Buffer = __StoreAllocate(FIELD_OFFSET(XENBUS_STORE_BUFFER, Data) +
                              Length +
                              (sizeof (CHAR) * 2));  // Double-NUL terminate
 
@@ -963,7 +980,7 @@ __StoreCopyPayload(
     if (Buffer == NULL)
         goto fail1;
 
-    Buffer->Magic = STORE_BUFFER_MAGIC;
+    Buffer->Magic = XENBUS_STORE_BUFFER_MAGIC;
     Buffer->Caller = Caller;
 
     RtlCopyMemory(Buffer->Data, Data, Length);
@@ -980,15 +997,15 @@ fail1:
     return NULL;
 }
 
-static FORCEINLINE VOID
-__StoreFreePayload(
+static VOID
+StoreFreePayload(
     IN  PXENBUS_STORE_CONTEXT   Context,
-    IN  PSTORE_BUFFER           Buffer
+    IN  PXENBUS_STORE_BUFFER    Buffer
     )
 {
     KIRQL                       Irql;
 
-    ASSERT3U(Buffer->Magic, ==, STORE_BUFFER_MAGIC);
+    ASSERT3U(Buffer->Magic, ==, XENBUS_STORE_BUFFER_MAGIC);
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     RemoveEntryList(&Buffer->ListEntry);
@@ -999,15 +1016,16 @@ __StoreFreePayload(
 
 static VOID
 StoreFree(
-    IN  PXENBUS_STORE_CONTEXT   Context,
-    IN  PCHAR                   Value
+    IN  PINTERFACE          Interface,
+    IN  PCHAR               Value
     )
 {
-    PSTORE_BUFFER               Buffer;
+    PXENBUS_STORE_CONTEXT   Context = Interface->Context;
+    PXENBUS_STORE_BUFFER    Buffer;
 
-    Buffer = CONTAINING_RECORD(Value, STORE_BUFFER, Data);
+    Buffer = CONTAINING_RECORD(Value, XENBUS_STORE_BUFFER, Data);
 
-    __StoreFreePayload(Context, Buffer);
+    StoreFreePayload(Context, Buffer);
 }
 
 extern USHORT
@@ -1020,22 +1038,23 @@ RtlCaptureStackBackTrace(
 
 static NTSTATUS
 StoreRead(
-    IN  PXENBUS_STORE_CONTEXT       Context,
+    IN  PINTERFACE                  Interface,
     IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
     IN  PCHAR                       Prefix OPTIONAL,
     IN  PCHAR                       Node,
     OUT PCHAR                       *Value
     )
 {
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
     PVOID                           Caller;
-    STORE_REQUEST                   Request;
-    PSTORE_RESPONSE                 Response;
-    PSTORE_BUFFER                   Buffer;
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
+    PXENBUS_STORE_BUFFER            Buffer;
     NTSTATUS                        status;
 
     (VOID) RtlCaptureStackBackTrace(1, 1, &Caller, NULL);    
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1066,18 +1085,18 @@ StoreRead(
     if (Response == NULL)
         goto fail2;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    Buffer = __StoreCopyPayload(Context, Response, Caller);
+    Buffer = StoreCopyPayload(Context, Response, Caller);
 
     status = STATUS_NO_MEMORY;
     if (Buffer == NULL)
         goto fail4;
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     *Value = Buffer->Data;
 
@@ -1085,16 +1104,16 @@ StoreRead(
 
 fail4:
 fail3:
-    __StoreFreeResponse(Response);
+    StoreFreeResponse(Response);
 
 fail2:
 fail1:
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return status;
 }
 
-NTSTATUS
+static NTSTATUS
 StoreWrite(
     IN  PXENBUS_STORE_CONTEXT       Context,
     IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
@@ -1103,11 +1122,11 @@ StoreWrite(
     IN  PCHAR                       Value
     )
 {
-    STORE_REQUEST                   Request;
-    PSTORE_RESPONSE                 Response;
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
     NTSTATUS                        status;
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1140,28 +1159,28 @@ StoreWrite(
     if (Response == NULL)
         goto fail2;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return STATUS_SUCCESS;
 
 fail3:
-    __StoreFreeResponse(Response);
+    StoreFreeResponse(Response);
 
 fail2:
 fail1:
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__StoreVPrintf(
-    IN  PXENBUS_STORE_CONTEXT       Context,
+static NTSTATUS
+StoreVPrintf(
+    IN  PINTERFACE                  Interface,
     IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
     IN  PCHAR                       Prefix OPTIONAL,
     IN  PCHAR                       Node,
@@ -1169,6 +1188,7 @@ __StoreVPrintf(
     IN  va_list                     Arguments
     )
 {
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
     PCHAR                           Buffer;
     ULONG                           Length;
     NTSTATUS                        status;
@@ -1198,10 +1218,10 @@ __StoreVPrintf(
     }
 
     status = StoreWrite(Context,
-                        Transaction,
-                        Prefix,
-                        Node,
-                        Buffer);
+                          Transaction,
+                          Prefix,
+                          Node,
+                          Buffer);
     if (!NT_SUCCESS(status))
         goto fail3;
 
@@ -1219,7 +1239,7 @@ fail1:
 
 static NTSTATUS
 StorePrintf(
-    IN  PXENBUS_STORE_CONTEXT       Context,
+    IN  PINTERFACE                  Interface,
     IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
     IN  PCHAR                       Prefix OPTIONAL,
     IN  PCHAR                       Node,
@@ -1231,7 +1251,7 @@ StorePrintf(
     NTSTATUS                        status;
 
     va_start(Arguments, Format);
-    status = __StoreVPrintf(Context,
+    status = StoreVPrintf(Interface,
                             Transaction,
                             Prefix,
                             Node,
@@ -1244,17 +1264,18 @@ StorePrintf(
 
 static NTSTATUS
 StoreRemove(
-    IN  PXENBUS_STORE_CONTEXT       Context,
+    IN  PINTERFACE                  Interface,
     IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
     IN  PCHAR                       Prefix OPTIONAL,
     IN  PCHAR                       Node
     )
 {
-    STORE_REQUEST                   Request;
-    PSTORE_RESPONSE                 Response;
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
     NTSTATUS                        status;
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1285,43 +1306,44 @@ StoreRemove(
     if (Response == NULL)
         goto fail2;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return STATUS_SUCCESS;
 
 fail3:
-    __StoreFreeResponse(Response);
+    StoreFreeResponse(Response);
 
 fail2:
 fail1:
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return status;
 }
 
 static NTSTATUS
 StoreDirectory(
-    IN  PXENBUS_STORE_CONTEXT       Context,
+    IN  PINTERFACE                  Interface,
     IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
     IN  PCHAR                       Prefix OPTIONAL,
     IN  PCHAR                       Node,
     OUT PCHAR                       *Value
     )
 {
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
     PVOID                           Caller;
-    STORE_REQUEST                   Request;
-    PSTORE_RESPONSE                 Response;
-    PSTORE_BUFFER                   Buffer;
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
+    PXENBUS_STORE_BUFFER            Buffer;
     NTSTATUS                        status;
 
     (VOID) RtlCaptureStackBackTrace(1, 1, &Caller, NULL);    
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1352,18 +1374,18 @@ StoreDirectory(
     if (Response == NULL)
         goto fail2;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    Buffer = __StoreCopyPayload(Context, Response, Caller);
+    Buffer = StoreCopyPayload(Context, Response, Caller);
 
     status = STATUS_NO_MEMORY;
     if (Buffer == NULL)
         goto fail4;
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     *Value = Buffer->Data;
 
@@ -1371,23 +1393,24 @@ StoreDirectory(
 
 fail4:
 fail3:
-    __StoreFreeResponse(Response);
+    StoreFreeResponse(Response);
 
 fail2:
 fail1:
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return status;
 }
 
 static NTSTATUS
 StoreTransactionStart(
-    IN  PXENBUS_STORE_CONTEXT       Context,
+    IN  PINTERFACE                  Interface,
     OUT PXENBUS_STORE_TRANSACTION   *Transaction
     )
 {
-    STORE_REQUEST                   Request;
-    PSTORE_RESPONSE                 Response;
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
     KIRQL                           Irql;
     NTSTATUS                        status;
 
@@ -1400,7 +1423,7 @@ StoreTransactionStart(
     (*Transaction)->Magic = STORE_TRANSACTION_MAGIC;
     (VOID) RtlCaptureStackBackTrace(1, 1, &(*Transaction)->Caller, NULL);    
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     status = StorePrepareRequest(Context,
                                  &Request,
@@ -1416,15 +1439,17 @@ StoreTransactionStart(
     if (Response == NULL)
         goto fail2;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    (*Transaction)->Id = (uint32_t)strtoul(Response->Segment[RESPONSE_PAYLOAD_SEGMENT].Data, NULL, 10);
+    (*Transaction)->Id = (uint32_t)strtoul(Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Data,
+                                           NULL,
+                                           10);
     ASSERT((*Transaction)->Id != 0);
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     (*Transaction)->Active = TRUE;
@@ -1436,8 +1461,8 @@ StoreTransactionStart(
 fail3:
     Error("fail3\n");
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     (*Transaction)->Caller = NULL;
     (*Transaction)->Magic = 0;
@@ -1456,13 +1481,14 @@ fail1:
 
 static NTSTATUS
 StoreTransactionEnd(
-    IN  PXENBUS_STORE_CONTEXT       Context,
+    IN  PINTERFACE                  Interface,
     IN  PXENBUS_STORE_TRANSACTION   Transaction,
     IN  BOOLEAN                     Commit
     )
 {
-    STORE_REQUEST                   Request;
-    PSTORE_RESPONSE                 Response;
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
     KIRQL                           Irql;
     NTSTATUS                        status;
 
@@ -1476,7 +1502,7 @@ StoreTransactionEnd(
 
     KeReleaseSpinLock(&Context->Lock, Irql);
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     status = StorePrepareRequest(Context,
                                  &Request,
@@ -1492,12 +1518,12 @@ StoreTransactionEnd(
     if (Response == NULL)
         goto fail1;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status) && status != STATUS_RETRY)
         goto fail2;
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     Transaction->Active = FALSE;
@@ -1521,28 +1547,29 @@ done:
 fail2:
     ASSERT3U(status, !=, STATUS_RETRY);
 
-    __StoreFreeResponse(Response);
+    StoreFreeResponse(Response);
 
 fail1:
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return status;
 }
 
 static NTSTATUS
-StoreWatch(
-    IN  PXENBUS_STORE_CONTEXT   Context,
+StoreWatchAdd(
+    IN  PINTERFACE              Interface,
     IN  PCHAR                   Prefix OPTIONAL,
     IN  PCHAR                   Node,
     IN  PKEVENT                 Event,
     OUT PXENBUS_STORE_WATCH     *Watch
     )
 {
+    PXENBUS_STORE_CONTEXT       Context = Interface->Context;
     ULONG                       Length;
     PCHAR                       Path;
     CHAR                        Token[TOKEN_LENGTH];
-    STORE_REQUEST               Request;
-    PSTORE_RESPONSE             Response;
+    XENBUS_STORE_REQUEST        Request;
+    PXENBUS_STORE_RESPONSE      Response;
     KIRQL                       Irql;
     NTSTATUS                    status;
 
@@ -1575,7 +1602,7 @@ StoreWatch(
     (*Watch)->Event = Event;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
-    (*Watch)->Id = __StoreNextWatchId(Context);
+    (*Watch)->Id = StoreNextWatchId(Context);
     (*Watch)->Active = TRUE;
     InsertTailList(&Context->WatchList, &(*Watch)->ListEntry);
     KeReleaseSpinLock(&Context->Lock, Irql);
@@ -1588,7 +1615,7 @@ StoreWatch(
     ASSERT(NT_SUCCESS(status));
     ASSERT3U(strlen(Token), ==, TOKEN_LENGTH - 1);
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     status = StorePrepareRequest(Context,
                                  &Request,
@@ -1607,24 +1634,24 @@ StoreWatch(
     if (Response == NULL)
         goto fail3;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return STATUS_SUCCESS;
 
 fail4:
     Error("fail4\n");
 
-    __StoreFreeResponse(Response);
+    StoreFreeResponse(Response);
 
 fail3:
     Error("fail3\n");
 
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     (*Watch)->Active = FALSE;
@@ -1655,15 +1682,16 @@ fail1:
 }
 
 static NTSTATUS
-StoreUnwatch(
-    IN  PXENBUS_STORE_CONTEXT   Context,
+StoreWatchRemove(
+    IN  PINTERFACE              Interface,
     IN  PXENBUS_STORE_WATCH     Watch
     )
 {
+    PXENBUS_STORE_CONTEXT       Context = Interface->Context;
     PCHAR                       Path;
     CHAR                        Token[TOKEN_LENGTH];
-    STORE_REQUEST               Request;
-    PSTORE_RESPONSE             Response;
+    XENBUS_STORE_REQUEST        Request;
+    PXENBUS_STORE_RESPONSE      Response;
     KIRQL                       Irql;
     NTSTATUS                    status;
 
@@ -1686,7 +1714,7 @@ StoreUnwatch(
     ASSERT(NT_SUCCESS(status));
     ASSERT3U(strlen(Token), ==, TOKEN_LENGTH - 1);
 
-    RtlZeroMemory(&Request, sizeof (STORE_REQUEST));
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     status = StorePrepareRequest(Context,
                                  &Request,
@@ -1705,12 +1733,12 @@ StoreUnwatch(
     if (Response == NULL)
         goto fail1;
 
-    status = __StoreCheckResponse(Response);
+    status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    __StoreFreeResponse(Response);
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     Watch->Active = FALSE;
@@ -1738,61 +1766,39 @@ done:
 fail2:
     Error("fail2\n");
 
-    __StoreFreeResponse(Response);
+    StoreFreeResponse(Response);
 
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    ASSERT(IsZeroMemory(&Request, sizeof (STORE_REQUEST)));
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return status;
 }
 
 static VOID
 StorePoll(
-    IN  PXENBUS_STORE_CONTEXT   Context
+    IN  PINTERFACE  Interface
     )
 {
+    PXENBUS_STORE_CONTEXT  Context = Interface->Context;
+
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-    __StorePoll(Context);
+    StorePollLocked(Context);
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
-static VOID
-StoreAcquire(
-    IN  PXENBUS_STORE_CONTEXT   Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-StoreRelease(
-    IN  PXENBUS_STORE_CONTEXT   Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define STORE_OPERATION(_Type, _Name, _Arguments) \
-        Store ## _Name,
-
-static XENBUS_STORE_OPERATIONS  Operations = {
-    DEFINE_STORE_OPERATIONS
-};
-
-#undef STORE_OPERATION
-
-KSERVICE_ROUTINE StoreEvtchnCallback;
-
+static
+_Function_class_(KSERVICE_ROUTINE)
+_IRQL_requires_(HIGH_LEVEL)
+_IRQL_requires_same_
 BOOLEAN
 StoreEvtchnCallback(
-    IN  PKINTERRUPT         InterruptObject,
-    IN  PVOID               Argument
+    IN  PKINTERRUPT InterruptObject,
+    IN  PVOID       Argument
     )
 {
-    PXENBUS_STORE_CONTEXT   Context = Argument;
+    PXENBUS_STORE_CONTEXT  Context = Argument;
 
     UNREFERENCED_PARAMETER(InterruptObject);
 
@@ -1803,46 +1809,70 @@ StoreEvtchnCallback(
     return TRUE;
 }
 
-static FORCEINLINE VOID
-__StoreDisable(
+static VOID
+StoreDisable(
     IN PXENBUS_STORE_CONTEXT    Context
     )
 {
-    EVTCHN(Close,
-           Context->EvtchnInterface,
-           Context->Evtchn);
-    Context->Evtchn = NULL;
+    XENBUS_EVTCHN(Close,
+                  &Context->EvtchnInterface,
+                  Context->Channel);
+    Context->Channel = NULL;
 }
 
-static FORCEINLINE VOID
-__StoreEnable(
+static VOID
+StoreEnable(
     IN PXENBUS_STORE_CONTEXT    Context
     )
 {
-    ULONG_PTR                   Port;
+    ULONGLONG                   Port;
     BOOLEAN                     Pending;
     NTSTATUS                    status;
 
     status = HvmGetParam(HVM_PARAM_STORE_EVTCHN, &Port);
     ASSERT(NT_SUCCESS(status));
 
-    Context->Evtchn = EVTCHN(Open,
-                             Context->EvtchnInterface,
-                             EVTCHN_FIXED,
-                             StoreEvtchnCallback,
-                             Context,
-                             Port,
-                             FALSE);
-    ASSERT(Context->Evtchn != NULL);
+    Context->Channel = XENBUS_EVTCHN(Open,
+                                     &Context->EvtchnInterface,
+                                     XENBUS_EVTCHN_TYPE_FIXED,
+                                     StoreEvtchnCallback,
+                                     Context,
+                                     Port,
+                                     FALSE);
+    ASSERT(Context->Channel != NULL);
 
-    Pending = EVTCHN(Unmask,
-                     Context->EvtchnInterface,
-                     Context->Evtchn,
-                     FALSE);
+    Pending = XENBUS_EVTCHN(Unmask,
+                            &Context->EvtchnInterface,
+                            Context->Channel,
+                            FALSE);
     if (Pending)
-        EVTCHN(Trigger,
-               Context->EvtchnInterface,
-               Context->Evtchn);
+        XENBUS_EVTCHN(Trigger,
+                      &Context->EvtchnInterface,
+                      Context->Channel);
+}
+
+static PHYSICAL_ADDRESS
+StoreGetAddress(
+    PXENBUS_STORE_CONTEXT   Context
+    )
+{
+    PHYSICAL_ADDRESS        Address;
+    NTSTATUS                status;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    status = HvmGetParam(HVM_PARAM_STORE_PFN,
+                         (PULONGLONG)&Address.QuadPart);
+    ASSERT(NT_SUCCESS(status));
+
+    Address.QuadPart <<= PAGE_SHIFT;
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "STORE: PAGE @ %08x.%08x\n",
+              Address.HighPart,
+              Address.LowPart);
+
+    return Address;
 }
 
 static VOID
@@ -1852,12 +1882,10 @@ StoreSuspendCallbackEarly(
 {
     PXENBUS_STORE_CONTEXT   Context = Argument;
     PLIST_ENTRY             ListEntry;
-    PFN_NUMBER              Pfn;
-    NTSTATUS                status;
+    PHYSICAL_ADDRESS        Address;
 
-    status = HvmGetParam(HVM_PARAM_STORE_PFN, &Pfn);
-    ASSERT(NT_SUCCESS(status));
-    ASSERT3U(Pfn, ==, Context->Pfn);
+    Address = StoreGetAddress(Context);
+    ASSERT3U(Address.QuadPart, ==, Context->Address.QuadPart);
 
     for (ListEntry = Context->TransactionList.Flink;
          ListEntry != &(Context->TransactionList);
@@ -1894,9 +1922,9 @@ StoreSuspendCallbackLate(
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
-    __StoreDisable(Context);
-    __StoreResetResponse(Context);
-    __StoreEnable(Context);
+    StoreDisable(Context);
+    StoreResetResponse(Context);
+    StoreEnable(Context);
 
     for (ListEntry = Context->WatchList.Flink;
          ListEntry != &(Context->WatchList);
@@ -1913,72 +1941,67 @@ StoreSuspendCallbackLate(
 
 static VOID
 StoreDebugCallback(
-    IN  PVOID                           Argument,
-    IN  BOOLEAN                         Crashing
+    IN  PVOID               Argument,
+    IN  BOOLEAN             Crashing
     )
 {
-    PXENBUS_STORE_CONTEXT               Context = Argument;
+    PXENBUS_STORE_CONTEXT   Context = Argument;
 
-    DEBUG(Printf,
-          Context->DebugInterface,
-          Context->DebugCallback,
-          "Pfn = %p\n",
-          (PVOID)Context->Pfn);
+    XENBUS_DEBUG(Printf,
+                 &Context->DebugInterface,
+                 "Address = %08x.%08x\n",
+                 Context->Address.HighPart,
+                 Context->Address.LowPart);
 
     if (!Crashing) {
         struct xenstore_domain_interface    *Shared;
 
         Shared = Context->Shared;
 
-        DEBUG(Printf,
-              Context->DebugInterface,
-              Context->DebugCallback,
-              "req_cons = %08x req_prod = %08x\n",
-              Shared->req_cons,
-              Shared->req_prod);
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "req_cons = %08x req_prod = %08x\n",
+                     Shared->req_cons,
+                     Shared->req_prod);
 
-        DEBUG(Printf,
-              Context->DebugInterface,
-              Context->DebugCallback,
-              "rsp_cons = %08x rsp_prod = %08x\n",
-              Shared->rsp_cons,
-              Shared->rsp_prod);
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "rsp_cons = %08x rsp_prod = %08x\n",
+                     Shared->rsp_cons,
+                     Shared->rsp_prod);
     }
 
     if (!IsListEmpty(&Context->BufferList)) {
         PLIST_ENTRY ListEntry;
 
-        DEBUG(Printf,
-              Context->DebugInterface,
-              Context->DebugCallback,
-              "BUFFERS:\n");
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "BUFFERS:\n");
 
         for (ListEntry = Context->BufferList.Flink;
              ListEntry != &(Context->BufferList);
              ListEntry = ListEntry->Flink) {
-            PSTORE_BUFFER   Buffer;
-            PCHAR           Name;
-            ULONG_PTR       Offset;
+            PXENBUS_STORE_BUFFER    Buffer;
+            PCHAR                   Name;
+            ULONG_PTR               Offset;
 
-            Buffer = CONTAINING_RECORD(ListEntry, STORE_BUFFER, ListEntry);
+            Buffer = CONTAINING_RECORD(ListEntry, XENBUS_STORE_BUFFER, ListEntry);
 
             ModuleLookup((ULONG_PTR)Buffer->Caller, &Name, &Offset);
 
             if (Name != NULL) {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%p) %s + %p\n",
-                      Buffer->Data,
-                      Name,
-                      (PVOID)Offset);
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%p) %s + %p\n",
+                             Buffer->Data,
+                             Name,
+                             (PVOID)Offset);
             } else {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%p) %p\n",
-                      Buffer->Data,
-                      Buffer->Caller);
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%p) %p\n",
+                             Buffer->Data,
+                             Buffer->Caller);
             }
         }
     }
@@ -1986,10 +2009,9 @@ StoreDebugCallback(
     if (!IsListEmpty(&Context->WatchList)) {
         PLIST_ENTRY ListEntry;
 
-        DEBUG(Printf,
-              Context->DebugInterface,
-              Context->DebugCallback,
-              "WATCHES:\n");
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "WATCHES:\n");
 
         for (ListEntry = Context->WatchList.Flink;
              ListEntry != &(Context->WatchList);
@@ -2003,24 +2025,22 @@ StoreDebugCallback(
             ModuleLookup((ULONG_PTR)Watch->Caller, &Name, &Offset);
 
             if (Name != NULL) {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%04X) ON %s BY %s + %p [%s]\n",
-                      Watch->Id,
-                      Watch->Path,
-                      Name,
-                      (PVOID)Offset,
-                      (Watch->Active) ? "ACTIVE" : "EXPIRED");
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%04X) ON %s BY %s + %p [%s]\n",
+                             Watch->Id,
+                             Watch->Path,
+                             Name,
+                             (PVOID)Offset,
+                             (Watch->Active) ? "ACTIVE" : "EXPIRED");
             } else {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%04X) ON %s BY %p [%s]\n",
-                      Watch->Id,
-                      Watch->Path,
-                      (PVOID)Watch->Caller,
-                      (Watch->Active) ? "ACTIVE" : "EXPIRED");
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%04X) ON %s BY %p [%s]\n",
+                             Watch->Id,
+                             Watch->Path,
+                             (PVOID)Watch->Caller,
+                             (Watch->Active) ? "ACTIVE" : "EXPIRED");
             }
         }
     }
@@ -2028,10 +2048,9 @@ StoreDebugCallback(
     if (!IsListEmpty(&Context->TransactionList)) {
         PLIST_ENTRY ListEntry;
 
-        DEBUG(Printf,
-              Context->DebugInterface,
-              Context->DebugCallback,
-              "TRANSACTIONS:\n");
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "TRANSACTIONS:\n");
 
         for (ListEntry = Context->TransactionList.Flink;
              ListEntry != &(Context->TransactionList);
@@ -2045,195 +2064,162 @@ StoreDebugCallback(
             ModuleLookup((ULONG_PTR)Transaction->Caller, &Name, &Offset);
 
             if (Name != NULL) {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%08X) BY %s + %p [%s]\n",
-                      Transaction->Id,
-                      Name,
-                      (PVOID)Offset,
-                      (Transaction->Active) ? "ACTIVE" : "EXPIRED");
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%08X) BY %s + %p [%s]\n",
+                             Transaction->Id,
+                             Name,
+                             (PVOID)Offset,
+                             (Transaction->Active) ? "ACTIVE" : "EXPIRED");
             } else {
-                DEBUG(Printf,
-                      Context->DebugInterface,
-                      Context->DebugCallback,
-                      "- (%04X) ON %s BY %p [%s]\n",
-                      Transaction->Id,
-                      (PVOID)Transaction->Caller,
-                      (Transaction->Active) ? "ACTIVE" : "EXPIRED");
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- (%04X) ON %s BY %p [%s]\n",
+                             Transaction->Id,
+                             (PVOID)Transaction->Caller,
+                             (Transaction->Active) ? "ACTIVE" : "EXPIRED");
             }
         }
     }
 }
 
-NTSTATUS
-StoreInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_STORE_INTERFACE Interface
+static NTSTATUS
+StoreAcquire(
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_STORE_CONTEXT       Context;
-    PHYSICAL_ADDRESS            Address;
-    NTSTATUS                    status;
+    PXENBUS_STORE_CONTEXT   Context = Interface->Context;
+    KIRQL                   Irql;
+    NTSTATUS                status;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
 
     Trace("====>\n");
 
-    Context = __StoreAllocate(sizeof (XENBUS_STORE_CONTEXT));
-
-    status = STATUS_NO_MEMORY;
-    if (Context == NULL)
-        goto fail1;
-
-    status = HvmGetParam(HVM_PARAM_STORE_PFN, &Context->Pfn);
-    ASSERT(NT_SUCCESS(status));
-
-    Address.QuadPart = (ULONGLONG)Context->Pfn << PAGE_SHIFT;
-    Context->Shared = (struct xenstore_domain_interface *)MmMapIoSpace(Address,
+    Context->Address = StoreGetAddress(Context);
+    Context->Shared = (struct xenstore_domain_interface *)MmMapIoSpace(Context->Address,
                                                                        PAGE_SIZE,
                                                                        MmCached);
     status = STATUS_UNSUCCESSFUL;
     if (Context->Shared == NULL)
+        goto fail1;
+
+    status = XENBUS_EVTCHN(Acquire, &Context->EvtchnInterface);
+    if (!NT_SUCCESS(status))
         goto fail2;
 
-    Info("xenstore_domain_interface *: %p\n", Context->Shared);
+    StoreResetResponse(Context);
+    StoreEnable(Context);
 
-    KeInitializeSpinLock(&Context->Lock);
-
-    Context->RequestId = (USHORT)__rdtsc();
-    InitializeListHead(&Context->SubmittedList);
-    InitializeListHead(&Context->PendingList);
-
-    InitializeListHead(&Context->TransactionList);
-
-    Context->WatchId = (USHORT)(__rdtsc() >> 16);
-    InitializeListHead(&Context->WatchList);
-
-    InitializeListHead(&Context->BufferList);
-
-    KeInitializeDpc(&Context->Dpc, StoreDpc, Context);
-
-    Context->EvtchnInterface = FdoGetEvtchnInterface(Fdo);
-
-    EVTCHN(Acquire, Context->EvtchnInterface);
-
-    __StoreResetResponse(Context);
-    __StoreEnable(Context);
-
-    Context->SuspendInterface = FdoGetSuspendInterface(Fdo);
-
-    SUSPEND(Acquire, Context->SuspendInterface);
-
-    status = SUSPEND(Register,
-                     Context->SuspendInterface,
-                     SUSPEND_CALLBACK_EARLY,
-                     StoreSuspendCallbackEarly,
-                     Context,
-                     &Context->SuspendCallbackEarly);
+    status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    status = SUSPEND(Register,
-                     Context->SuspendInterface,
-                     SUSPEND_CALLBACK_LATE,
-                     StoreSuspendCallbackLate,
-                     Context,
-                     &Context->SuspendCallbackLate);
+    status = XENBUS_SUSPEND(Register,
+                            &Context->SuspendInterface,
+                            SUSPEND_CALLBACK_EARLY,
+                            StoreSuspendCallbackEarly,
+                            Context,
+                            &Context->SuspendCallbackEarly);
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    Context->DebugInterface = FdoGetDebugInterface(Fdo);
-
-    DEBUG(Acquire, Context->DebugInterface);
-
-    status = DEBUG(Register,
-                   Context->DebugInterface,
-                   __MODULE__ "|STORE",
-                   StoreDebugCallback,
-                   Context,
-                   &Context->DebugCallback);
+    status = XENBUS_SUSPEND(Register,
+                            &Context->SuspendInterface,
+                            SUSPEND_CALLBACK_LATE,
+                            StoreSuspendCallbackLate,
+                            Context,
+                            &Context->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
+    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
+    if (!NT_SUCCESS(status))
+        goto fail6;
+
+    status = XENBUS_DEBUG(Register,
+                          &Context->DebugInterface,
+                          __MODULE__ "|STORE",
+                          StoreDebugCallback,
+                          Context,
+                          &Context->DebugCallback);
+    if (!NT_SUCCESS(status))
+        goto fail7;
 
     Trace("<====\n");
 
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     return STATUS_SUCCESS;
+
+fail7:
+    Error("fail7\n");
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
+fail6:
+    Error("fail6\n");
+
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackLate);
+    Context->SuspendCallbackLate = NULL;
 
 fail5:
     Error("fail5\n");
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
-
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackLate);
-    Context->SuspendCallbackLate = NULL;
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
+    Context->SuspendCallbackEarly = NULL;
 
 fail4:
     Error("fail4\n");
 
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
-    Context->SuspendCallbackEarly = NULL;
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
 fail3:
     Error("fail3\n");
 
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
+    StoreDisable(Context);
+    RtlZeroMemory(&Context->Response, sizeof (XENBUS_STORE_RESPONSE));
 
-    __StoreDisable(Context);
-
-    KeFlushQueuedDpcs();
-
-    EVTCHN(Release, Context->EvtchnInterface);
-    Context->EvtchnInterface = NULL;
-
-    RtlZeroMemory(&Context->Response, sizeof (STORE_RESPONSE));
-
-    RtlZeroMemory(&Context->BufferList, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&Context->WatchList, sizeof (LIST_ENTRY));
-
-    Context->WatchId = 0;
-
-    RtlZeroMemory(&Context->TransactionList, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&Context->PendingList, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&Context->SubmittedList, sizeof (LIST_ENTRY));
-
-    Context->RequestId = 0;
-
-    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
-
-    RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
-
-    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
-    Context->Shared = NULL;
+    XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
 
 fail2:
     Error("fail2\n");
 
-    ASSERT(IsZeroMemory(Context, sizeof (XENBUS_STORE_CONTEXT)));
-    __StoreFree(Context);
+    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
+    Context->Shared = NULL;
 
 fail1:
     Error("fail1 (%08x)\n", status);
 
+    Context->Address.QuadPart = 0;
+
+    --Context->References;
+    ASSERT3U(Context->References, ==, 0);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     return status;
 }
 
-VOID
-StoreTeardown(
-    IN OUT  PXENBUS_STORE_INTERFACE Interface
+static VOID
+StoreRelease(
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
+    PXENBUS_STORE_CONTEXT   Context = Interface->Context;
+    KIRQL                   Irql;    
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
 
     Trace("====>\n");
 
@@ -2246,65 +2232,202 @@ StoreTeardown(
     if (!IsListEmpty(&Context->BufferList))
         BUG("OUTSTANDING BUFFER");
 
-    DEBUG(Deregister,
-          Context->DebugInterface,
-          Context->DebugCallback);
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
     Context->DebugCallback = NULL;
 
-    DEBUG(Release, Context->DebugInterface);
-    Context->DebugInterface = NULL;
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackLate);
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackLate);
     Context->SuspendCallbackLate = NULL;
 
-    SUSPEND(Deregister,
-            Context->SuspendInterface,
-            Context->SuspendCallbackEarly);
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
-    SUSPEND(Release, Context->SuspendInterface);
-    Context->SuspendInterface = NULL;
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-    __StoreDisable(Context);
+    StoreDisable(Context);
+    RtlZeroMemory(&Context->Response, sizeof (XENBUS_STORE_RESPONSE));
 
-    KeFlushQueuedDpcs();
-
-    EVTCHN(Release, Context->EvtchnInterface);
-    Context->EvtchnInterface = NULL;
-
-    RtlZeroMemory(&Context->Response, sizeof (STORE_RESPONSE));
-
-    RtlZeroMemory(&Context->BufferList, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&Context->WatchList, sizeof (LIST_ENTRY));
-
-    Context->WatchId = 0;
-
-    RtlZeroMemory(&Context->TransactionList, sizeof (LIST_ENTRY));
-
-    ASSERT(IsListEmpty(&Context->PendingList));
-    RtlZeroMemory(&Context->PendingList, sizeof (LIST_ENTRY));
-
-    ASSERT(IsListEmpty(&Context->SubmittedList));
-    RtlZeroMemory(&Context->SubmittedList, sizeof (LIST_ENTRY));
-
-    Context->RequestId = 0;
-
-    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
-
-    RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
+    XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
 
     MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
     Context->Shared = NULL;
 
-    Context->Pfn = 0;
+    Context->Address.QuadPart = 0;
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENBUS_STORE_INTERFACE_V1 StoreInterfaceVersion1 = {
+    { sizeof (struct _XENBUS_STORE_INTERFACE_V1), 1, NULL, NULL, NULL },
+    StoreAcquire,
+    StoreRelease,
+    StoreFree,
+    StoreRead,
+    StorePrintf,
+    StoreRemove,
+    StoreDirectory,
+    StoreTransactionStart,
+    StoreTransactionEnd,
+    StoreWatchAdd,
+    StoreWatchRemove,
+    StorePoll
+};
+                     
+NTSTATUS
+StoreInitialize(
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_STORE_CONTEXT   *Context
+    )
+{
+    LARGE_INTEGER               Now;
+    ULONG                       Seed;
+    NTSTATUS                    status;
+
+    Trace("====>\n");
+
+    *Context = __StoreAllocate(sizeof (XENBUS_STORE_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    status = EvtchnGetInterface(FdoGetEvtchnContext(Fdo),
+                                XENBUS_EVTCHN_INTERFACE_VERSION_MAX,
+                                (PINTERFACE)&(*Context)->EvtchnInterface,
+                                sizeof ((*Context)->EvtchnInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->EvtchnInterface.Interface.Context != NULL);
+
+    status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
+                                 XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
+                                 (PINTERFACE)&(*Context)->SuspendInterface,
+                                 sizeof ((*Context)->SuspendInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->SuspendInterface.Interface.Context != NULL);
+
+    status = DebugGetInterface(FdoGetDebugContext(Fdo),
+                               XENBUS_DEBUG_INTERFACE_VERSION_MAX,
+                               (PINTERFACE)&(*Context)->DebugInterface,
+                               sizeof ((*Context)->DebugInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
+
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    KeQuerySystemTime(&Now);
+    Seed = Now.LowPart;
+
+    (*Context)->RequestId = (USHORT)RtlRandomEx(&Seed);
+    InitializeListHead(&(*Context)->SubmittedList);
+    InitializeListHead(&(*Context)->PendingList);
+
+    InitializeListHead(&(*Context)->TransactionList);
+
+    (*Context)->WatchId = (USHORT)RtlRandomEx(&Seed);
+    InitializeListHead(&(*Context)->WatchList);
+
+    InitializeListHead(&(*Context)->BufferList);
+
+    KeInitializeDpc(&(*Context)->Dpc, StoreDpc, *Context);
+
+    (*Context)->Fdo = Fdo;
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
+StoreGetInterface(
+    IN      PXENBUS_STORE_CONTEXT   Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
+    )
+{
+    NTSTATUS                        status;
+
+    ASSERT(Context != NULL);
+
+    switch (Version) {
+    case 1: {
+        struct _XENBUS_STORE_INTERFACE_V1  *StoreInterface;
+
+        StoreInterface = (struct _XENBUS_STORE_INTERFACE_V1 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_STORE_INTERFACE_V1))
+            break;
+
+        *StoreInterface = StoreInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    return status;
+}   
+
+VOID
+StoreTeardown(
+    IN  PXENBUS_STORE_CONTEXT   Context
+    )
+{
+    Trace("====>\n");
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+    KeFlushQueuedDpcs();
+
+    Context->Fdo = NULL;
+
+    RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
+
+    RtlZeroMemory(&Context->BufferList, sizeof (LIST_ENTRY));
+
+    RtlZeroMemory(&Context->WatchList, sizeof (LIST_ENTRY));
+    Context->WatchId = 0;
+
+    RtlZeroMemory(&Context->TransactionList, sizeof (LIST_ENTRY));
+
+    RtlZeroMemory(&Context->PendingList, sizeof (LIST_ENTRY));
+    RtlZeroMemory(&Context->SubmittedList, sizeof (LIST_ENTRY));
+    Context->RequestId = 0;
+
+    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
+
+    RtlZeroMemory(&Context->DebugInterface,
+                  sizeof (XENBUS_DEBUG_INTERFACE));
+
+    RtlZeroMemory(&Context->SuspendInterface,
+                  sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    RtlZeroMemory(&Context->EvtchnInterface,
+                  sizeof (XENBUS_EVTCHN_INTERFACE));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_STORE_CONTEXT)));
     __StoreFree(Context);
-
-    RtlZeroMemory(Interface, sizeof (XENBUS_STORE_INTERFACE));
 
     Trace("<====\n");
 }

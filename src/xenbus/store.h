@@ -36,25 +36,27 @@
 #include <xen.h>
 #include <store_interface.h>
 
+typedef struct _XENBUS_STORE_CONTEXT  XENBUS_STORE_CONTEXT, *PXENBUS_STORE_CONTEXT;
+
 #include "fdo.h"
-
-struct _XENBUS_STORE_INTERFACE {
-    PXENBUS_STORE_OPERATIONS    Operations;
-    PXENBUS_STORE_CONTEXT       Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENBUS_STORE_INTERFACE, Operations) == (ULONG_PTR)STORE_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENBUS_STORE_INTERFACE, Context) == (ULONG_PTR)STORE_CONTEXT(NULL));
 
 extern NTSTATUS
 StoreInitialize(
     IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_STORE_INTERFACE Interface
+    OUT PXENBUS_STORE_CONTEXT   *Context
+    );
+
+extern NTSTATUS
+StoreGetInterface(
+    IN      PXENBUS_STORE_CONTEXT   Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     );
 
 extern VOID
 StoreTeardown(
-    IN OUT  PXENBUS_STORE_INTERFACE Interface
+    IN  PXENBUS_STORE_CONTEXT   Context
     );
 
 #endif  // _XENBUS_STORE_H

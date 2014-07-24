@@ -33,22 +33,10 @@
 #define _XENBUS_FDO_H
 
 #include <ntddk.h>
-
 #include <unplug_interface.h>
 
 #include "driver.h"
 #include "types.h"
-
-typedef enum _XENBUS_RESOURCE_TYPE {
-    MEMORY_RESOURCE = 0,
-    INTERRUPT_RESOURCE,
-    RESOURCE_COUNT
-} XENBUS_RESOURCE_TYPE, *PXENBUS_RESOURCE_TYPE;
-
-typedef struct _XENBUS_RESOURCE {
-    CM_PARTIAL_RESOURCE_DESCRIPTOR Raw;
-    CM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
-} XENBUS_RESOURCE, *PXENBUS_RESOURCE;
 
 extern NTSTATUS
 FdoCreate(
@@ -138,69 +126,106 @@ FdoGetName(
     IN  PXENBUS_FDO Fdo
     );
 
-extern PXENBUS_RESOURCE
-FdoGetResource(
-    IN  PXENBUS_FDO             Fdo,
-    IN  XENBUS_RESOURCE_TYPE    Type
+extern NTSTATUS
+FdoAllocateIoSpace(
+    IN  PXENBUS_FDO         Fdo,
+    IN  ULONG               Size,
+    OUT PPHYSICAL_ADDRESS   Address
     );
 
-extern PKINTERRUPT
-FdoGetInterruptObject(
+extern VOID
+FdoFreeIoSpace(
+    IN  PXENBUS_FDO         Fdo,
+    IN  PHYSICAL_ADDRESS    Address,
+    IN  ULONG               Size
+    );
+
+extern ULONG
+FdoGetInterruptVector(
     IN  PXENBUS_FDO Fdo
     );
 
-extern PXENFILT_UNPLUG_INTERFACE
-FdoGetUnplugInterface(
+// Disable erroneous SAL warnings around use of interrupt locks
+#pragma warning(disable:28230)
+#pragma warning(disable:28285)
+
+extern
+_IRQL_requires_max_(HIGH_LEVEL)
+_IRQL_saves_
+_IRQL_raises_(HIGH_LEVEL)
+KIRQL
+FdoAcquireInterruptLock(
     IN  PXENBUS_FDO Fdo
+    );
+
+extern
+_IRQL_requires_(HIGH_LEVEL)
+VOID
+FdoReleaseInterruptLock(
+    IN  PXENBUS_FDO                 Fdo,
+    IN  __drv_restoresIRQL KIRQL    Irql
     );
 
 #include "suspend.h"
 
-extern PXENBUS_SUSPEND_INTERFACE
-FdoGetSuspendInterface(
+extern PXENBUS_SUSPEND_CONTEXT
+FdoGetSuspendContext(
     IN  PXENBUS_FDO Fdo
     );
 
 #include "shared_info.h"
 
-extern PXENBUS_SHARED_INFO_INTERFACE
-FdoGetSharedInfoInterface(
+extern PXENBUS_SHARED_INFO_CONTEXT
+FdoGetSharedInfoContext(
     IN  PXENBUS_FDO Fdo
     );
 
 #include "evtchn.h"
 
-extern PXENBUS_EVTCHN_INTERFACE
-FdoGetEvtchnInterface(
+extern PXENBUS_EVTCHN_CONTEXT
+FdoGetEvtchnContext(
     IN  PXENBUS_FDO Fdo
     );
 
 #include "debug.h"
 
-extern PXENBUS_DEBUG_INTERFACE
-FdoGetDebugInterface(
+extern PXENBUS_DEBUG_CONTEXT
+FdoGetDebugContext(
     IN  PXENBUS_FDO Fdo
     );
 
 #include "store.h"
 
-extern PXENBUS_STORE_INTERFACE
-FdoGetStoreInterface(
+extern PXENBUS_STORE_CONTEXT
+FdoGetStoreContext(
+    IN  PXENBUS_FDO Fdo
+    );
+
+#include "range_set.h"
+
+extern PXENBUS_RANGE_SET_CONTEXT
+FdoGetRangeSetContext(
     IN  PXENBUS_FDO Fdo
     );
 
 #include "cache.h"
 
-extern PXENBUS_CACHE_INTERFACE
-FdoGetCacheInterface(
+extern PXENBUS_CACHE_CONTEXT
+FdoGetCacheContext(
     IN  PXENBUS_FDO Fdo
     );
 
 #include "gnttab.h"
 
-extern PXENBUS_GNTTAB_INTERFACE
-FdoGetGnttabInterface(
+extern PXENBUS_GNTTAB_CONTEXT
+FdoGetGnttabContext(
     IN  PXENBUS_FDO Fdo
+    );
+
+extern VOID
+FdoGetUnplugInterface(
+    IN  PXENBUS_FDO                 Fdo,
+    OUT PXENFILT_UNPLUG_INTERFACE   UnplugInterface
     );
 
 extern NTSTATUS

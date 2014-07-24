@@ -39,7 +39,6 @@
 #include <xen.h>
 
 #include "emulated.h"
-#include "unplug.h"
 #include "names.h"
 #include "fdo.h"
 #include "pdo.h"
@@ -65,13 +64,12 @@ struct _XENFILT_FDO {
     PIRP                            DevicePowerIrp;
 
     MUTEX                           Mutex;
+    LIST_ENTRY                      List;
     ULONG                           References;
 
-    CHAR                            Prefix[MAXNAMELEN];
+    BOOLEAN                         Enumerated;
 
     XENFILT_EMULATED_OBJECT_TYPE    Type;
-    XENFILT_EMULATED_INTERFACE      EmulatedInterface;
-    XENFILT_UNPLUG_INTERFACE        UnplugInterface;
 };
 
 static FORCEINLINE PVOID
@@ -79,7 +77,7 @@ __FdoAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, FDO_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, FDO_TAG);
 }
 
 static FORCEINLINE VOID
@@ -87,7 +85,7 @@ __FdoFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, FDO_TAG);
+    ExFreePoolWithTag(Buffer, FDO_TAG);
 }
 
 static FORCEINLINE VOID
@@ -169,6 +167,24 @@ __FdoGetSystemPowerState(
     return Dx->SystemPowerState;
 }
 
+static FORCEINLINE PDEVICE_OBJECT
+__FdoGetDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    PXENFILT_DX         Dx = Fdo->Dx;
+
+    return Dx->DeviceObject;
+}
+    
+PDEVICE_OBJECT
+FdoGetDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    return __FdoGetDeviceObject(Fdo);
+}
+
 static FORCEINLINE VOID
 __FdoSetName(
     IN  PXENFILT_FDO    Fdo,
@@ -232,137 +248,40 @@ __FdoGetPhysicalDeviceObject(
     return Fdo->PhysicalDeviceObject;
 }
 
-
-static FORCEINLINE NTSTATUS
-__FdoSetWindowsPEPrefix(
-    IN  PXENFILT_FDO    Fdo
-    )
-{
-    HANDLE                  ServiceKey;
-    DWORD                   WindowsPEMode;
-    NTSTATUS                status;
-
-    status = RegistryOpenServiceKey(KEY_READ,
-                                    &ServiceKey);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = RegistryQueryDwordValue(ServiceKey,
-                                     "WindowsPEMode",
-                                     &WindowsPEMode);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = STATUS_UNSUCCESSFUL;
-
-    if (!WindowsPEMode)
-        goto fail3;
-
-    Fdo->Prefix[0]=0;
-    
-    RegistryCloseKey(ServiceKey);
-
-    return STATUS_SUCCESS;
-
-fail3:
-    Error("fail3\n");
-
-fail2:
-    Error("fail2\n");
-    RegistryCloseKey(ServiceKey);
-
-fail1:
-    Error("fail1\n");
-
-    return status;
-}
-
-static FORCEINLINE NTSTATUS
-__FdoSetPrefix(
-    IN  PXENFILT_FDO        Fdo
-    )
-{
-    HANDLE                  HardwareKey;
-    PANSI_STRING            ParentIdPrefix;
-    NTSTATUS                status;
-
-    status = RegistryOpenHardwareKey(__FdoGetPhysicalDeviceObject(Fdo),
-                                     KEY_READ,
-                                     &HardwareKey);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = RegistryQuerySzValue(HardwareKey,
-                                  "ParentIdPrefix",
-                                  &ParentIdPrefix);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = RtlStringCbPrintfA(Fdo->Prefix,
-                                MAXNAMELEN,
-                                "%Z",
-                                ParentIdPrefix);
-    ASSERT(NT_SUCCESS(status));
-
-    RegistryFreeSzValue(ParentIdPrefix);
-
-    RegistryCloseKey(HardwareKey);
-
-    return STATUS_SUCCESS;
-
-fail2:
-    Error("fail2\n");
-
-    RegistryCloseKey(HardwareKey);
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
-}
-
-static FORCEINLINE PCHAR
-__FdoGetPrefix(
-    IN  PXENFILT_FDO    Fdo
-    )
-{
-    return Fdo->Prefix;
-}
-
-PCHAR
-FdoGetPrefix(
-    IN  PXENFILT_FDO    Fdo
-    )
-{
-    return __FdoGetPrefix(Fdo);
-}
-
 VOID
 FdoAddPhysicalDeviceObject(
     IN  PXENFILT_FDO    Fdo,
-    IN  PDEVICE_OBJECT  DeviceObject
+    IN  PXENFILT_PDO    Pdo
     )
 {
+    PDEVICE_OBJECT      DeviceObject;
     PXENFILT_DX         Dx;
 
+    DeviceObject = PdoGetDeviceObject(Pdo);
     Dx = (PXENFILT_DX)DeviceObject->DeviceExtension;
     ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
-    InsertTailList(&Fdo->Dx->ListEntry, &Dx->ListEntry);
+    InsertTailList(&Fdo->List, &Dx->ListEntry);
     ASSERT3U(Fdo->References, !=, 0);
     Fdo->References++;
+
+    PdoResume(Pdo);
 }
 
 VOID
 FdoRemovePhysicalDeviceObject(
     IN  PXENFILT_FDO    Fdo,
-    IN  PDEVICE_OBJECT  DeviceObject
+    IN  PXENFILT_PDO    Pdo
     )
 {
+    PDEVICE_OBJECT      DeviceObject;
     PXENFILT_DX         Dx;
 
+    DeviceObject = PdoGetDeviceObject(Pdo);
     Dx = (PXENFILT_DX)DeviceObject->DeviceExtension;
     ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
+
+    PdoSuspend(Pdo);
 
     RemoveEntryList(&Dx->ListEntry);
     ASSERT3U(Fdo->References, !=, 0);
@@ -400,36 +319,33 @@ FdoReleaseMutex(
 {
     __FdoReleaseMutex(Fdo);
 
-    if (Fdo->References == 0)
+    if (Fdo->References == 0) {
+        DriverAcquireMutex();
         FdoDestroy(Fdo);
-}
-
-PXENFILT_EMULATED_INTERFACE
-FdoGetEmulatedInterface(
-    IN  PXENFILT_FDO     Fdo
-    )
-{
-    return &Fdo->EmulatedInterface;
-}
-
-static FORCEINLINE PXENFILT_UNPLUG_INTERFACE
-__FdoGetUnplugInterface(
-    IN  PXENFILT_FDO     Fdo
-    )
-{
-    return &Fdo->UnplugInterface;
-}
-
-PXENFILT_UNPLUG_INTERFACE
-FdoGetUnplugInterface(
-    IN  PXENFILT_FDO     Fdo
-    )
-{
-    return __FdoGetUnplugInterface(Fdo);
+        DriverReleaseMutex();
+    }
 }
 
 static FORCEINLINE VOID
-__FdoEnumerate(
+__FdoSetEnumerated(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    Fdo->Enumerated = TRUE;
+
+    DriverSetFilterState();
+}
+
+BOOLEAN
+FdoHasEnumerated(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    return Fdo->Enumerated;
+}
+
+static VOID
+FdoEnumerate(
     IN  PXENFILT_FDO        Fdo,
     IN  PDEVICE_RELATIONS   Relations
     )
@@ -453,11 +369,11 @@ __FdoEnumerate(
                   Relations->Objects,
                   sizeof (PDEVICE_OBJECT) * Count);
 
-    AcquireMutex(&Fdo->Mutex);
+    __FdoAcquireMutex(Fdo);
 
     // Remove any PDOs that do not appear in the device list
-    ListEntry = Fdo->Dx->ListEntry.Flink;
-    while (ListEntry != &Fdo->Dx->ListEntry) {
+    ListEntry = Fdo->List.Flink;
+    while (ListEntry != &Fdo->List) {
         PLIST_ENTRY     Next = ListEntry->Flink;
         PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
         PXENFILT_PDO    Pdo = Dx->Pdo;
@@ -474,12 +390,17 @@ __FdoEnumerate(
             }
         }
 
-        if (Missing && !PdoIsMissing(Pdo)) {
+        if (Missing &&
+            !PdoIsMissing(Pdo) &&
+            PdoGetDevicePnpState(Pdo) != Deleted) {
+            PdoSetMissing(Pdo, "device disappeared");
+
+            // If the PDO has not yet been enumerated then we can go ahead
+            // and mark it as deleted, otherwise we need to notify PnP manager and
+            // wait for the REMOVE_DEVICE IRP.
             if (PdoGetDevicePnpState(Pdo) == Present) {
                 PdoSetDevicePnpState(Pdo, Deleted);
                 PdoDestroy(Pdo);
-            } else {
-                PdoSetMissing(Pdo, "device disappeared");
             }
         }
 
@@ -497,7 +418,9 @@ __FdoEnumerate(
         }
     }
     
-    ReleaseMutex(&Fdo->Mutex);
+    __FdoReleaseMutex(Fdo);
+
+    __FdoSetEnumerated(Fdo);
 
     __FdoFree(PhysicalDeviceObject);
     return;
@@ -506,43 +429,10 @@ fail1:
     Error("fail1 (%08x)\n", status);
 }
 
-static FORCEINLINE VOID
-__FdoS4ToS3(
-    IN  PXENFILT_FDO            Fdo
-    )
-{
-    KIRQL                       Irql;
-    PXENFILT_UNPLUG_INTERFACE   UnplugInterface;
-
-    ASSERT3U(__FdoGetSystemPowerState(Fdo), ==, PowerSystemHibernate);
-
-    KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Flush out any attempt to use pageable memory
-
-    UnplugInterface = __FdoGetUnplugInterface(Fdo);
-
-    UNPLUG(Acquire, UnplugInterface);
-    UNPLUG(Replay, UnplugInterface);
-    UNPLUG(Release, UnplugInterface);
-
-    __FdoSetSystemPowerState(Fdo, PowerSystemSleeping3);
-
-    KeLowerIrql(Irql);
-}
-
-static FORCEINLINE VOID
-__FdoS3ToS4(
-    IN  PXENFILT_FDO    Fdo
-    )
-{
-    ASSERT3U(__FdoGetSystemPowerState(Fdo), ==, PowerSystemSleeping3);
-
-    __FdoSetSystemPowerState(Fdo, PowerSystemHibernate);
-}
-
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoForwardIrpSynchronously(
+FdoForwardIrpSynchronouslyCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -573,7 +463,7 @@ FdoForwardIrpSynchronously(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoForwardIrpSynchronously,
+                           FdoForwardIrpSynchronouslyCompletion,
                            &Event,
                            TRUE,
                            TRUE,
@@ -594,14 +484,14 @@ FdoForwardIrpSynchronously(
     return status;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoStartDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    IN  PXENFILT_FDO            Fdo,
+    IN  PIRP                    Irp
     )
 {
-    POWER_STATE         PowerState;
-    NTSTATUS            status;
+    POWER_STATE                 PowerState;
+    NTSTATUS                    status;
 
     status = IoAcquireRemoveLock(&Fdo->Dx->RemoveLock, Irp);
     if (!NT_SUCCESS(status))
@@ -611,18 +501,12 @@ FdoStartDevice(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    __FdoSetSystemPowerState(Fdo, PowerSystemHibernate);
-
-    __FdoS4ToS3(Fdo);
-    
-    __FdoSetSystemPowerState(Fdo, PowerSystemWorking);
-
-    __FdoSetDevicePowerState(Fdo, PowerDeviceD0);
-
     PowerState.DeviceState = PowerDeviceD0;
     PoSetPowerState(Fdo->Dx->DeviceObject,
                     DevicePowerState,
                     PowerState);
+
+    __FdoSetDevicePowerState(Fdo, PowerDeviceD0);
 
     __FdoSetDevicePnpState(Fdo, Started);
 
@@ -649,7 +533,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoQueryStopDevice(
+FdoQueryStopDeviceCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -667,7 +551,7 @@ __FdoQueryStopDevice(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoQueryStopDevice(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -684,7 +568,7 @@ FdoQueryStopDevice(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoQueryStopDevice,
+                           FdoQueryStopDeviceCompletion,
                            Fdo,
                            TRUE,
                            TRUE,
@@ -704,7 +588,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoCancelStopDevice(
+FdoCancelStopDeviceCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -722,7 +606,7 @@ __FdoCancelStopDevice(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoCancelStopDevice(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -740,7 +624,7 @@ FdoCancelStopDevice(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoCancelStopDevice,
+                           FdoCancelStopDeviceCompletion,
                            Fdo,
                            TRUE,
                            TRUE,
@@ -760,7 +644,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoStopDevice(
+FdoStopDeviceCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -778,21 +662,18 @@ __FdoStopDevice(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoStopDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    IN  PXENFILT_FDO            Fdo,
+    IN  PIRP                    Irp
     )
 {
-    POWER_STATE         PowerState;
-    NTSTATUS            status;
+    POWER_STATE                 PowerState;
+    NTSTATUS                    status;
 
     status = IoAcquireRemoveLock(&Fdo->Dx->RemoveLock, Irp);
     if (!NT_SUCCESS(status))
         goto fail1;
-
-    if (__FdoGetDevicePowerState(Fdo) != PowerDeviceD0)
-        goto done;
 
     PowerState.DeviceState = PowerDeviceD3;
     PoSetPowerState(Fdo->Dx->DeviceObject,
@@ -801,17 +682,12 @@ FdoStopDevice(
 
     __FdoSetDevicePowerState(Fdo, PowerDeviceD3);
 
-    __FdoSetSystemPowerState(Fdo, PowerSystemSleeping3);
-    __FdoS3ToS4(Fdo);
-    __FdoSetSystemPowerState(Fdo, PowerSystemShutdown);
-
-done:
     __FdoSetDevicePnpState(Fdo, Stopped);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoStopDevice,
+                           FdoStopDeviceCompletion,
                            Fdo,
                            TRUE,
                            TRUE,
@@ -831,7 +707,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoQueryRemoveDevice(
+FdoQueryRemoveDeviceCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -849,7 +725,7 @@ __FdoQueryRemoveDevice(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoQueryRemoveDevice(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -866,7 +742,7 @@ FdoQueryRemoveDevice(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoQueryRemoveDevice,
+                           FdoQueryRemoveDeviceCompletion,
                            Fdo,
                            TRUE,
                            TRUE,
@@ -886,7 +762,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoCancelRemoveDevice(
+FdoCancelRemoveDeviceCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -904,7 +780,7 @@ __FdoCancelRemoveDevice(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoCancelRemoveDevice(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -921,7 +797,7 @@ FdoCancelRemoveDevice(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoCancelRemoveDevice,
+                           FdoCancelRemoveDeviceCompletion,
                            Fdo,
                            TRUE,
                            TRUE,
@@ -941,7 +817,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoSurpriseRemoval(
+FdoSurpriseRemovalCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -959,7 +835,7 @@ __FdoSurpriseRemoval(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoSurpriseRemoval(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -976,7 +852,7 @@ FdoSurpriseRemoval(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoSurpriseRemoval,
+                           FdoSurpriseRemovalCompletion,
                            Fdo,
                            TRUE,
                            TRUE,
@@ -993,21 +869,18 @@ fail1:
     return status;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoRemoveDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    IN  PXENFILT_FDO            Fdo,
+    IN  PIRP                    Irp
     )
 {
-    POWER_STATE         PowerState;
-    NTSTATUS            status;
+    POWER_STATE                 PowerState;
+    NTSTATUS                    status;
 
     status = IoAcquireRemoveLock(&Fdo->Dx->RemoveLock, Irp);
     if (!NT_SUCCESS(status))
         goto fail1;
-
-    if (__FdoGetDevicePowerState(Fdo) != PowerDeviceD0)
-        goto done;
 
     PowerState.DeviceState = PowerDeviceD3;
     PoSetPowerState(Fdo->Dx->DeviceObject,
@@ -1016,11 +889,6 @@ FdoRemoveDevice(
 
     __FdoSetDevicePowerState(Fdo, PowerDeviceD3);
 
-    __FdoSetSystemPowerState(Fdo, PowerSystemSleeping3);
-    __FdoS3ToS4(Fdo);
-    __FdoSetSystemPowerState(Fdo, PowerSystemShutdown);
-
-done:
     __FdoSetDevicePnpState(Fdo, Deleted);
 
     IoReleaseRemoveLockAndWait(&Fdo->Dx->RemoveLock, Irp);
@@ -1028,13 +896,16 @@ done:
     status = FdoForwardIrpSynchronously(Fdo, Irp);
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
-    AcquireMutex(&Fdo->Mutex);
+    __FdoAcquireMutex(Fdo);
     ASSERT3U(Fdo->References, !=, 0);
     --Fdo->References;
-    ReleaseMutex(&Fdo->Mutex);
+    __FdoReleaseMutex(Fdo);
 
-    if (Fdo->References == 0)
+    if (Fdo->References == 0) {
+        DriverAcquireMutex();
         FdoDestroy(Fdo);
+        DriverReleaseMutex();
+    }
 
     return status;
 
@@ -1048,7 +919,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoQueryDeviceRelations(
+FdoQueryDeviceRelationsCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -1064,19 +935,20 @@ __FdoQueryDeviceRelations(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoQueryDeviceRelations(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    IN  PXENFILT_FDO        Fdo,
+    IN  PIRP                Irp
     )
 {
-    KEVENT              Event;
-    PIO_STACK_LOCATION  StackLocation;
-    ULONG               Size;
-    PDEVICE_RELATIONS   Relations;
-    PLIST_ENTRY         ListEntry;
-    ULONG               Count;
-    NTSTATUS            status;
+    KEVENT                  Event;
+    PIO_STACK_LOCATION      StackLocation;
+    ULONG                   Size;
+    PDEVICE_RELATIONS       Relations;
+    PLIST_ENTRY             ListEntry;
+    XENFILT_FILTER_STATE    State;
+    ULONG                   Count;
+    NTSTATUS                status;
 
     status = IoAcquireRemoveLock(&Fdo->Dx->RemoveLock, Irp);
     if (!NT_SUCCESS(status))
@@ -1086,7 +958,7 @@ FdoQueryDeviceRelations(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoQueryDeviceRelations,
+                           FdoQueryDeviceRelationsCompletion,
                            &Event,
                            TRUE,
                            TRUE,
@@ -1114,48 +986,61 @@ FdoQueryDeviceRelations(
     Relations = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
 
     if (Relations->Count != 0)
-        __FdoEnumerate(Fdo, Relations);
+        FdoEnumerate(Fdo, Relations);
 
     ExFreePool(Relations);
 
-    AcquireMutex(&Fdo->Mutex);
+    __FdoAcquireMutex(Fdo);
 
+    State = DriverGetFilterState();
     Count = 0;
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
-         ListEntry = ListEntry->Flink)
-        Count++;
 
-    Size = FIELD_OFFSET(DEVICE_RELATIONS, Objects) + (sizeof (DEVICE_OBJECT) * __min(Count, 1));
+    if (State == XENFILT_FILTER_DISABLED) {
+        for (ListEntry = Fdo->List.Flink;
+             ListEntry != &Fdo->List;
+             ListEntry = ListEntry->Flink)
+            Count++;
+    }
 
-    Relations = ExAllocatePoolWithTag(PagedPool, Size, 'TLIF');
+    Size = FIELD_OFFSET(DEVICE_RELATIONS, Objects) +
+           (sizeof (DEVICE_OBJECT) * __min(Count, 1));
+
+    Relations = __AllocatePoolWithTag(PagedPool, Size, 'TLIF');
 
     status = STATUS_NO_MEMORY;
     if (Relations == NULL)
         goto fail3;
 
-    RtlZeroMemory(Relations, Size);
+    if (State == XENFILT_FILTER_DISABLED) {
+        for (ListEntry = Fdo->List.Flink;
+             ListEntry != &Fdo->List;
+             ListEntry = ListEntry->Flink) {
+            PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
+            PXENFILT_PDO    Pdo = Dx->Pdo;
 
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
-         ListEntry = ListEntry->Flink) {
-        PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
-        PXENFILT_PDO    Pdo = Dx->Pdo;
+            ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
-        ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
+            if (PdoGetDevicePnpState(Pdo) == Present)
+                PdoSetDevicePnpState(Pdo, Enumerated);
 
-        if (PdoGetDevicePnpState(Pdo) == Present)
-            PdoSetDevicePnpState(Pdo, Enumerated);
+            ObReferenceObject(PdoGetPhysicalDeviceObject(Pdo));
+            Relations->Objects[Relations->Count++] = PdoGetPhysicalDeviceObject(Pdo);
+        }
 
-        ObReferenceObject(PdoGetPhysicalDeviceObject(Pdo));
-        Relations->Objects[Relations->Count++] = PdoGetPhysicalDeviceObject(Pdo);
+        ASSERT3U(Relations->Count, <=, Count);
+
+        Trace("%s: %d PDO(s)\n", 
+              __FdoGetName(Fdo),
+              Relations->Count);
+    } else {
+        Trace("%s: FILTERED\n",
+              __FdoGetName(Fdo));
+
+        IoInvalidateDeviceRelations(__FdoGetPhysicalDeviceObject(Fdo), 
+                                    BusRelations);
     }
 
-    ASSERT3U(Relations->Count, ==, Count);
-
-    Trace("%d PDO(s)\n", Relations->Count);
-
-    ReleaseMutex(&Fdo->Mutex);
+    __FdoReleaseMutex(Fdo);
 
     Irp->IoStatus.Information = (ULONG_PTR)Relations;
     status = STATUS_SUCCESS;
@@ -1169,7 +1054,7 @@ done:
     return status;
 
 fail3:
-    ReleaseMutex(&Fdo->Mutex);
+    __FdoReleaseMutex(Fdo);
 
 fail2:
     IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
@@ -1184,7 +1069,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoDispatchPnp(
+FdoDispatchPnpCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -1201,7 +1086,7 @@ __FdoDispatchPnp(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoDispatchPnp(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -1258,7 +1143,7 @@ FdoDispatchPnp(
 
         IoCopyCurrentIrpStackLocationToNext(Irp);
         IoSetCompletionRoutine(Irp,
-                               __FdoDispatchPnp,
+                               FdoDispatchPnpCompletion,
                                Fdo,
                                TRUE,
                                TRUE,
@@ -1279,14 +1164,15 @@ fail1:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoSetDevicePowerUp(
+static NTSTATUS
+FdoSetDevicePowerUp(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
     DEVICE_POWER_STATE  DeviceState;
+    POWER_STATE         PowerState;
     NTSTATUS            status;
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
@@ -1298,10 +1184,15 @@ __FdoSetDevicePowerUp(
     if (!NT_SUCCESS(status))
         goto done;
 
-    Info("%s: %s -> %s\n",
-         __FdoGetName(Fdo),
-         PowerDeviceStateName(__FdoGetDevicePowerState(Fdo)),
-         PowerDeviceStateName(DeviceState));
+    Trace("%s: %s -> %s\n",
+          __FdoGetName(Fdo),
+          DevicePowerStateName(__FdoGetDevicePowerState(Fdo)),
+          DevicePowerStateName(DeviceState));
+
+    PowerState.DeviceState = DeviceState;
+    PoSetPowerState(Fdo->Dx->DeviceObject,
+                    DevicePowerState,
+                    PowerState);
 
     __FdoSetDevicePowerState(Fdo, DeviceState);
 
@@ -1311,14 +1202,15 @@ done:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoSetDevicePowerDown(
+static NTSTATUS
+FdoSetDevicePowerDown(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
     DEVICE_POWER_STATE  DeviceState;
+    POWER_STATE         PowerState;
     NTSTATUS            status;
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
@@ -1326,10 +1218,15 @@ __FdoSetDevicePowerDown(
 
     ASSERT3U(DeviceState, >,  __FdoGetDevicePowerState(Fdo));
 
-    Info("%s: %s -> %s\n",
-         __FdoGetName(Fdo),
-         PowerDeviceStateName(__FdoGetDevicePowerState(Fdo)),
-         PowerDeviceStateName(DeviceState));
+    Trace("%s: %s -> %s\n",
+          __FdoGetName(Fdo),
+          DevicePowerStateName(__FdoGetDevicePowerState(Fdo)),
+          DevicePowerStateName(DeviceState));
+
+    PowerState.DeviceState = DeviceState;
+    PoSetPowerState(Fdo->Dx->DeviceObject,
+                    DevicePowerState,
+                    PowerState);
 
     __FdoSetDevicePowerState(Fdo, DeviceState);
 
@@ -1339,8 +1236,8 @@ __FdoSetDevicePowerDown(
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoSetDevicePower(
+static NTSTATUS
+FdoSetDevicePower(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1354,8 +1251,9 @@ __FdoSetDevicePower(
     DeviceState = StackLocation->Parameters.Power.State.DeviceState;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
-    Trace("====> (%s:%s)\n",
-          PowerDeviceStateName(DeviceState), 
+    Trace("%s: ====> (%s:%s)\n",
+          __FdoGetName(Fdo),
+          DevicePowerStateName(DeviceState), 
           PowerActionName(PowerAction));
 
     if (DeviceState == __FdoGetDevicePowerState(Fdo)) {
@@ -1366,19 +1264,20 @@ __FdoSetDevicePower(
     }
 
     status = (DeviceState < __FdoGetDevicePowerState(Fdo)) ?
-             __FdoSetDevicePowerUp(Fdo, Irp) :
-             __FdoSetDevicePowerDown(Fdo, Irp);
+             FdoSetDevicePowerUp(Fdo, Irp) :
+             FdoSetDevicePowerDown(Fdo, Irp);
 
 done:
-    Trace("<==== (%s:%s)(%08x)\n",
-          PowerDeviceStateName(DeviceState), 
+    Trace("%s: <==== (%s:%s)(%08x)\n",
+          __FdoGetName(Fdo),
+          DevicePowerStateName(DeviceState), 
           PowerActionName(PowerAction),
           status);
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoSetSystemPowerUp(
+static NTSTATUS
+FdoSetSystemPowerUp(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1396,16 +1295,14 @@ __FdoSetSystemPowerUp(
     if (!NT_SUCCESS(status))
         goto done;
 
-    Info("%s: %s -> %s\n",
-         __FdoGetName(Fdo),
-         PowerSystemStateName(__FdoGetSystemPowerState(Fdo)),
-         PowerSystemStateName(SystemState));
+    Trace("%s: %s -> %s\n",
+          __FdoGetName(Fdo),
+          SystemPowerStateName(__FdoGetSystemPowerState(Fdo)),
+          SystemPowerStateName(SystemState));
 
     if (SystemState < PowerSystemHibernate &&
-        __FdoGetSystemPowerState(Fdo) >= PowerSystemHibernate) {
-        __FdoSetSystemPowerState(Fdo, PowerSystemHibernate);
-        __FdoS4ToS3(Fdo);
-    }
+        __FdoGetSystemPowerState(Fdo) >= PowerSystemHibernate)
+        __DbgPrintEnable();
 
     __FdoSetSystemPowerState(Fdo, SystemState);
 
@@ -1415,8 +1312,8 @@ done:
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoSetSystemPowerDown(
+static NTSTATUS
+FdoSetSystemPowerDown(
     IN  PXENFILT_FDO     Fdo,
     IN  PIRP            Irp
     )
@@ -1430,10 +1327,10 @@ __FdoSetSystemPowerDown(
 
     ASSERT3U(SystemState, >,  __FdoGetSystemPowerState(Fdo));
 
-    Info("%s: %s -> %s\n",
-         __FdoGetName(Fdo),
-         PowerSystemStateName(__FdoGetSystemPowerState(Fdo)),
-         PowerSystemStateName(SystemState));
+    Trace("%s: %s -> %s\n",
+          __FdoGetName(Fdo),
+          SystemPowerStateName(__FdoGetSystemPowerState(Fdo)),
+          SystemPowerStateName(SystemState));
 
     __FdoSetSystemPowerState(Fdo, SystemState);
 
@@ -1443,8 +1340,8 @@ __FdoSetSystemPowerDown(
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoSetSystemPower(
+static NTSTATUS
+FdoSetSystemPower(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1458,8 +1355,9 @@ __FdoSetSystemPower(
     SystemState = StackLocation->Parameters.Power.State.SystemState;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
-    Trace("====> (%s:%s)\n",
-          PowerSystemStateName(SystemState), 
+    Trace("%s: ====> (%s:%s)\n",
+          __FdoGetName(Fdo),
+          SystemPowerStateName(SystemState), 
           PowerActionName(PowerAction));
 
     if (SystemState == __FdoGetSystemPowerState(Fdo)) {
@@ -1470,19 +1368,20 @@ __FdoSetSystemPower(
     }
 
     status = (SystemState < __FdoGetSystemPowerState(Fdo)) ?
-             __FdoSetSystemPowerUp(Fdo, Irp) :
-             __FdoSetSystemPowerDown(Fdo, Irp);
+             FdoSetSystemPowerUp(Fdo, Irp) :
+             FdoSetSystemPowerDown(Fdo, Irp);
 
 done:
-    Trace("<==== (%s:%s)(%08x)\n",
-          PowerSystemStateName(SystemState), 
+    Trace("%s: <==== (%s:%s)(%08x)\n",
+          __FdoGetName(Fdo),
+          SystemPowerStateName(SystemState), 
           PowerActionName(PowerAction),
           status);
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoQueryDevicePowerUp(
+static NTSTATUS
+FdoQueryDevicePowerUp(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1503,8 +1402,8 @@ __FdoQueryDevicePowerUp(
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoQueryDevicePowerDown(
+static NTSTATUS
+FdoQueryDevicePowerDown(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1524,8 +1423,8 @@ __FdoQueryDevicePowerDown(
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoQueryDevicePower(
+static NTSTATUS
+FdoQueryDevicePower(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1539,8 +1438,9 @@ __FdoQueryDevicePower(
     DeviceState = StackLocation->Parameters.Power.State.DeviceState;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
-    Trace("====> (%s:%s)\n",
-          PowerDeviceStateName(DeviceState), 
+    Trace("%s: ====> (%s:%s)\n",
+          __FdoGetName(Fdo),
+          DevicePowerStateName(DeviceState), 
           PowerActionName(PowerAction));
 
     if (DeviceState == __FdoGetDevicePowerState(Fdo)) {
@@ -1551,19 +1451,20 @@ __FdoQueryDevicePower(
     }
 
     status = (DeviceState < __FdoGetDevicePowerState(Fdo)) ?
-             __FdoQueryDevicePowerUp(Fdo, Irp) :
-             __FdoQueryDevicePowerDown(Fdo, Irp);
+             FdoQueryDevicePowerUp(Fdo, Irp) :
+             FdoQueryDevicePowerDown(Fdo, Irp);
 
 done:
-    Trace("<==== (%s:%s)(%08x)\n",
-          PowerDeviceStateName(DeviceState), 
+    Trace("%s: <==== (%s:%s)(%08x)\n",
+          __FdoGetName(Fdo),
+          DevicePowerStateName(DeviceState), 
           PowerActionName(PowerAction),
           status);
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoQuerySystemPowerUp(
+static NTSTATUS
+FdoQuerySystemPowerUp(
     IN  PXENFILT_FDO     Fdo,
     IN  PIRP            Irp
     )
@@ -1584,8 +1485,8 @@ __FdoQuerySystemPowerUp(
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoQuerySystemPowerDown(
+static NTSTATUS
+FdoQuerySystemPowerDown(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1605,8 +1506,8 @@ __FdoQuerySystemPowerDown(
     return status;
 }
 
-static FORCEINLINE NTSTATUS
-__FdoQuerySystemPower(
+static NTSTATUS
+FdoQuerySystemPower(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
     )
@@ -1620,8 +1521,9 @@ __FdoQuerySystemPower(
     SystemState = StackLocation->Parameters.Power.State.SystemState;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
-    Trace("====> (%s:%s)\n",
-          PowerSystemStateName(SystemState), 
+    Trace("%s: ====> (%s:%s)\n",
+          __FdoGetName(Fdo),
+          SystemPowerStateName(SystemState), 
           PowerActionName(PowerAction));
 
     if (SystemState == __FdoGetSystemPowerState(Fdo)) {
@@ -1632,12 +1534,13 @@ __FdoQuerySystemPower(
     }
 
     status = (SystemState < __FdoGetSystemPowerState(Fdo)) ?
-             __FdoQuerySystemPowerUp(Fdo, Irp) :
-             __FdoQuerySystemPowerDown(Fdo, Irp);
+             FdoQuerySystemPowerUp(Fdo, Irp) :
+             FdoQuerySystemPowerDown(Fdo, Irp);
 
 done:
-    Trace("<==== (%s:%s)(%08x)\n",
-          PowerSystemStateName(SystemState), 
+    Trace("%s: <==== (%s:%s)(%08x)\n",
+          __FdoGetName(Fdo),
+          SystemPowerStateName(SystemState), 
           PowerActionName(PowerAction),
           status);
 
@@ -1685,11 +1588,11 @@ FdoDevicePower(
 
         switch (StackLocation->MinorFunction) {
         case IRP_MN_SET_POWER:
-            (VOID) __FdoSetDevicePower(Fdo, Irp);
+            (VOID) FdoSetDevicePower(Fdo, Irp);
             break;
 
         case IRP_MN_QUERY_POWER:
-            (VOID) __FdoQueryDevicePower(Fdo, Irp);
+            (VOID) FdoQueryDevicePower(Fdo, Irp);
             break;
 
         default:
@@ -1744,11 +1647,11 @@ FdoSystemPower(
 
         switch (StackLocation->MinorFunction) {
         case IRP_MN_SET_POWER:
-            (VOID) __FdoSetSystemPower(Fdo, Irp);
+            (VOID) FdoSetSystemPower(Fdo, Irp);
             break;
 
         case IRP_MN_QUERY_POWER:
-            (VOID) __FdoQuerySystemPower(Fdo, Irp);
+            (VOID) FdoQuerySystemPower(Fdo, Irp);
             break;
 
         default:
@@ -1765,7 +1668,7 @@ FdoSystemPower(
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoDispatchPower(
+FdoDispatchPowerCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -1782,7 +1685,7 @@ __FdoDispatchPower(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoDispatchPower(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -1804,7 +1707,7 @@ FdoDispatchPower(
         MinorFunction != IRP_MN_SET_POWER) {
         IoCopyCurrentIrpStackLocationToNext(Irp);
         IoSetCompletionRoutine(Irp,
-                               __FdoDispatchPower,
+                               FdoDispatchPowerCompletion,
                                Fdo,
                                TRUE,
                                TRUE,
@@ -1817,7 +1720,8 @@ FdoDispatchPower(
 
     PowerType = StackLocation->Parameters.Power.Type;
 
-    Trace("====> (%02x:%s)\n",
+    Trace("%s: ====> (%02x:%s)\n",
+          __FdoGetName(Fdo),
           MinorFunction, 
           PowerMinorFunctionName(MinorFunction)); 
 
@@ -1849,7 +1753,7 @@ FdoDispatchPower(
     default:
         IoCopyCurrentIrpStackLocationToNext(Irp);
         IoSetCompletionRoutine(Irp,
-                               __FdoDispatchPower,
+                               FdoDispatchPowerCompletion,
                                Fdo,
                                TRUE,
                                TRUE,
@@ -1859,7 +1763,8 @@ FdoDispatchPower(
         break;
     }
 
-    Trace("<==== (%02x:%s) (%08x)\n",
+    Trace("%s: <==== (%02x:%s) (%08x)\n",
+          __FdoGetName(Fdo),
           MinorFunction, 
           PowerMinorFunctionName(MinorFunction),
           status);
@@ -1879,7 +1784,7 @@ fail1:
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-__FdoDispatchDefault(
+FdoDispatchDefaultCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -1897,7 +1802,7 @@ __FdoDispatchDefault(
     return STATUS_SUCCESS;
 }
 
-static DECLSPEC_NOINLINE NTSTATUS
+static NTSTATUS
 FdoDispatchDefault(
     IN  PXENFILT_FDO    Fdo,
     IN  PIRP            Irp
@@ -1911,7 +1816,7 @@ FdoDispatchDefault(
 
     IoCopyCurrentIrpStackLocationToNext(Irp);
     IoSetCompletionRoutine(Irp,
-                           __FdoDispatchDefault,
+                           FdoDispatchDefaultCompletion,
                            Fdo,
                            TRUE,
                            TRUE,
@@ -1993,7 +1898,7 @@ FdoCreate(
     Dx->Type = FUNCTION_DEVICE_OBJECT;
     Dx->DeviceObject = FilterDeviceObject;
     Dx->DevicePnpState = Added;
-    Dx->SystemPowerState = PowerSystemShutdown;
+    Dx->SystemPowerState = PowerSystemWorking;
     Dx->DevicePowerState = PowerDeviceD3;
 
     IoInitializeRemoveLock(&Dx->RemoveLock, FDO_TAG, 0, 0);
@@ -2025,26 +1930,12 @@ FdoCreate(
 
     __FdoSetName(Fdo, Name);
 
-    status = __FdoSetPrefix(Fdo);
-    if (!NT_SUCCESS(status))
-        status = __FdoSetWindowsPEPrefix(Fdo);
+    status = __FdoSetEmulatedType(Fdo, Type);
     if (!NT_SUCCESS(status))
         goto fail6;
 
-    status = __FdoSetEmulatedType(Fdo, Type);
-    if (!NT_SUCCESS(status))
-        goto fail7;
-
-    status = EmulatedInitialize(&Fdo->EmulatedInterface);
-    if (!NT_SUCCESS(status))
-        goto fail8;
-
-    status = UnplugInitialize(&Fdo->UnplugInterface);
-    if (!NT_SUCCESS(status))
-        goto fail9;
-
     InitializeMutex(&Fdo->Mutex);
-    InitializeListHead(&Dx->ListEntry);
+    InitializeListHead(&Fdo->List);
     Fdo->References = 1;
 
     Info("%p (%s)\n",
@@ -2060,22 +1951,9 @@ FdoCreate(
     FilterDeviceObject->Flags |= LowerDeviceObject->Flags;
     FilterDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
+    DriverAddFunctionDeviceObject(Fdo);
+
     return STATUS_SUCCESS;
-
-fail9:
-    Error("fail9\n");
-
-    EmulatedTeardown(&Fdo->EmulatedInterface);
-
-fail8:
-    Error("fail8\n");
-
-    Fdo->Type = XENFILT_EMULATED_OBJECT_TYPE_INVALID;
-
-fail7:
-    Error("fail7\n");
-
-    RtlZeroMemory(Fdo->Prefix, MAXNAMELEN);
 
 fail6:
     Error("fail6\n");
@@ -2126,9 +2004,13 @@ FdoDestroy(
     PXENFILT_DX         Dx = Fdo->Dx;
     PDEVICE_OBJECT      FilterDeviceObject = Dx->DeviceObject;
 
-    ASSERT(IsListEmpty(&Dx->ListEntry));
+    ASSERT(IsListEmpty(&Fdo->List));
     ASSERT3U(Fdo->References, ==, 0);
     ASSERT3U(__FdoGetDevicePnpState(Fdo), ==, Deleted);
+
+    DriverRemoveFunctionDeviceObject(Fdo);
+
+    Fdo->Enumerated = FALSE;
 
     Info("%p (%s)\n",
          FilterDeviceObject,
@@ -2136,15 +2018,10 @@ FdoDestroy(
 
     Dx->Fdo = NULL;
 
+    RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&Fdo->Mutex, sizeof (MUTEX));
 
-    UnplugTeardown(&Fdo->UnplugInterface);
-
-    EmulatedTeardown(&Fdo->EmulatedInterface);
-
     Fdo->Type = XENFILT_EMULATED_OBJECT_TYPE_INVALID;
-
-    RtlZeroMemory(Fdo->Prefix, MAXNAMELEN);
 
     ThreadAlert(Fdo->DevicePowerThread);
     ThreadJoin(Fdo->DevicePowerThread);
@@ -2162,6 +2039,9 @@ FdoDestroy(
 
     ASSERT(IsZeroMemory(Fdo, sizeof (XENFILT_FDO)));
     __FdoFree(Fdo);
+
+    ASSERT3U(Dx->DevicePowerState, ==, PowerDeviceD3);
+    ASSERT3U(Dx->SystemPowerState, ==, PowerSystemWorking);
 
     IoDeleteDevice(FilterDeviceObject);
 }

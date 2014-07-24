@@ -207,6 +207,15 @@ DllUnload(
 
     SystemTeardown();
 
+    Info("XEN %d.%d.%d (%d) (%02d.%02d.%04d)\n",
+         MAJOR_VERSION,
+         MINOR_VERSION,
+         MICRO_VERSION,
+         BUILD_NUMBER,
+         DAY,
+         MONTH,
+         YEAR);
+
     LogRemoveDisposition(Driver.InfoDisposition);
     Driver.InfoDisposition = NULL;
 

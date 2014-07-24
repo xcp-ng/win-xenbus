@@ -34,8 +34,8 @@
 
 #include <ntddk.h>
 
+#include "driver.h"
 #include "types.h"
-#include "fdo.h"
 #include "emulated.h"
 
 typedef struct _XENFILT_PDO XENFILT_PDO, *PXENFILT_PDO;
@@ -72,11 +72,26 @@ PdoIsMasked(
     IN  PXENFILT_PDO    Pdo
     );
 
+extern PDEVICE_OBJECT
+PdoGetDeviceObject(
+    IN  PXENFILT_PDO    Pdo
+    );
+
 extern NTSTATUS
 PdoCreate(
     IN  PXENFILT_FDO                    Fdo,
     IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type
+    );
+
+extern VOID
+PdoResume(
+    IN  PXENFILT_PDO    Pdo
+    );
+
+extern VOID
+PdoSuspend(
+    IN  PXENFILT_PDO    Pdo
     );
 
 extern VOID

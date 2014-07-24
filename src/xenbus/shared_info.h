@@ -36,28 +36,27 @@
 #include <xen.h>
 #include <shared_info_interface.h>
 
+typedef struct _XENBUS_SHARED_INFO_CONTEXT  XENBUS_SHARED_INFO_CONTEXT, *PXENBUS_SHARED_INFO_CONTEXT;
+
 #include "fdo.h"
-
-#define EVTCHN_PER_SELECTOR     (sizeof (ULONG_PTR) * 8)
-#define EVTCHN_SELECTOR_COUNT   (RTL_FIELD_SIZE(shared_info_t, evtchn_pending) / sizeof (ULONG_PTR))
-
-struct _XENBUS_SHARED_INFO_INTERFACE {
-    PXENBUS_SHARED_INFO_OPERATIONS  Operations;
-    PXENBUS_SHARED_INFO_CONTEXT     Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENBUS_SHARED_INFO_INTERFACE, Operations) == (ULONG_PTR)SHARED_INFO_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENBUS_SHARED_INFO_INTERFACE, Context) == (ULONG_PTR)SHARED_INFO_CONTEXT(NULL));
 
 extern NTSTATUS
 SharedInfoInitialize(
-    IN  PXENBUS_FDO                     Fdo,
-    OUT PXENBUS_SHARED_INFO_INTERFACE   Interface
+    IN  PXENBUS_FDO                 Fdo,
+    OUT PXENBUS_SHARED_INFO_CONTEXT *Context
+    );
+
+extern NTSTATUS
+SharedInfoGetInterface(
+    IN      PXENBUS_SHARED_INFO_CONTEXT Context,
+    IN      ULONG                       Version,
+    IN OUT  PINTERFACE                  Interface,
+    IN      ULONG                       Size
     );
 
 extern VOID
 SharedInfoTeardown(
-    IN OUT  PXENBUS_SHARED_INFO_INTERFACE   Interface
+    IN  PXENBUS_SHARED_INFO_CONTEXT Context
     );
 
 #endif  // _XENBUS_SHARED_INFO_H

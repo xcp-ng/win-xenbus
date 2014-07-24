@@ -45,28 +45,31 @@
 #define MAXIMUM_PREFIX_LENGTH   32
 
 struct _XENBUS_DEBUG_CALLBACK {
-    LIST_ENTRY          ListEntry;
-    PVOID               Caller;
-    CHAR                Prefix[MAXIMUM_PREFIX_LENGTH];
-    VOID                (*Function)(PVOID, BOOLEAN);
-    PVOID               Argument;
+    LIST_ENTRY              ListEntry;
+    PVOID                   Caller;
+    CHAR                    Prefix[MAXIMUM_PREFIX_LENGTH];
+    XENBUS_DEBUG_FUNCTION   Function;
+    PVOID                   Argument;
 };
 
 struct _XENBUS_DEBUG_CONTEXT {
+    PXENBUS_FDO                 Fdo;
+    KSPIN_LOCK                  Lock;
     LONG                        References;
-    KBUGCHECK_CALLBACK_RECORD   BugCheckCallbackRecord;
-    LIST_ENTRY                  List;
-    HIGH_LOCK                   Lock;
+    KBUGCHECK_CALLBACK_RECORD   CallbackRecord;
+    LIST_ENTRY                  CallbackList;
+    const CHAR                  *CallbackPrefix;
+    HIGH_LOCK                   CallbackLock;
 };
 
-#define DEBUG_TAG   'UBED'
+#define XENBUS_DEBUG_TAG    'UBED'
 
 static FORCEINLINE PVOID
 __DebugAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, DEBUG_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_DEBUG_TAG);
 }
 
 static FORCEINLINE VOID
@@ -74,7 +77,7 @@ __DebugFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, DEBUG_TAG);
+    ExFreePoolWithTag(Buffer, XENBUS_DEBUG_TAG);
 }
 
 extern USHORT
@@ -87,13 +90,14 @@ RtlCaptureStackBackTrace(
 
 static NTSTATUS
 DebugRegister(
-    IN  PXENBUS_DEBUG_CONTEXT   Context,
-    IN  const CHAR              *Prefix,
-    IN  VOID                    (*Function)(PVOID, BOOLEAN),
+    IN  PINTERFACE              Interface,
+    IN  PCHAR                   Prefix,
+    IN  XENBUS_DEBUG_FUNCTION   Function,
     IN  PVOID                   Argument OPTIONAL,
     OUT PXENBUS_DEBUG_CALLBACK  *Callback
     )
 {
+    PXENBUS_DEBUG_CONTEXT       Context = Interface->Context;
     ULONG                       Length;
     KIRQL                       Irql;
     NTSTATUS                    status;
@@ -112,9 +116,9 @@ DebugRegister(
     (*Callback)->Function = Function;
     (*Callback)->Argument = Argument;
 
-    AcquireHighLock(&Context->Lock, &Irql);
-    InsertTailList(&Context->List, &(*Callback)->ListEntry);
-    ReleaseHighLock(&Context->Lock, Irql);
+    AcquireHighLock(&Context->CallbackLock, &Irql);
+    InsertTailList(&Context->CallbackList, &(*Callback)->ListEntry);
+    ReleaseHighLock(&Context->CallbackLock, Irql);
 
     return STATUS_SUCCESS;
 
@@ -126,19 +130,19 @@ fail1:
 
 static VOID
 DebugPrintf(
-    IN  PXENBUS_DEBUG_CONTEXT   Context,
-    IN  PXENBUS_DEBUG_CALLBACK  Callback,
+    IN  PINTERFACE              Interface,
     IN  const CHAR              *Format,
     ...
     )
 {
+    PXENBUS_DEBUG_CONTEXT       Context = Interface->Context;
     va_list                     Arguments;
 
-    UNREFERENCED_PARAMETER(Context);
+    ASSERT(Context->CallbackPrefix != NULL);
 
     LogPrintf(LOG_LEVEL_INFO,
               "%s: ",
-              Callback->Prefix);
+              Context->CallbackPrefix);
 
     va_start(Arguments, Format);
     LogVPrintf(LOG_LEVEL_INFO,
@@ -149,98 +153,95 @@ DebugPrintf(
 
 static VOID
 DebugDeregister(
-    IN  PXENBUS_DEBUG_CONTEXT   Context,
+    IN  PINTERFACE              Interface,
     IN  PXENBUS_DEBUG_CALLBACK  Callback
     )
 {
+    PXENBUS_DEBUG_CONTEXT       Context = Interface->Context;
     KIRQL                       Irql;
 
-    AcquireHighLock(&Context->Lock, &Irql);
+    AcquireHighLock(&Context->CallbackLock, &Irql);
     RemoveEntryList(&Callback->ListEntry);
-    ReleaseHighLock(&Context->Lock, Irql);
+    ReleaseHighLock(&Context->CallbackLock, Irql);
 
     __DebugFree(Callback);
 }
 
 static VOID
-DebugAcquire(
-    IN  PXENBUS_DEBUG_CONTEXT   Context
-    )
-{
-    InterlockedIncrement(&Context->References);
-}
-
-static VOID
-DebugRelease(
-    IN  PXENBUS_DEBUG_CONTEXT   Context
-    )
-{
-    ASSERT(Context->References != 0);
-    InterlockedDecrement(&Context->References);
-}
-
-#define DEBUG_OPERATION(_Type, _Name, _Arguments) \
-        Debug ## _Name,
-
-static XENBUS_DEBUG_OPERATIONS  Operations = {
-    DEFINE_DEBUG_OPERATIONS
-};
-
-#undef DEBUG_OPERATION
-
-static FORCEINLINE VOID
-__DebugTrigger(
+DebugCallback(
     IN  PXENBUS_DEBUG_CONTEXT   Context,
+    IN  PXENBUS_DEBUG_CALLBACK  Callback,
     IN  BOOLEAN                 Crashing
     )
 {
-    PLIST_ENTRY                 ListEntry;
+    PCHAR                       Name;
+    ULONG_PTR                   Offset;
 
-    for (ListEntry = Context->List.Flink;
-         ListEntry != &Context->List;
-         ListEntry = ListEntry->Flink) {
-        PXENBUS_DEBUG_CALLBACK  Callback;
-        PCHAR                   Name;
-        ULONG_PTR               Offset;
+    ModuleLookup((ULONG_PTR)Callback->Function, &Name, &Offset);
 
-        Callback = CONTAINING_RECORD(ListEntry, XENBUS_DEBUG_CALLBACK, ListEntry);
+    if (Name == NULL) {
+        ModuleLookup((ULONG_PTR)Callback->Caller, &Name, &Offset);
 
-        ModuleLookup((ULONG_PTR)Callback->Function, &Name, &Offset);
-
-        if (Name == NULL) {
-            ModuleLookup((ULONG_PTR)Callback->Caller, &Name, &Offset);
-
-            if (Name != NULL) {
-                LogPrintf(LOG_LEVEL_INFO,
-                          "XEN|DEBUG: SKIPPING %p PREFIX '%s' REGISTERED BY %s + %p\n",
-                          Callback->Function,
-                          Callback->Prefix,
-                          Name,
-                          Offset);
-            } else {
-                LogPrintf(LOG_LEVEL_INFO,
-                          "XEN|DEBUG: SKIPPING %p PREFIX '%s' REGISTERED BY %p\n",
-                          Callback->Function,
-                          Callback->Prefix,
-                          Callback->Caller);
-            }
+        if (Name != NULL) {
+            LogPrintf(LOG_LEVEL_INFO,
+                      "XEN|DEBUG: SKIPPING %p PREFIX '%s' REGISTERED BY %s + %p\n",
+                      Callback->Function,
+                      Callback->Prefix,
+                      Name,
+                      Offset);
         } else {
             LogPrintf(LOG_LEVEL_INFO,
-                      "XEN|DEBUG: ====> (%s + %p)\n",
-                      Name,
-                      Offset);
-            Callback->Function(Callback->Argument, Crashing);
-            LogPrintf(LOG_LEVEL_INFO,
-                      "XEN|DEBUG: <==== (%s + %p)\n",
-                      Name,
-                      Offset);
+                      "XEN|DEBUG: SKIPPING %p PREFIX '%s' REGISTERED BY %p\n",
+                      Callback->Function,
+                      Callback->Prefix,
+                      Callback->Caller);
         }
+    } else {
+        LogPrintf(LOG_LEVEL_INFO,
+                  "XEN|DEBUG: ====> (%s + %p)\n",
+                  Name,
+                  Offset);
+
+        Context->CallbackPrefix = Callback->Prefix;
+        Callback->Function(Callback->Argument, Crashing);
+        Context->CallbackPrefix = NULL;
+
+        LogPrintf(LOG_LEVEL_INFO,
+                  "XEN|DEBUG: <==== (%s + %p)\n",
+                  Name,
+                  Offset);
+    }
+}
+
+static VOID
+DebugTriggerLocked(
+    IN  PXENBUS_DEBUG_CONTEXT   Context,
+    IN  PXENBUS_DEBUG_CALLBACK  Callback OPTIONAL,
+    IN  BOOLEAN                 Crashing
+    )
+{
+    if (Callback == NULL) {
+        PLIST_ENTRY ListEntry;
+
+        for (ListEntry = Context->CallbackList.Flink;
+             ListEntry != &Context->CallbackList;
+             ListEntry = ListEntry->Flink) {
+
+            Callback = CONTAINING_RECORD(ListEntry,
+                                         XENBUS_DEBUG_CALLBACK,
+                                         ListEntry);
+
+            DebugCallback(Context, Callback, Crashing);
+        }
+    } else {
+        DebugCallback(Context, Callback, Crashing);
     }
 }
     
-VOID
+static VOID
 DebugTrigger(
-    IN  PXENBUS_DEBUG_INTERFACE Interface
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_DEBUG_CALLBACK  Callback OPTIONAL
     )
 {
     PXENBUS_DEBUG_CONTEXT       Context = Interface->Context;
@@ -248,73 +249,139 @@ DebugTrigger(
 
     Trace("====>\n");
 
-    KeRaiseIrql(HIGH_LEVEL, &Irql);
-
-    __DebugTrigger(Context, FALSE);
-
-    KeLowerIrql(Irql);
+    AcquireHighLock(&Context->CallbackLock, &Irql);
+    DebugTriggerLocked(Context, Callback, FALSE);
+    ReleaseHighLock(&Context->CallbackLock, Irql);
 
     Trace("<====\n");
 }
 
-KBUGCHECK_CALLBACK_ROUTINE DebugBugCheckCallback;
-
+static 
+_Function_class_(KBUGCHECK_CALLBACK_ROUTINE)
+_IRQL_requires_same_
 VOID                     
 DebugBugCheckCallback(
-    IN  PVOID   Argument,
-    IN  ULONG   Length
+    IN  PVOID               Argument,
+    IN  ULONG               Length
     )
 {
     PXENBUS_DEBUG_CONTEXT   Context = Argument;
 
     if (Length >= sizeof (XENBUS_DEBUG_CONTEXT))
-        __DebugTrigger(Context, TRUE);
+        DebugTriggerLocked(Context, NULL, TRUE);
 }
 
-NTSTATUS
-DebugInitialize(
-    IN  PXENBUS_FDO                     Fdo,
-    OUT PXENBUS_DEBUG_INTERFACE         Interface
+static NTSTATUS
+DebugAcquire(
+    PINTERFACE              Interface
     )
 {
-    PXENBUS_DEBUG_CONTEXT               Context;
-    NTSTATUS                            status;
+    PXENBUS_DEBUG_CONTEXT   Context = Interface->Context;
+    KIRQL                   Irql;
+    NTSTATUS                status;
 
-    UNREFERENCED_PARAMETER(Fdo);
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (Context->References++ != 0)
+        goto done;
 
     Trace("====>\n");
 
-    Context = __DebugAllocate(sizeof (XENBUS_DEBUG_CONTEXT));
-
-    status = STATUS_NO_MEMORY;
-    if (Context == NULL)
-        goto fail1;
-
-    InitializeListHead(&Context->List);
-    InitializeHighLock(&Context->Lock);
-
-    KeInitializeCallbackRecord(&Context->BugCheckCallbackRecord);
+    KeInitializeCallbackRecord(&Context->CallbackRecord);
 
     status = STATUS_UNSUCCESSFUL;
-    if (!KeRegisterBugCheckCallback(&Context->BugCheckCallbackRecord,
+    if (!KeRegisterBugCheckCallback(&Context->CallbackRecord,
                                     DebugBugCheckCallback,
                                     Context,
                                     sizeof (XENBUS_DEBUG_CONTEXT),
                                     (PUCHAR)__MODULE__))
-        goto fail2;
+        goto fail1;
 
-    Interface->Context = Context;
-    Interface->Operations = &Operations;
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    RtlZeroMemory(&Context->CallbackRecord, sizeof (KBUGCHECK_CALLBACK_RECORD));
+
+    --Context->References;
+    ASSERT3U(Context->References, ==, 0);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return status;
+}
+
+static VOID
+DebugRelease(
+    IN  PINTERFACE          Interface
+    )
+{
+    PXENBUS_DEBUG_CONTEXT   Context = Interface->Context;
+    KIRQL                   Irql;
+    BOOLEAN                 Success;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (--Context->References > 0)
+        goto done;
+
+    Trace("====>\n");
+
+    (VOID) __AcquireHighLock(&Context->CallbackLock);
+    if (!IsListEmpty(&Context->CallbackList))
+        BUG("OUTSTANDING CALLBACKS");
+    ReleaseHighLock(&Context->CallbackLock, DISPATCH_LEVEL);
+
+    Success = KeDeregisterBugCheckCallback(&Context->CallbackRecord);
+    ASSERT(Success);
+
+    RtlZeroMemory(&Context->CallbackRecord, sizeof (KBUGCHECK_CALLBACK_RECORD));
+
+    Trace("<====\n");
+
+done:
+    KeReleaseSpinLock(&Context->Lock, Irql);
+}
+
+static struct _XENBUS_DEBUG_INTERFACE_V1 DebugInterfaceVersion1 = {
+    { sizeof (struct _XENBUS_DEBUG_INTERFACE_V1), 1, NULL, NULL, NULL },
+    DebugAcquire,
+    DebugRelease,
+    DebugRegister,
+    DebugPrintf,
+    DebugTrigger,
+    DebugDeregister
+};
+                     
+NTSTATUS
+DebugInitialize(
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_DEBUG_CONTEXT   *Context
+    )
+{
+    NTSTATUS                    status;
+
+    Trace("====>\n");
+
+    *Context = __DebugAllocate(sizeof (XENBUS_DEBUG_CONTEXT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Context == NULL)
+        goto fail1;
+
+    InitializeListHead(&(*Context)->CallbackList);
+    KeInitializeSpinLock(&(*Context)->Lock);
+
+    (*Context)->Fdo = Fdo;
 
     Trace("<====\n");
 
     return STATUS_SUCCESS;
-
-fail2:
-    Error("fail2\n");
-
-    RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
-    RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -322,56 +389,59 @@ fail1:
     return status;
 }
 
-VOID
-DebugTeardown(
-    IN OUT  PXENBUS_DEBUG_INTERFACE     Interface
+NTSTATUS
+DebugGetInterface(
+    IN      PXENBUS_DEBUG_CONTEXT   Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
     )
 {
-    PXENBUS_DEBUG_CONTEXT               Context = Interface->Context;
+    NTSTATUS                        status;
 
-    Trace("====>\n");
+    ASSERT(Context != NULL);
+        
+    switch (Version) {
+    case 1: {
+        struct _XENBUS_DEBUG_INTERFACE_V1   *DebugInterface;
 
-    (VOID) KeDeregisterBugCheckCallback(&Context->BugCheckCallbackRecord);
-    RtlZeroMemory(&Context->BugCheckCallbackRecord, sizeof (KBUGCHECK_CALLBACK_RECORD));
+        DebugInterface = (struct _XENBUS_DEBUG_INTERFACE_V1 *)Interface;
 
-    if (!IsListEmpty(&Context->List)) {
-        PLIST_ENTRY ListEntry;
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_DEBUG_INTERFACE_V1))
+            break;
 
-        for (ListEntry = Context->List.Flink;
-             ListEntry != &Context->List;
-             ListEntry = ListEntry->Flink) {
-            PXENBUS_DEBUG_CALLBACK  Callback;
-            PCHAR                   Name;
-            ULONG_PTR               Offset;
+        *DebugInterface = DebugInterfaceVersion1;
 
-            Callback = CONTAINING_RECORD(ListEntry, XENBUS_DEBUG_CALLBACK, ListEntry);
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
 
-            ModuleLookup((ULONG_PTR)Callback->Caller, &Name, &Offset);
-
-            if (Name != NULL) {
-                Error("CALLBACK: %p PREFIX '%s' REGISTERED BY %s + %p\n",
-                      Callback->Function,
-                      Callback->Prefix,
-                      Name,
-                      (PVOID)Offset);
-            } else {
-                Error("CALLBACK: %p PREFIX '%s' REGISTERED BY %p\n",
-                      Callback->Function,
-                      Callback->Prefix,
-                      Callback->Caller);
-            }
-        }
-
-        BUG("OUTSTANDING CALLBACKS");
+        status = STATUS_SUCCESS;
+        break;
+    }
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
     }
 
+    return status;
+}   
+
+VOID
+DebugTeardown(
+    IN  PXENBUS_DEBUG_CONTEXT   Context
+    )
+{
+    Trace("====>\n");
+
+    Context->Fdo = NULL;
+
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
-    RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
+    RtlZeroMemory(&Context->CallbackList, sizeof (LIST_ENTRY));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_DEBUG_CONTEXT)));
     __DebugFree(Context);
 
-    RtlZeroMemory(Interface, sizeof (XENBUS_DEBUG_INTERFACE));
-
     Trace("<====\n");
 }
+

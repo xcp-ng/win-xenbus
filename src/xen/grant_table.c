@@ -38,14 +38,14 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-static FORCEINLINE LONG_PTR
+static LONG_PTR
 GrantTableOp(
     IN  ULONG   Command,
     IN  PVOID   Argument,
     IN  ULONG   Count
     )
 {
-    return Hypercall3(LONG_PTR, grant_table_op, Command, Argument, Count);
+    return HYPERCALL(LONG_PTR, grant_table_op, 3, Command, Argument, Count);
 }
 
 __checkReturn

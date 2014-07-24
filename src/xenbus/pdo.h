@@ -92,20 +92,20 @@ PdoTranslateBusAddress(
 
 extern ULONG
 PdoSetBusData(
-    IN  PXENBUS_PDO     Pdo,
-    IN  ULONG           DataType,
-    IN  PVOID           Buffer,
-    IN  ULONG           Offset,
-    IN  ULONG           Length
+    IN  PXENBUS_PDO Pdo,
+    IN  ULONG       DataType,
+    IN  PVOID       Buffer,
+    IN  ULONG       Offset,
+    IN  ULONG       Length
     );
 
 extern ULONG
 PdoGetBusData(
-    IN  PXENBUS_PDO     Pdo,
-    IN  ULONG           DataType,
-    IN  PVOID           Buffer,
-    IN  ULONG           Offset,
-    IN  ULONG           Length
+    IN  PXENBUS_PDO Pdo,
+    IN  ULONG       DataType,
+    IN  PVOID       Buffer,
+    IN  ULONG       Offset,
+    IN  ULONG       Length
     );
 
 extern NTSTATUS
@@ -116,12 +116,12 @@ PdoCreate(
 
 extern VOID
 PdoResume(
-    IN  PXENBUS_PDO     Pdo
+    IN  PXENBUS_PDO Pdo
     );
 
 extern VOID
 PdoSuspend(
-    IN  PXENBUS_PDO     Pdo
+    IN  PXENBUS_PDO Pdo
     );
 
 extern VOID

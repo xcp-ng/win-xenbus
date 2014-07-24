@@ -36,13 +36,7 @@
 #include <xen.h>
 #include <emulated_interface.h>
 
-struct _XENFILT_EMULATED_INTERFACE {
-    PXENFILT_EMULATED_OPERATIONS    Operations;
-    PXENFILT_EMULATED_CONTEXT       Context;
-};
-
-C_ASSERT(FIELD_OFFSET(XENFILT_EMULATED_INTERFACE, Operations) == (ULONG_PTR)EMULATED_OPERATIONS(NULL));
-C_ASSERT(FIELD_OFFSET(XENFILT_EMULATED_INTERFACE, Context) == (ULONG_PTR)EMULATED_CONTEXT(NULL));
+typedef struct _XENFILT_EMULATED_CONTEXT XENFILT_EMULATED_CONTEXT, *PXENFILT_EMULATED_CONTEXT;
 
 typedef enum _XENFILT_EMULATED_OBJECT_TYPE {
     XENFILT_EMULATED_OBJECT_TYPE_INVALID = 0,
@@ -53,33 +47,41 @@ typedef enum _XENFILT_EMULATED_OBJECT_TYPE {
 typedef struct _XENFILT_EMULATED_OBJECT XENFILT_EMULATED_OBJECT, *PXENFILT_EMULATED_OBJECT;
 
 extern NTSTATUS
+EmulatedInitialize(
+    OUT PXENFILT_EMULATED_CONTEXT   *Context
+    );
+
+extern NTSTATUS
+EmulatedGetInterface(
+    IN      PXENFILT_EMULATED_CONTEXT   Context,
+    IN      ULONG                       Version,
+    IN OUT  PINTERFACE                  Interface,
+    IN      ULONG                       Size
+    );
+
+extern VOID
+EmulatedTeardown(
+    IN  PXENFILT_EMULATED_CONTEXT   Context
+    );
+
+extern NTSTATUS
 EmulatedAddObject(
-    IN  PXENFILT_EMULATED_INTERFACE     Interface,
+    IN  PXENFILT_EMULATED_CONTEXT       Context,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
-    IN  PCHAR                           Prefix,
     IN  PDEVICE_OBJECT                  DeviceObject,
     OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
     );
 
 extern VOID
 EmulatedRemoveObject(
-    IN  PXENFILT_EMULATED_INTERFACE     Interface,
-    IN  PXENFILT_EMULATED_OBJECT        EmulatedObject
-    );
-
-const CHAR *
-EmulatedGetObjectText(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
     );
 
-extern NTSTATUS
-EmulatedInitialize(
-    OUT PXENFILT_EMULATED_INTERFACE Interface
-    );
-
-extern VOID
-EmulatedTeardown(
-    IN OUT  PXENFILT_EMULATED_INTERFACE Interface
+extern const CHAR *
+EmulatedGetText(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
     );
 
 #endif  // _XENFILT_EMULATED_H

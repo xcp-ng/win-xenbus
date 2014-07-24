@@ -38,13 +38,13 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-static FORCEINLINE LONG_PTR
+static LONG_PTR
 SchedOp(
     IN  ULONG   Command,
     IN  PVOID   Argument
     )
 {
-    return Hypercall2(LONG_PTR, sched_op, Command, Argument);
+    return HYPERCALL(LONG_PTR, sched_op, 2, Command, Argument);
 }
 
 __checkReturn

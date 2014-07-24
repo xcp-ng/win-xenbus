@@ -64,7 +64,7 @@ __ModuleAllocate(
     IN  ULONG   Length
     )
 {
-    return __AllocateNonPagedPoolWithTag(Length, MODULE_TAG);
+    return __AllocatePoolWithTag(NonPagedPool, Length, MODULE_TAG);
 }
 
 static FORCEINLINE VOID
@@ -72,47 +72,11 @@ __ModuleFree(
     IN  PVOID   Buffer
     )
 {
-    __FreePoolWithTag(Buffer, MODULE_TAG);
+    ExFreePoolWithTag(Buffer, MODULE_TAG);
 }
 
-static FORCEINLINE VOID
-__ModuleAudit(
-    IN  PMODULE_CONTEXT Context
-    )
-{
-    if (!IsListEmpty(&Context->List)) {
-        PLIST_ENTRY ListEntry;
-        BOOLEAN     FoundCursor;
-
-        FoundCursor = FALSE;
-
-        for (ListEntry = Context->List.Flink;
-             ListEntry != &Context->List;
-             ListEntry = ListEntry->Flink) {
-            PMODULE Module;
-
-            if (ListEntry == Context->Cursor)
-                FoundCursor = TRUE;
-
-            Module = CONTAINING_RECORD(ListEntry, MODULE, ListEntry);
-
-            ASSERT(Module->Start < Module->End);
-
-            if (ListEntry->Flink != &Context->List) {
-                PMODULE Next;
-
-                Next = CONTAINING_RECORD(ListEntry->Flink, MODULE, ListEntry);
-
-                ASSERT(Module->End < Next->Start);
-            }
-        }
-
-        ASSERT(FoundCursor);
-    }
-}
-
-static FORCEINLINE VOID
-__ModuleSearchForwards(
+static VOID
+ModuleSearchForwards(
     IN  PMODULE_CONTEXT Context,
     IN  ULONG_PTR       Address
     )
@@ -129,8 +93,8 @@ __ModuleSearchForwards(
     }
 }
 
-static FORCEINLINE VOID
-__ModuleSearchBackwards(
+static VOID
+ModuleSearchBackwards(
     IN  PMODULE_CONTEXT Context,
     IN  ULONG_PTR       Address
     )
@@ -147,8 +111,8 @@ __ModuleSearchBackwards(
     }
 }
 
-static FORCEINLINE NTSTATUS
-__ModuleAdd(
+static NTSTATUS
+ModuleAdd(
     IN  PMODULE_CONTEXT Context,
     IN  PCHAR           Name,
     IN  ULONG_PTR       Start,
@@ -197,11 +161,6 @@ __ModuleAdd(
     New->Start = Start;
     New->End = Start + Size - 1;
 
-    Trace("ADDING: (%p - %p) %s\n",
-          (PVOID)New->Start,
-          (PVOID)New->End,
-          New->Name);
-
     InitializeListHead(&List);
 
     AcquireHighLock(&Context->Lock, &Irql);
@@ -217,7 +176,7 @@ again:
     Module = CONTAINING_RECORD(Context->Cursor, MODULE, ListEntry);
 
     if (New->Start > Module->End) {
-        __ModuleSearchForwards(Context, New->Start);
+        ModuleSearchForwards(Context, New->Start);
 
         After = FALSE;
 
@@ -236,7 +195,7 @@ again:
             goto again;
         }
     } else if (New->End < Module->Start) {
-        __ModuleSearchBackwards(Context, New->End);
+        ModuleSearchBackwards(Context, New->End);
 
         After = TRUE;
 
@@ -285,16 +244,8 @@ done:
         ASSERT(ListEntry != &List);
 
         Module = CONTAINING_RECORD(ListEntry, MODULE, ListEntry);
-
-        Trace("REMOVED: (%p - %p) %s\n",
-              (PVOID)Module->Start,
-              (PVOID)Module->End,
-              Module->Name);
-
         __ModuleFree(Module);
     }
-
-    __ModuleAudit(Context);
 
     return STATUS_SUCCESS;
 
@@ -342,10 +293,10 @@ ModuleLoad(
     Name = strrchr((const CHAR *)Buffer, '\\');
     Name = (Name == NULL) ? Buffer : (Name + 1);
 
-    status = __ModuleAdd(Context,
-                         Name,
-                         (ULONG_PTR)ImageInfo->ImageBase,
-                         (ULONG_PTR)ImageInfo->ImageSize);
+    status = ModuleAdd(Context,
+                       Name,
+                       (ULONG_PTR)ImageInfo->ImageBase,
+                       (ULONG_PTR)ImageInfo->ImageSize);
     if (!NT_SUCCESS(status))
         goto fail3;
 
@@ -495,10 +446,10 @@ again:
         Name = strrchr((const CHAR *)QueryInfo[Index].FullPathName, '\\');
         Name = (Name == NULL) ? (PCHAR)QueryInfo[Index].FullPathName : (Name + 1);
 
-        status = __ModuleAdd(Context,
-                             Name,
-                             (ULONG_PTR)QueryInfo[Index].BasicInfo.ImageBase,
-                             (ULONG_PTR)QueryInfo[Index].ImageSize);
+        status = ModuleAdd(Context,
+                           Name,
+                           (ULONG_PTR)QueryInfo[Index].BasicInfo.ImageBase,
+                           (ULONG_PTR)QueryInfo[Index].ImageSize);
         if (!NT_SUCCESS(status))
             goto fail6;
     }

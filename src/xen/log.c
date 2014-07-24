@@ -74,7 +74,7 @@ __LogAcquireBuffer(
     return __AcquireHighLock(&Context->Lock);
 }
 
-static DECLSPEC_NOINLINE VOID
+static FORCEINLINE VOID
 __drv_maxIRQL(HIGH_LEVEL)
 __drv_requiresIRQL(HIGH_LEVEL)
 __LogReleaseBuffer(
@@ -109,7 +109,7 @@ __LogPut(
     Context->Buffer[Context->Offset++] = Character;
 }
 
-static DECLSPEC_NOINLINE PCHAR
+static PCHAR
 LogFormatNumber(
     IN  PCHAR       Buffer,
     IN  ULONGLONG   Value,
@@ -169,7 +169,7 @@ LogFormatNumber(
             (VOID) LogFormatNumber(&(_Buffer)[_Index], (ULONGLONG)_Value, _Base, _UpperCase);   \
         } while (FALSE)
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 LogWriteBuffer(
     IN  PLOG_CONTEXT    Context, 
     IN  LONG            Count,
@@ -488,7 +488,7 @@ typedef VOID
     ULONG           Level
     );
 
-static DECLSPEC_NOINLINE VOID
+static VOID
 LogDebugPrint(
     IN  PANSI_STRING    Ansi,
     IN  ULONG           ComponentId,

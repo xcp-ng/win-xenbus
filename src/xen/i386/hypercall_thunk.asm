@@ -1,5 +1,5 @@
                         page    ,132
-                        title   Hypercall Gates
+                        title   Hypercall Thunks
 
                         .686p
                         .model  FLAT
@@ -7,9 +7,9 @@
 
                         extrn   _Hypercall:dword
 
-                        ; uintptr_t __stdcall hypercall_gate_2(uint32_t ord, uintptr_t arg1, uintptr_t arg2);
-                        public _hypercall_gate_2@12
-_hypercall_gate_2@12    proc
+                        ; uintptr_t __stdcall hypercall2(uint32_t ord, uintptr_t arg1, uintptr_t arg2);
+                        public _hypercall2@12
+_hypercall2@12    	proc
                         push    ebp
                         mov     ebp, esp
                         push    ebx
@@ -22,11 +22,11 @@ _hypercall_gate_2@12    proc
                         pop     ebx
                         leave
                         ret     0Ch
-_hypercall_gate_2@12    endp
+_hypercall2@12    	endp
 
-                        ; uintptr_t __stdcall asm__hypercall3(uint32_t ord, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
-                        public _hypercall_gate_3@16
-_hypercall_gate_3@16    proc
+                        ; uintptr_t __stdcall hypercall3(uint32_t ord, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
+                        public _hypercall3@16
+_hypercall3@16    	proc
                         push    ebp
                         mov     ebp, esp
                         push    ebx
@@ -40,7 +40,7 @@ _hypercall_gate_3@16    proc
                         pop     ebx
                         leave
                         ret     10h
-_hypercall_gate_3@16    endp
+_hypercall3@16    	endp
 
                         end
 

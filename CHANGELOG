@@ -8,3 +8,5 @@
 7.2.0 (2013-09-27):
 * Drivers compatible with upstream Xen, QEMU and Linux dom0
 
+8.0.0 (2014-07-24):
+* Drivers with new API version scheme
