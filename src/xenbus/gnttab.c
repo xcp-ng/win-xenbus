@@ -633,6 +633,7 @@ fail4:
     Context->CacheInterface = NULL;
 
     RangeSetTeardown(Context->RangeSet);
+    Context->RangeSet = NULL;
 
 fail3:
     Error("fail3\n");
@@ -688,7 +689,9 @@ GnttabTeardown(
     Context->CacheInterface = NULL;
 
     __GnttabShrink(Context);
+
     RangeSetTeardown(Context->RangeSet);
+    Context->RangeSet = NULL;
 
     Context->Entry = NULL;
 
