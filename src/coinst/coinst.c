@@ -1213,9 +1213,18 @@ found:
         goto fail9;
     }
 
-    if (strcmp(DriverDesc, "XenServer PV Bus") != 0) {
+    if (strncmp(DriverDesc,
+                PRODUCT_NAME_STR,
+                strlen(PRODUCT_NAME_STR)) != 0) {
         SetLastError(ERROR_INSTALL_FAILURE);
         goto fail10;
+    }
+
+    DriverDesc += strlen(PRODUCT_NAME_STR);
+
+    if (strcmp(DriverDesc, " PV Bus") != 0) {
+        SetLastError(ERROR_INSTALL_FAILURE);
+        goto fail11;
     }
 
 done:
@@ -1233,6 +1242,9 @@ done:
         free(DeviceKeyName);
 
     return TRUE;
+
+fail11:
+    Log("fail11");
 
 fail10:
     Log("fail10");
