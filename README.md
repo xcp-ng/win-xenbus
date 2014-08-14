@@ -1,5 +1,5 @@
-XenBus - The XenServer Paravitual Bus Device Driver for Windows
-===============================================================
+XenBus - The Xen Paravitual Bus Device Driver for Windows
+=========================================================
 
 The XenBus package consists of three device drivers:
 
