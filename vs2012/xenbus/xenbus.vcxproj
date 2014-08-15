@@ -26,12 +26,20 @@
 	<PropertyGroup>
 		<IncludePath>..\..\include;..\..\src\common;$(IncludePath)</IncludePath>
 		<RunCodeAnalysis>true</RunCodeAnalysis>
-		<EnableInf2cat>false</EnableInf2cat>
+        <EnableInf2cat>false</EnableInf2cat>
+        <CustomBuildBeforeTargets>StampInf</CustomBuildBeforeTargets>
 		<IntDir>..\$(ProjectName)\$(ConfigurationName)\$(Platform)\</IntDir>
 		<OutDir>..\$(ConfigurationName)\$(Platform)\</OutDir>
 	</PropertyGroup>
 
-	<ItemDefinitionGroup>
+    <ItemDefinitionGroup>
+        <CustomBuildStep>
+            <Command>echo "Build Inf"
+                powershell -Command "(Get-Content ..\..\src\xenbus.inf) -replace '@MAJOR_VERSION@', '$(MAJOR_VERSION)' -replace '@MINOR_VERSION@', '$(MINOR_VERSION)' -replace '@MICRO_VERSION@','$(MICRO_VERSION)' -replace '@BUILD_NUMBER@','$(BUILD_NUMBER)' -replace '@COMPANY_NAME@','$(COMPANY_NAME)' -replace '@PRODUCT_NAME@','$(PRODUCT_NAME)' | Set-Content ..\..\vs2012\xenbus.inf"
+            </Command>
+            <Outputs>..\..\vs2012\xenbus.inf</Outputs>
+            <Inputs>..\..\src\xenbus.inf</Inputs>
+        </CustomBuildStep>
 		<ClCompile>
 			<PreprocessorDefinitions>__MODULE__="XENBUS";POOL_NX_OPTIN=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 			<WarningLevel>EnableAllWarnings</WarningLevel>

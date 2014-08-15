@@ -8,6 +8,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xenfilt", "xenfilt\xenfilt.
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xenbus_coinst", "xenbus_coinst\xenbus_coinst.vcxproj", "{4BF41378-C01B-4002-8581-563C5F703362}"
+	ProjectSection(ProjectDependencies) = postProject
+		{9C6A5D48-A331-4B1F-A004-7BB67BA5BE1C} = {9C6A5D48-A331-4B1F-A004-7BB67BA5BE1C}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xenbus", "xenbus\xenbus.vcxproj", "{14C16C29-77C9-475B-A618-1B01E67CF985}"
 	ProjectSection(ProjectDependencies) = postProject

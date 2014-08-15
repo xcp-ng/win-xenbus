@@ -26,7 +26,7 @@
 			<Platform>Win32</Platform> 
 		</ProjectConfiguration> 
 		<ProjectConfiguration Include="Windows 8 Debug|x64"> 
-			<Configuration>Windows8 Debug</Configuration> 
+			<Configuration>Windows 8 Debug</Configuration> 
 			<Platform>x64</Platform> 
 		</ProjectConfiguration> 
 		<ProjectConfiguration Include="Windows 7 Debug|x64"> 

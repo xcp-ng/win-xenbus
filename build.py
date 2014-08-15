@@ -24,63 +24,6 @@ def next_build_number():
     return build_number
 
 
-def make_header():
-    now = datetime.datetime.now()
-
-    file = open('include\\version.h', 'w')
-
-    file.write('#define COMPANY_NAME_STR\t"' + os.environ['COMPANY_NAME'] + '"\n')
-    file.write('#define PRODUCT_NAME_STR\t"' + os.environ['PRODUCT_NAME'] + '"\n')
-    file.write('\n')
-
-    file.write('#define MAJOR_VERSION\t' + os.environ['MAJOR_VERSION'] + '\n')
-    file.write('#define MAJOR_VERSION_STR\t"' + os.environ['MAJOR_VERSION'] + '"\n')
-    file.write('\n')
-
-    file.write('#define MINOR_VERSION\t' + os.environ['MINOR_VERSION'] + '\n')
-    file.write('#define MINOR_VERSION_STR\t"' + os.environ['MINOR_VERSION'] + '"\n')
-    file.write('\n')
-
-    file.write('#define MICRO_VERSION\t' + os.environ['MICRO_VERSION'] + '\n')
-    file.write('#define MICRO_VERSION_STR\t"' + os.environ['MICRO_VERSION'] + '"\n')
-    file.write('\n')
-
-    file.write('#define BUILD_NUMBER\t' + os.environ['BUILD_NUMBER'] + '\n')
-    file.write('#define BUILD_NUMBER_STR\t"' + os.environ['BUILD_NUMBER'] + '"\n')
-    file.write('\n')
-
-    file.write('#define YEAR\t' + str(now.year) + '\n')
-    file.write('#define YEAR_STR\t"' + str(now.year) + '"\n')
-    file.write('\n')
-
-    file.write('#define MONTH\t' + str(now.month) + '\n')
-    file.write('#define MONTH_STR\t"' + str(now.month) + '"\n')
-    file.write('\n')
-
-    file.write('#define DAY\t' + str(now.day) + '\n')
-    file.write('#define DAY_STR\t"' + str(now.day) + '"\n')
-    file.write('\n')
-
-    file.close()
-
-
-def copy_inf(name):
-    src = open('src\\%s.inf' % name, 'r')
-    dst = open('proj\\%s.inf' % name, 'w')
-
-    for line in src:
-        line = re.sub('@MAJOR_VERSION@', os.environ['MAJOR_VERSION'], line)
-        line = re.sub('@MINOR_VERSION@', os.environ['MINOR_VERSION'], line)
-        line = re.sub('@MICRO_VERSION@', os.environ['MICRO_VERSION'], line)
-        line = re.sub('@BUILD_NUMBER@', os.environ['BUILD_NUMBER'], line)
-        line = re.sub('@COMPANY_NAME@', os.environ['COMPANY_NAME'], line)
-        line = re.sub('@PRODUCT_NAME@', os.environ['PRODUCT_NAME'], line)
-        dst.write(line)
-
-    dst.close()
-    src.close()
-
-
 def get_expired_symbols(name, age = 30):
     path = os.path.join(os.environ['SYMBOL_SERVER'], '000Admin\\history.txt')
 
@@ -134,11 +77,11 @@ def get_configuration(release, debug):
     return configuration
 
 
-def get_target_path(release, arch, debug):
+def get_target_path(release, arch, debug, vs):
     configuration = get_configuration(release, debug)
     name = ''.join(configuration.split(' '))
     target = { 'x86': os.sep.join([name, 'Win32']), 'x64': os.sep.join([name, 'x64']) }
-    target_path = os.sep.join(['proj', target[arch]])
+    target_path = os.sep.join([vs, target[arch]])
 
     return target_path
 
@@ -182,7 +125,7 @@ def msbuild(platform, configuration, target, file, args, dir):
         raise msbuild_failure(configuration)
 
 
-def build_sln(name, release, arch, debug):
+def build_sln(name, release, arch, debug, vs):
     configuration = get_configuration(release, debug)
 
     if arch == 'x86':
@@ -192,7 +135,7 @@ def build_sln(name, release, arch, debug):
 
     cwd = os.getcwd()
 
-    msbuild(platform, configuration, 'Build', name + '.sln', '', 'proj')
+    msbuild(platform, configuration, 'Build', name + '.sln', '', vs)
 
 
 def remove_timestamps(path):
@@ -213,18 +156,18 @@ def remove_timestamps(path):
     dst.close()
     src.close()
 
-def sdv_clean(name):
-    path = ['proj', name, 'sdv']
+def sdv_clean(name, vs):
+    path = [vs, name, 'sdv']
     print(path)
 
     shutil.rmtree(os.path.join(*path), True)
 
-    path = ['proj', name, 'sdv.temp']
+    path = [vs, name, 'sdv.temp']
     print(path)
 
     shutil.rmtree(os.path.join(*path), True)
 
-    path = ['proj', name, 'staticdv.job']
+    path = [vs, name, 'staticdv.job']
     print(path)
 
     try:
@@ -232,7 +175,7 @@ def sdv_clean(name):
     except OSError:
         pass
 
-    path = ['proj', name, 'refine.sdv']
+    path = [vs, name, 'refine.sdv']
     print(path)
 
     try:
@@ -240,7 +183,7 @@ def sdv_clean(name):
     except OSError:
         pass
 
-    path = ['proj', name, 'sdv-map.h']
+    path = [vs, name, 'sdv-map.h']
     print(path)
 
     try:
@@ -249,19 +192,19 @@ def sdv_clean(name):
         pass
 
 
-def run_sdv(name, dir):
+def run_sdv(name, dir, vs):
     configuration = get_configuration('Windows 8', False)
     platform = 'x64'
 
     msbuild(platform, configuration, 'Build', name + '.vcxproj',
-            '', os.path.join('proj', name))
+            '', os.path.join(vs, name))
 
-    sdv_clean(name)
+    sdv_clean(name, vs)
 
     msbuild(platform, configuration, 'sdv', name + '.vcxproj',
-            '/p:Inputs="/scan"', os.path.join('proj', name))
+            '/p:Inputs="/scan"', os.path.join(vs, name))
 
-    path = ['proj', name, 'sdv-map.h']
+    path = [vs, name, 'sdv-map.h']
     file = open(os.path.join(*path), 'r')
 
     for line in file:
@@ -270,21 +213,21 @@ def run_sdv(name, dir):
     file.close()
 
     msbuild(platform, configuration, 'sdv', name + '.vcxproj',
-            '/p:Inputs="/check:default.sdv"', os.path.join('proj', name))
+            '/p:Inputs="/check:default.sdv"', os.path.join(vs, name))
 
-    path = ['proj', name, 'sdv', 'SDV.DVL.xml']
+    path = [vs, name, 'sdv', 'SDV.DVL.xml']
     remove_timestamps(os.path.join(*path))
 
     msbuild(platform, configuration, 'dvl', name + '.vcxproj',
-            '', os.path.join('proj', name))
+            '', os.path.join(vs, name))
 
-    path = ['proj', name, name + '.DVL.XML']
+    path = [vs, name, name + '.DVL.XML']
     shutil.copy(os.path.join(*path), dir)
 
-    path = ['proj', name, 'refine.sdv']
+    path = [vs, name, 'refine.sdv']
     if os.path.isfile(os.path.join(*path)):
         msbuild(platform, configuration, 'sdv', name + '.vcxproj',
-                '/p:Inputs=/refine', os.path.join('proj', name))
+                '/p:Inputs=/refine', os.path.join(vs, name))
 
 
 def symstore_del(name, age):
@@ -308,8 +251,8 @@ def symstore_del(name, age):
         shell(command, None)
 
 
-def symstore_add(name, release, arch, debug):
-    target_path = get_target_path(release, arch, debug)
+def symstore_add(name, release, arch, debug, vs):
+    target_path = get_target_path(release, arch, debug, vs)
 
     symstore_path = [os.environ['KIT'], 'Debuggers']
     if os.environ['PROCESSOR_ARCHITECTURE'] == 'x86':
@@ -354,6 +297,7 @@ def manifest():
 
 
 def archive(filename, files, tgz=False):
+    print(filename)
     access='w'
     if tgz:
         access='w:gz'
@@ -366,11 +310,30 @@ def archive(filename, files, tgz=False):
     tar.close()
 
 
+
+def getVsVersion():
+    vsenv ={} 
+    vars = subprocess.check_output([os.environ['VS']+'\\VC\\vcvarsall.bat', '&&', 'set'], shell=True)
+    print( vars)
+    for var in vars.splitlines():
+        print (var)
+        print (var.strip())
+        k, _, v = map(str.strip, var.strip().decode('utf-8').partition('='))
+        if k.startswith('?'):
+            continue
+        vsenv[k] = v
+
+    if vsenv['VisualStudioVersion'] == '11.0' :
+        return 'vs2012'
+    elif vsenv['VisualStudioVersion'] == '12.0' :
+        return 'vs2013'
+
 if __name__ == '__main__':
     debug = { 'checked': True, 'free': False }
     sdv = { 'nosdv': False, None: True }
     driver = 'xenbus'
-
+    vs = getVsVersion()
+    
     if 'COMPANY_NAME' not in os.environ.keys():
         os.environ['COMPANY_NAME'] = 'Xen Project'
 
@@ -391,25 +354,25 @@ if __name__ == '__main__':
         print(os.environ['GIT_REVISION'], file=revision)
         revision.close()
 
-    make_header()
-
-    copy_inf(driver)
-
     symstore_del(driver, 30)
 
-    release = 'Windows Vista'
+    if vs=='vs2012':
+        release = 'Windows Vista'
+    else:
+        release = 'Windows 7'
 
-    build_sln(driver, release, 'x86', debug[sys.argv[1]])
-    build_sln(driver, release, 'x64', debug[sys.argv[1]])
+    build_sln(driver, release, 'x86', debug[sys.argv[1]], vs)
+    build_sln(driver, release, 'x64', debug[sys.argv[1]], vs)
 
-    symstore_add(driver, release, 'x86', debug[sys.argv[1]])
-    symstore_add(driver, release, 'x64', debug[sys.argv[1]])
+    symstore_add(driver, release, 'x86', debug[sys.argv[1]], vs)
+    symstore_add(driver, release, 'x64', debug[sys.argv[1]], vs)
 
     if len(sys.argv) <= 2 or sdv[sys.argv[2]]:
-        run_sdv('xen', driver)
-        run_sdv('xenfilt', driver)
-        run_sdv('xenbus', driver)
+        run_sdv('xen', driver, vs)
+        run_sdv('xenfilt', driver, vs)
+        run_sdv('xenbus', driver, vs)
 
     archive(driver + '\\source.tgz', manifest().splitlines(), tgz=True)
     archive(driver + '.tar', [driver,'revision'])
+
 
