@@ -79,9 +79,34 @@ EmulatedRemoveObject(
     );
 
 extern const CHAR *
-EmulatedGetText(
+EmulatedGetObjectDeviceID(
     IN  PXENFILT_EMULATED_CONTEXT   Context,
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
     );
+
+extern const CHAR *
+EmulatedGetObjectInstanceID(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    );
+
+extern ULONG
+EmulatedGetObjectController(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    );
+
+extern ULONG
+EmulatedGetObjectTarget(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    );
+
+extern ULONG
+EmulatedGetObjectLun(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    );
+
 
 #endif  // _XENFILT_EMULATED_H

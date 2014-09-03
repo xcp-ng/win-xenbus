@@ -63,7 +63,6 @@ struct _XENFILT_EMULATED_OBJECT {
     LIST_ENTRY                      ListEntry;
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     XENFILT_EMULATED_OBJECT_DATA    Data;
-    CHAR                            Text[MAXNAMELEN];
 };
 
 struct _XENFILT_EMULATED_CONTEXT {
@@ -224,14 +223,33 @@ EmulatedSetObjectDeviceData(
         ASSERT(NT_SUCCESS(status));
     }
 
-    status = RtlStringCbPrintfA(EmulatedObject->Text,
-                                MAXNAMELEN,
-                                "DEVICE %s\\%s",
-                                EmulatedObject->Data.Device.DeviceID,
-                                EmulatedObject->Data.Device.InstanceID);
-    ASSERT(NT_SUCCESS(status));
-
     return STATUS_SUCCESS;
+}
+
+const CHAR *
+EmulatedGetObjectDeviceID(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    )
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DEVICE);
+
+    return EmulatedObject->Data.Device.DeviceID;
+}
+
+const CHAR *
+EmulatedGetObjectInstanceID(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    )
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DEVICE);
+
+    return EmulatedObject->Data.Device.InstanceID;
 }
 
 static NTSTATUS
@@ -290,14 +308,6 @@ EmulatedSetObjectDiskData(
     RtlFreeAnsiString(&Ansi);
     ExFreePool(InstanceID);
 
-    status = RtlStringCbPrintfA(EmulatedObject->Text,
-                                MAXNAMELEN,
-                                "DISK C%02XT%02XL%02X",
-                                EmulatedObject->Data.Disk.Controller,
-                                EmulatedObject->Data.Disk.Target,
-                                EmulatedObject->Data.Disk.Lun);
-    ASSERT(NT_SUCCESS(status));
-
     return STATUS_SUCCESS;
 
 fail5:
@@ -320,6 +330,45 @@ fail1:
     Error("fail1 (%08x)\n", status);
 
     return status;
+}
+
+ULONG
+EmulatedGetObjectController(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    )
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DISK);
+
+    return EmulatedObject->Data.Disk.Controller;
+}
+
+ULONG
+EmulatedGetObjectTarget(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    )
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DISK);
+
+    return EmulatedObject->Data.Disk.Target;
+}
+
+ULONG
+EmulatedGetObjectLun(
+    IN  PXENFILT_EMULATED_CONTEXT   Context,
+    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    )
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DISK);
+
+    return EmulatedObject->Data.Disk.Lun;
 }
 
 NTSTATUS
@@ -362,8 +411,6 @@ EmulatedAddObject(
 
     (*EmulatedObject)->Type = Type;
 
-    Info("%s\n", (*EmulatedObject)->Text);
-
     KeAcquireSpinLock(&Context->Lock, &Irql);
     InsertTailList(&Context->List, &(*EmulatedObject)->ListEntry);
     KeReleaseSpinLock(&Context->Lock, Irql);
@@ -391,24 +438,11 @@ EmulatedRemoveObject(
 {
     KIRQL                           Irql;
 
-    Info("%s\n", EmulatedObject->Text);
-
     KeAcquireSpinLock(&Context->Lock, &Irql);
     RemoveEntryList(&EmulatedObject->ListEntry);
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     __EmulatedFree(EmulatedObject);
-}
-
-const CHAR *
-EmulatedGetText(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    )
-{
-    UNREFERENCED_PARAMETER(Context);
-
-    return (const CHAR *)(EmulatedObject->Text);
 }
 
 static BOOLEAN

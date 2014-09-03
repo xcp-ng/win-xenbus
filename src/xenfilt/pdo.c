@@ -51,20 +51,21 @@
 #define MAXNAMELEN  128
 
 struct _XENFILT_PDO {
-    PXENFILT_DX                 Dx;
-    PDEVICE_OBJECT              LowerDeviceObject;
-    PDEVICE_OBJECT              PhysicalDeviceObject;
+    PXENFILT_DX                     Dx;
+    PDEVICE_OBJECT                  LowerDeviceObject;
+    PDEVICE_OBJECT                  PhysicalDeviceObject;
 
-    PXENFILT_THREAD             SystemPowerThread;
-    PIRP                        SystemPowerIrp;
-    PXENFILT_THREAD             DevicePowerThread;
-    PIRP                        DevicePowerIrp;
+    PXENFILT_THREAD                 SystemPowerThread;
+    PIRP                            SystemPowerIrp;
+    PXENFILT_THREAD                 DevicePowerThread;
+    PIRP                            DevicePowerIrp;
 
-    PXENFILT_EMULATED_OBJECT    EmulatedObject;
+    XENFILT_EMULATED_OBJECT_TYPE    Type;
+    PXENFILT_EMULATED_OBJECT        EmulatedObject;
 
-    PXENFILT_FDO                Fdo;
-    BOOLEAN                     Missing;
-    const CHAR                  *Reason;
+    PXENFILT_FDO                    Fdo;
+    BOOLEAN                         Missing;
+    const CHAR                      *Reason;
 };
 
 static FORCEINLINE PVOID
@@ -250,21 +251,55 @@ __PdoGetFdo(
 
 static FORCEINLINE VOID
 __PdoSetName(
-    IN  PXENFILT_PDO            Pdo
+    IN  PXENFILT_PDO    Pdo
     )
 {
-    PXENFILT_DX                 Dx = Pdo->Dx;
-    const CHAR                  *Text;
-    NTSTATUS                    status;
+    PXENFILT_DX         Dx = Pdo->Dx;
+    NTSTATUS            status;
 
-    Text = EmulatedGetText(DriverGetEmulatedContext(),
-                           Pdo->EmulatedObject);
+    switch (Pdo->Type) {
+    case XENFILT_EMULATED_OBJECT_TYPE_DEVICE: {
+        const CHAR  *DeviceID;
+        const CHAR  *InstanceID;
 
-    status = RtlStringCbPrintfA(Dx->Name,
-                                MAX_DEVICE_ID_LEN,
-                                "%s",
-                                Text);
-    ASSERT(NT_SUCCESS(status));
+        DeviceID = EmulatedGetObjectDeviceID(DriverGetEmulatedContext(),
+                                             Pdo->EmulatedObject);
+        InstanceID = EmulatedGetObjectInstanceID(DriverGetEmulatedContext(),
+                                                 Pdo->EmulatedObject);
+
+        status = RtlStringCbPrintfA(Dx->Name,
+                                    MAX_DEVICE_ID_LEN,
+                                    "DEVICE %s/%s",
+                                    DeviceID,
+                                    InstanceID);
+        ASSERT(NT_SUCCESS(status));
+        break;
+    }
+    case XENFILT_EMULATED_OBJECT_TYPE_DISK: {
+        ULONG   Controller;
+        ULONG   Target;
+        ULONG   Lun;
+
+        Controller = EmulatedGetObjectController(DriverGetEmulatedContext(),
+                                                 Pdo->EmulatedObject);
+        Target = EmulatedGetObjectTarget(DriverGetEmulatedContext(),
+                                         Pdo->EmulatedObject);
+        Lun = EmulatedGetObjectLun(DriverGetEmulatedContext(),
+                                   Pdo->EmulatedObject);
+
+        status = RtlStringCbPrintfA(Dx->Name,
+                                    MAX_DEVICE_ID_LEN,
+                                    "DISK %02X.%02X.%02X",
+                                    Controller,
+                                    Target,
+                                    Lun);
+        ASSERT(NT_SUCCESS(status));
+        break;
+    }
+    default:
+        ASSERT(FALSE);
+        break;
+    }
 }
 
 static FORCEINLINE PCHAR
@@ -904,6 +939,89 @@ fail1:
 }
 
 static NTSTATUS
+PdoQueryId(
+    IN  PXENFILT_PDO    Pdo,
+    IN  PIRP            Irp
+    )
+{
+    PIO_STACK_LOCATION  StackLocation;
+    const CHAR          *ActiveDeviceID;
+    const CHAR          *DeviceID;
+    PWCHAR              ActiveInstanceID;
+    PWCHAR              InstanceID;
+    NTSTATUS            status;
+
+    status = IoAcquireRemoveLock(&Pdo->Dx->RemoveLock, Irp);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = PdoForwardIrpSynchronously(Pdo, Irp);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+
+    if (Pdo->Type != XENFILT_EMULATED_OBJECT_TYPE_DEVICE ||
+        StackLocation->Parameters.QueryId.IdType != BusQueryInstanceID)
+        goto done;
+
+    ActiveDeviceID = DriverGetActiveDeviceID();
+    if (ActiveDeviceID == NULL)
+        goto done;
+
+    DeviceID = EmulatedGetObjectDeviceID(DriverGetEmulatedContext(),
+                                         Pdo->EmulatedObject);
+
+    if (_stricmp(DeviceID, ActiveDeviceID) != 0)
+        goto done;
+    
+    ActiveInstanceID = __AllocatePoolWithTag(PagedPool,
+                                             MAX_DEVICE_ID_LEN * sizeof (WCHAR),
+                                             'TLIF');
+
+    status = STATUS_NO_MEMORY;
+    if (ActiveInstanceID == NULL)
+        goto fail3;
+
+    RtlStringCbPrintfW(ActiveInstanceID,
+                       MAX_DEVICE_ID_LEN * sizeof (WCHAR),
+                       L"%hs",
+                       DriverGetActiveInstanceID());
+    ASSERT(NT_SUCCESS(status));
+
+    InstanceID = (PWCHAR)Irp->IoStatus.Information;
+
+    if (_wcsicmp(InstanceID, ActiveInstanceID) != 0) {
+        Warning("ActiveInstanceID DOES NOT MATCH\n");
+        Warning("Replacing '%ws' with '%ws'\n",
+                InstanceID, ActiveInstanceID);
+
+        Irp->IoStatus.Information = (ULONG_PTR)ActiveInstanceID;
+        ExFreePool(InstanceID);
+    } else {
+        ExFreePool(ActiveInstanceID);
+    }
+
+done:
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    return STATUS_SUCCESS;
+
+fail3:
+fail2:
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
+
+fail1:
+    Irp->IoStatus.Status = status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    return status;
+}
+
+static NTSTATUS
 PdoEject(
     IN  PXENFILT_PDO    Pdo,
     IN  PIRP            Irp
@@ -993,6 +1111,10 @@ PdoDispatchPnp(
 
     case IRP_MN_QUERY_INTERFACE:
         status = PdoQueryInterface(Pdo, Irp);
+        break;
+
+    case IRP_MN_QUERY_ID:
+        status = PdoQueryId(Pdo, Irp);
         break;
 
     case IRP_MN_EJECT:
@@ -1809,18 +1931,19 @@ PdoCreate(
     if (!NT_SUCCESS(status))
         goto fail5;
 
+    Pdo->Type = Type;
     status = EmulatedAddObject(DriverGetEmulatedContext(),
-                              Type,
-                              Pdo->PhysicalDeviceObject,
-                              &Pdo->EmulatedObject);
+                               Pdo->Type,
+                               Pdo->PhysicalDeviceObject,
+                               &Pdo->EmulatedObject);
     if (!NT_SUCCESS(status))
         goto fail6;
 
     __PdoSetName(Pdo);
 
-    Trace("%p (%s)\n",
-          FilterDeviceObject,
-          __PdoGetName(Pdo));
+    Info("%p (%s)\n",
+         FilterDeviceObject,
+         __PdoGetName(Pdo));
 
     Dx->Pdo = Pdo;
 
@@ -1837,6 +1960,8 @@ PdoCreate(
 
 fail6:
     Error("fail6\n");
+
+    Pdo->Type = 0;
 
     ThreadAlert(Pdo->DevicePowerThread);
     ThreadJoin(Pdo->DevicePowerThread);
@@ -1894,10 +2019,10 @@ PdoDestroy(
 
     FdoRemovePhysicalDeviceObject(Fdo, Pdo);
 
-    Trace("%p (%s) (%s)\n",
-          FilterDeviceObject,
-          __PdoGetName(Pdo),
-          Pdo->Reason);
+    Info("%p (%s) (%s)\n",
+         FilterDeviceObject,
+         __PdoGetName(Pdo),
+         Pdo->Reason);
     Pdo->Reason = NULL;
 
     Dx->Pdo = NULL;
@@ -1905,6 +2030,8 @@ PdoDestroy(
     EmulatedRemoveObject(DriverGetEmulatedContext(),
                          Pdo->EmulatedObject);
     Pdo->EmulatedObject = NULL;
+
+    Pdo->Type = 0;
 
     ThreadAlert(Pdo->DevicePowerThread);
     ThreadJoin(Pdo->DevicePowerThread);
