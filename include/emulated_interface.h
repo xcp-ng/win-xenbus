@@ -101,6 +101,7 @@ DEFINE_GUID(GUID_XENFILT_EMULATED_INTERFACE,
 
 /*! \struct _XENFILT_EMULATED_INTERFACE_V1
     \brief EMULATED interface version 1
+    \ingroup interfaces
 */
 struct _XENFILT_EMULATED_INTERFACE_V1 {
     INTERFACE                           Interface;

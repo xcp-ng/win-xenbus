@@ -117,6 +117,7 @@ DEFINE_GUID(GUID_XENBUS_SHARED_INFO_INTERFACE,
 
 /*! \struct _XENBUS_SHARED_INFO_INTERFACE_V1
     \brief SHARED_INFO interface version 1
+    \ingroup interfaces
 */
 struct _XENBUS_SHARED_INFO_INTERFACE_V1 {
     INTERFACE                           Interface;

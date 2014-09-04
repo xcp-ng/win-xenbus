@@ -205,6 +205,7 @@ DEFINE_GUID(GUID_XENBUS_CACHE_INTERFACE,
 
 /*! \struct _XENBUS_CACHE_INTERFACE_V1
     \brief CACHE interface version 1
+    \ingroup interfaces
 */
 struct _XENBUS_CACHE_INTERFACE_V1 {
     INTERFACE               Interface;

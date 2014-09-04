@@ -146,6 +146,7 @@ DEFINE_GUID(GUID_XENBUS_DEBUG_INTERFACE,
 
 /*! \struct _XENBUS_DEBUG_INTERFACE_V1
     \brief DEBUG interface version 1
+    \ingroup interfaces
 */
 struct _XENBUS_DEBUG_INTERFACE_V1 {
     INTERFACE               Interface;

@@ -78,6 +78,7 @@ DEFINE_GUID(GUID_XENFILT_UNPLUG_INTERFACE,
 
 /*! \struct _XENFILT_UNPLUG_INTERFACE_V1
     \brief UNPLUG interface version 1
+    \ingroup interfaces
 */
 struct _XENFILT_UNPLUG_INTERFACE_V1 {
     INTERFACE               Interface;

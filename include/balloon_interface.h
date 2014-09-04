@@ -89,6 +89,7 @@ DEFINE_GUID(GUID_XENBUS_BALLOON_INTERFACE,
 
 /*! \struct _XENBUS_BALLOON_INTERFACE_V1
     \brief BALLOON interface version 1
+    \ingroup interfaces
 */  
 struct _XENBUS_BALLOON_INTERFACE_V1 {
     INTERFACE                   Interface;

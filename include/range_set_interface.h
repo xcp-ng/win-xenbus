@@ -149,6 +149,7 @@ DEFINE_GUID(GUID_XENBUS_RANGE_SET_INTERFACE,
 
 /*! \struct _XENBUS_RANGE_SET_INTERFACE_V1
     \brief RANGE_SET interface version 1
+    \ingroup interfaces
 */
 struct _XENBUS_RANGE_SET_INTERFACE_V1 {
     INTERFACE                   Interface;

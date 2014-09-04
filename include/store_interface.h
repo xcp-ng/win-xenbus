@@ -269,6 +269,7 @@ struct _XENBUS_STORE_INTERFACE_V1 {
 
 /*! \struct _XENBUS_STORE_INTERFACE_V1
     \brief STORE interface version 1
+    \ingroup interfaces
 */
 typedef struct _XENBUS_STORE_INTERFACE_V1 XENBUS_STORE_INTERFACE, *PXENBUS_STORE_INTERFACE;
 

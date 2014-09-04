@@ -148,6 +148,7 @@ DEFINE_GUID(GUID_XENBUS_SUSPEND_INTERFACE,
 
 /*! \struct _XENBUS_SUSPEND_INTERFACE_V1
     \brief SUSPEND interface version 1
+    \ingroup interfaces
 */
 struct _XENBUS_SUSPEND_INTERFACE_V1 {
     INTERFACE                   Interface;

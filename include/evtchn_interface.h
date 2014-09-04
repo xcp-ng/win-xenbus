@@ -182,6 +182,7 @@ DEFINE_GUID(GUID_XENBUS_EVTCHN_INTERFACE,
 
 /*! \struct _XENBUS_EVTCHN_INTERFACE_V1
     \brief EVTCHN interface version 1
+    \ingroup interfaces
 */
 struct _XENBUS_EVTCHN_INTERFACE_V1 {
     INTERFACE               Interface;
