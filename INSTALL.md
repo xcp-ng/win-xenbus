@@ -1,5 +1,5 @@
-Installing XenBus
-=================
+Installing the XenBus Package
+=============================
 
 It's important to note that the build scripts generate a driver which is
 *test signed*. This means that when the driver is installed on a 64-bit

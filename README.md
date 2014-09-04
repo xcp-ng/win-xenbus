@@ -20,45 +20,15 @@ Quick Start Guide
 Building the driver
 -------------------
 
-First you'll need a device driver build environment for Windows 8. For this
-you must use:
-
-*   Visual Studio 2012 (Professional or Ultimate)
-*   Windows Driver Kit 8
-
-(See http://msdn.microsoft.com/en-us/windows/hardware/hh852365.aspx). You
-may find it useful to install VirtualCloneDrive from http://www.slysoft.com
-as Visual Studio is generally supplied in ISO form.
-
-Install Visual Studio first (you only need install MFC for C++) and then
-the WDK. Set an environment variable called VS to the base of the Visual
-Studio Installation (e.g. C:\Program Files\Microsoft Visual Studio 11.0) and
-a variable called KIT to the base of the WDK
-(e.g. C:\Program Files\Windows Kits\8.0). Also set an environment variable
-called SYMBOL\_SERVER to point at a location where driver symbols can be
-stored. This can be local directory e.g. C:\Symbols.
-
-Next you'll need a 3.x version of python (which you can get from
-http://www.python.org). Make sure python.exe is somewhere on your default
-path.
-
-Now fire up a Command Prompt and navigate to the base of your git repository.
-At the prompt type:
-
-    build.py checked
-
-This will create a debug build of the driver. To create a non-debug build
-type:
-
-    build.py free
+See BUILD.md
 
 Installing the driver
 ---------------------
 
 See INSTALL.md
 
-API Versions
-============
+Interfaces
+==========
 
 The XenBus package exports several APIs, as defined by the various
 'interface' headers in the include subdirectory. It is important that
@@ -98,11 +68,6 @@ kdfiles.py
 
 This generates two files called kdfiles32.txt and kdfiles64.txt which can
 be used as map files for the .kdfiles WinDBG command.
-
-sdv.py
-------
-
-This runs Static Driver Verifier on the source.
 
 clean.py
 --------
