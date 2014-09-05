@@ -33,10 +33,10 @@
 #define _XENFILT_PDO_H
 
 #include <ntddk.h>
+#include <emulated_interface.h>
 
 #include "driver.h"
 #include "types.h"
-#include "emulated.h"
 
 typedef struct _XENFILT_PDO XENFILT_PDO, *PXENFILT_PDO;
 
@@ -81,6 +81,8 @@ extern NTSTATUS
 PdoCreate(
     IN  PXENFILT_FDO                    Fdo,
     IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
+    IN  PWCHAR                          DeviceID,
+    IN  PWCHAR                          InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type
     );
 

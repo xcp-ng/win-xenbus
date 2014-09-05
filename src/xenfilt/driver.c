@@ -445,16 +445,29 @@ DriverQueryId(
     return STATUS_SUCCESS;
 
 fail2:
-    Error("fail2\n");
-
     IoFreeIrp(Irp);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
-
     ObDereferenceObject(DeviceObject);
 
     return status;
+}
+
+static XENFILT_EMULATED_OBJECT_TYPE
+DriverGetEmulatedType(
+    IN  PANSI_STRING                Ansi
+    )
+{
+    XENFILT_EMULATED_OBJECT_TYPE    Type;
+
+    if (_strnicmp(Ansi->Buffer, "DEVICE", Ansi->Length) == 0)
+        Type = XENFILT_EMULATED_OBJECT_TYPE_DEVICE;
+    else if (_strnicmp(Ansi->Buffer, "DISK", Ansi->Length) == 0)
+        Type = XENFILT_EMULATED_OBJECT_TYPE_DISK;
+    else
+        Type = XENFILT_EMULATED_OBJECT_TYPE_INVALID;
+
+    return Type;
 }
 
 DRIVER_ADD_DEVICE   DriverAddDevice;
@@ -468,6 +481,7 @@ DriverAddDevice(
 {
     HANDLE              ParametersKey;
     PWCHAR              DeviceID;
+    PWCHAR              InstanceID;
     UNICODE_STRING      Unicode;
     ANSI_STRING         Name;
     PANSI_STRING        Type;
@@ -483,45 +497,50 @@ DriverAddDevice(
     if (!NT_SUCCESS(status))
         goto fail1;
 
+    status = DriverQueryId(PhysicalDeviceObject, BusQueryInstanceID, &InstanceID);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
     RtlInitUnicodeString(&Unicode, DeviceID);
 
     status = RtlUnicodeStringToAnsiString(&Name, &Unicode, TRUE);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     status = RegistryQuerySzValue(ParametersKey,
                                   Name.Buffer,
                                   &Type);
     if (NT_SUCCESS(status)) {
-        status = FdoCreate(PhysicalDeviceObject, &Name, Type);
+        status = FdoCreate(PhysicalDeviceObject,
+                           DeviceID,
+                           InstanceID,
+                           DriverGetEmulatedType(Type));
 
         if (!NT_SUCCESS(status))
-            goto fail3;
+            goto fail4;
 
         RegistryFreeSzValue(Type);
     }
 
     RtlFreeAnsiString(&Name);
+    ExFreePool(InstanceID);
     ExFreePool(DeviceID);
 
 done:
     return STATUS_SUCCESS;
 
-fail3:
-    Error("fail3\n");
-
+fail4:
     RegistryFreeSzValue(Type);
 
     RtlFreeAnsiString(&Name);
 
-fail2:
-    Error("fail2\n");
+fail3:
+    ExFreePool(InstanceID);
 
+fail2:
     ExFreePool(DeviceID);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
-
     return status;
 }
 

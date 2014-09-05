@@ -67,8 +67,9 @@ EmulatedTeardown(
 extern NTSTATUS
 EmulatedAddObject(
     IN  PXENFILT_EMULATED_CONTEXT       Context,
+    IN  PWCHAR                          DeviceID,
+    IN  PWCHAR                          InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
-    IN  PDEVICE_OBJECT                  DeviceObject,
     OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
     );
 
@@ -77,36 +78,5 @@ EmulatedRemoveObject(
     IN  PXENFILT_EMULATED_CONTEXT   Context,
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
     );
-
-extern const CHAR *
-EmulatedGetObjectDeviceID(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    );
-
-extern const CHAR *
-EmulatedGetObjectInstanceID(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    );
-
-extern ULONG
-EmulatedGetObjectController(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    );
-
-extern ULONG
-EmulatedGetObjectTarget(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    );
-
-extern ULONG
-EmulatedGetObjectLun(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    );
-
 
 #endif  // _XENFILT_EMULATED_H

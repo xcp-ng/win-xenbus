@@ -89,176 +89,37 @@ __EmulatedFree(
     ExFreePoolWithTag(Buffer, XENFILT_EMULATED_TAG);
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-EmulatedQueryIdCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PKEVENT             Event = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-    UNREFERENCED_PARAMETER(Irp);
-
-    KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
-
-    return STATUS_MORE_PROCESSING_REQUIRED;
-}
-
-static NTSTATUS
-EmulatedQueryId(
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  BUS_QUERY_ID_TYPE   IdType,
-    OUT PVOID               *Information
-    )
-{
-    PIRP                    Irp;
-    KEVENT                  Event;
-    PIO_STACK_LOCATION      StackLocation;
-    NTSTATUS                status;
-
-    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
-
-    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
-
-    status = STATUS_INSUFFICIENT_RESOURCES;
-    if (Irp == NULL)
-        goto fail1;
-
-    StackLocation = IoGetNextIrpStackLocation(Irp);
-
-    StackLocation->MajorFunction = IRP_MJ_PNP;
-    StackLocation->MinorFunction = IRP_MN_QUERY_ID;
-    StackLocation->Flags = 0;
-    StackLocation->Parameters.QueryId.IdType = IdType;
-    StackLocation->DeviceObject = DeviceObject;
-    StackLocation->FileObject = NULL;
-
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
-
-    IoSetCompletionRoutine(Irp,
-                           EmulatedQueryIdCompletion,
-                           &Event,
-                           TRUE,
-                           TRUE,
-                           TRUE);
-
-    // Default completion status
-    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-
-    status = IoCallDriver(DeviceObject, Irp);
-    if (status == STATUS_PENDING) {
-        (VOID) KeWaitForSingleObject(&Event,
-                                     Executive,
-                                     KernelMode,
-                                     FALSE,
-                                     NULL);
-        status = Irp->IoStatus.Status;
-    } else {
-        ASSERT3U(status, ==, Irp->IoStatus.Status);
-    }
-
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    *Information = (PVOID)Irp->IoStatus.Information;
-
-    IoFreeIrp(Irp);
-
-    return STATUS_SUCCESS;
-
-fail2:
-    IoFreeIrp(Irp);
-
-fail1:
-    return status;
-}
-
 static NTSTATUS
 EmulatedSetObjectDeviceData(
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PDEVICE_OBJECT              DeviceObject
+    IN  PWCHAR                      DeviceID,
+    IN  PWCHAR                      InstanceID
     )
 {
-    PWCHAR                          DeviceID;
-    PWCHAR                          InstanceID;
     NTSTATUS                        status;
 
-    status = EmulatedQueryId(DeviceObject,
-                             BusQueryDeviceID,
-                             &DeviceID);
-    if (NT_SUCCESS(status)) {
-        status = RtlStringCbPrintfA(EmulatedObject->Data.Device.DeviceID,
-                                    MAXNAMELEN,
-                                    "%ws",
-                                    DeviceID);
-        ASSERT(NT_SUCCESS(status));
+    status = RtlStringCbPrintfA(EmulatedObject->Data.Device.DeviceID,
+                                MAXNAMELEN,
+                                "%ws",
+                                DeviceID);
+    ASSERT(NT_SUCCESS(status));
 
-        ExFreePool(DeviceID);
-    } else {
-        status = RtlStringCbPrintfA(EmulatedObject->Data.Device.DeviceID,
-                                    MAXNAMELEN,
-                                    "UNKNOWN");
-        ASSERT(NT_SUCCESS(status));
-    }
-
-    status = EmulatedQueryId(DeviceObject,
-                             BusQueryInstanceID,
-                             &InstanceID);
-    if (NT_SUCCESS(status)) {
-        status = RtlStringCbPrintfA(EmulatedObject->Data.Device.InstanceID,
-                                    MAXNAMELEN,
-                                    "%ws",
-                                    InstanceID);
-        ASSERT(NT_SUCCESS(status));
-
-        ExFreePool(InstanceID);
-    } else {
-        status = RtlStringCbPrintfA(EmulatedObject->Data.Device.InstanceID,
-                                    MAXNAMELEN,
-                                    "UNKNOWN");
-        ASSERT(NT_SUCCESS(status));
-    }
+    status = RtlStringCbPrintfA(EmulatedObject->Data.Device.InstanceID,
+                                MAXNAMELEN,
+                                "%ws",
+                                InstanceID);
+    ASSERT(NT_SUCCESS(status));
 
     return STATUS_SUCCESS;
-}
-
-const CHAR *
-EmulatedGetObjectDeviceID(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    )
-{
-    UNREFERENCED_PARAMETER(Context);
-
-    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DEVICE);
-
-    return EmulatedObject->Data.Device.DeviceID;
-}
-
-const CHAR *
-EmulatedGetObjectInstanceID(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    )
-{
-    UNREFERENCED_PARAMETER(Context);
-
-    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DEVICE);
-
-    return EmulatedObject->Data.Device.InstanceID;
 }
 
 static NTSTATUS
 EmulatedSetObjectDiskData(
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PDEVICE_OBJECT              DeviceObject
+    IN  PWCHAR                      DeviceID,
+    IN  PWCHAR                      InstanceID
     )
 {
-    PWCHAR                          InstanceID;
     UNICODE_STRING                  Unicode;
     ANSI_STRING                     Ansi;
     PCHAR                           End;
@@ -267,23 +128,19 @@ EmulatedSetObjectDiskData(
     ULONG                           Lun;
     NTSTATUS                        status;
 
-    status = EmulatedQueryId(DeviceObject,
-                             BusQueryInstanceID,
-                             &InstanceID);
-    if (!NT_SUCCESS(status))
-        goto fail1;
+    UNREFERENCED_PARAMETER(DeviceID);
 
     RtlInitUnicodeString(&Unicode, InstanceID);
 
     status = RtlUnicodeStringToAnsiString(&Ansi, &Unicode, TRUE);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail1;
 
     Controller = strtol(Ansi.Buffer, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '.')
-        goto fail3;
+        goto fail2;
 
     End++;
 
@@ -291,7 +148,7 @@ EmulatedSetObjectDiskData(
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '.')
-        goto fail4;
+        goto fail3;
 
     End++;
 
@@ -299,19 +156,15 @@ EmulatedSetObjectDiskData(
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '\0')
-        goto fail5;
+        goto fail4;
 
     EmulatedObject->Data.Disk.Controller = Controller;
     EmulatedObject->Data.Disk.Target = Target;
     EmulatedObject->Data.Disk.Lun = Lun;
 
     RtlFreeAnsiString(&Ansi);
-    ExFreePool(InstanceID);
 
     return STATUS_SUCCESS;
-
-fail5:
-    Error("fail5\n");
 
 fail4:
     Error("fail4\n");
@@ -319,12 +172,10 @@ fail4:
 fail3:
     Error("fail3\n");
 
-    RtlFreeAnsiString(&Ansi);
-
 fail2:
     Error("fail2\n");
 
-    ExFreePool(InstanceID);
+    RtlFreeAnsiString(&Ansi);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -332,50 +183,12 @@ fail1:
     return status;
 }
 
-ULONG
-EmulatedGetObjectController(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    )
-{
-    UNREFERENCED_PARAMETER(Context);
-
-    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DISK);
-
-    return EmulatedObject->Data.Disk.Controller;
-}
-
-ULONG
-EmulatedGetObjectTarget(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    )
-{
-    UNREFERENCED_PARAMETER(Context);
-
-    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DISK);
-
-    return EmulatedObject->Data.Disk.Target;
-}
-
-ULONG
-EmulatedGetObjectLun(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
-    )
-{
-    UNREFERENCED_PARAMETER(Context);
-
-    ASSERT3U(EmulatedObject->Type, ==, XENFILT_EMULATED_OBJECT_TYPE_DISK);
-
-    return EmulatedObject->Data.Disk.Lun;
-}
-
 NTSTATUS
 EmulatedAddObject(
     IN  PXENFILT_EMULATED_CONTEXT       Context,
+    IN  PWCHAR                          DeviceID,
+    IN  PWCHAR                          InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
-    IN  PDEVICE_OBJECT                  DeviceObject,
     OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
     )
 {
@@ -393,12 +206,14 @@ EmulatedAddObject(
     switch (Type) {
     case XENFILT_EMULATED_OBJECT_TYPE_DEVICE:
         status = EmulatedSetObjectDeviceData(*EmulatedObject,
-                                             DeviceObject);
+                                             DeviceID,
+                                             InstanceID);
         break;
 
     case XENFILT_EMULATED_OBJECT_TYPE_DISK:
         status = EmulatedSetObjectDiskData(*EmulatedObject,
-                                           DeviceObject);
+                                           DeviceID,
+                                           InstanceID);
         break;
 
     default:

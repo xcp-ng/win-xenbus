@@ -33,6 +33,7 @@
 #define _XENFILT_FDO_H
 
 #include <ntddk.h>
+#include <emulated_interface.h>
 
 #include "driver.h"
 #include "types.h"
@@ -41,9 +42,10 @@ typedef struct _XENFILT_FDO XENFILT_FDO, *PXENFILT_FDO;
 
 extern NTSTATUS
 FdoCreate(
-    IN  PDEVICE_OBJECT  PhysicalDeviceObject,
-    IN  PANSI_STRING    Name,
-    IN  PANSI_STRING    Type
+    IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
+    IN  PWCHAR                          DeviceID,
+    IN  PWCHAR                          InstanceID,
+    IN  XENFILT_EMULATED_OBJECT_TYPE    Type
     );
 
 extern VOID

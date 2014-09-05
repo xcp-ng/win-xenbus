@@ -102,7 +102,8 @@ typedef struct _XENFILT_DX {
     SYSTEM_POWER_STATE  SystemPowerState;
     DEVICE_POWER_STATE  DevicePowerState;
 
-    CHAR                Name[MAX_DEVICE_ID_LEN];
+    WCHAR               DeviceID[MAX_DEVICE_ID_LEN];
+    WCHAR               InstanceID[MAX_DEVICE_ID_LEN];
 
     IO_REMOVE_LOCK      RemoveLock;
 
