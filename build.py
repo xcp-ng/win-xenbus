@@ -93,11 +93,10 @@ def shell(command, dir):
     
     sub = subprocess.Popen(' '.join(command), cwd=dir,
                            stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, 
-                           universal_newlines=True)
+                           stderr=subprocess.STDOUT)
 
     for line in sub.stdout:
-        print(line.rstrip())
+        print(line.decode(sys.getdefaultencoding()).rstrip())
 
     sub.wait()
 
