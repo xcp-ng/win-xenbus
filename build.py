@@ -313,10 +313,7 @@ def archive(filename, files, tgz=False):
 def getVsVersion():
     vsenv ={} 
     vars = subprocess.check_output([os.environ['VS']+'\\VC\\vcvarsall.bat', '&&', 'set'], shell=True)
-    print( vars)
     for var in vars.splitlines():
-        print (var)
-        print (var.strip())
         k, _, v = map(str.strip, var.strip().decode('utf-8').partition('='))
         if k.startswith('?'):
             continue
