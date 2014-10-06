@@ -59,7 +59,6 @@ typedef struct _XENFILT_DRIVER {
 
     XENFILT_EMULATED_INTERFACE  EmulatedInterface;
     XENFILT_UNPLUG_INTERFACE    UnplugInterface;
-    BOOLEAN                     UnplugAcquired;
 } XENFILT_DRIVER, *PXENFILT_DRIVER;
 
 static XENFILT_DRIVER   Driver;
@@ -305,10 +304,7 @@ DriverUnload(
     if (*InitSafeBootMode > 0)
         goto done;
 
-    if (Driver.UnplugAcquired) {
-        XENFILT_UNPLUG(Release, &Driver.UnplugInterface);
-        Driver.UnplugAcquired = FALSE;
-    }
+    XENFILT_UNPLUG(Release, &Driver.UnplugInterface);
 
     XENFILT_EMULATED(Release, &Driver.EmulatedInterface);
 
@@ -679,6 +675,10 @@ DriverEntry(
     if (!NT_SUCCESS(status))
         goto fail8;
 
+    status = XENFILT_UNPLUG(Acquire, &Driver.UnplugInterface);
+    if (!NT_SUCCESS(status))
+        goto fail9;
+
     RegistryCloseKey(ServiceKey);
 
     DriverObject->DriverExtension->AddDevice = DriverAddDevice;
@@ -692,6 +692,11 @@ DriverEntry(
 done:
     Trace("<====\n");
     return STATUS_SUCCESS;
+
+fail9:
+    Error("fail9\n");
+
+    XENFILT_EMULATED(Release, &Driver.EmulatedInterface);
 
 fail8:
     Error("fail8\n");
