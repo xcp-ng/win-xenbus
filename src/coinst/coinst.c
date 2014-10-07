@@ -1132,6 +1132,7 @@ MatchExistingDriver(
     DWORD   MaxValueLength;
     DWORD   DriverDescLength;
     PTCHAR  DriverDesc = NULL;
+    DWORD   ProductNameLength;
     DWORD   Type;
 
     // Look for a legacy platform device
@@ -1213,16 +1214,17 @@ found:
         goto fail9;
     }
 
+    ProductNameLength = (DWORD)strlen(PRODUCT_NAME_STR);
+
     if (strncmp(DriverDesc,
                 PRODUCT_NAME_STR,
-                strlen(PRODUCT_NAME_STR)) != 0) {
+                ProductNameLength) != 0) {
         SetLastError(ERROR_INSTALL_FAILURE);
         goto fail10;
     }
 
-    DriverDesc += strlen(PRODUCT_NAME_STR);
-
-    if (strcmp(DriverDesc, " PV Bus") != 0) {
+    if (strcmp(DriverDesc + ProductNameLength,
+               " PV Bus") != 0) {
         SetLastError(ERROR_INSTALL_FAILURE);
         goto fail11;
     }

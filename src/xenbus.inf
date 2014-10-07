@@ -72,8 +72,8 @@ xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll
 CopyFiles=XenBus_Copyfiles
 
 [XenBus_Inst.Services] 
-AddService=xenfilt,,XenFilt_Service,
 AddService=xenbus,0x02,XenBus_Service,
+AddService=xenfilt,,XenFilt_Service,
 
 [XenBus_Service] 
 DisplayName=%XenBusDesc%
