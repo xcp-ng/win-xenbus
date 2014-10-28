@@ -74,21 +74,12 @@ SharedInfoSetBit(
     IN  ULONG               Bit
     )
 {
-    ULONG_PTR               Old;
-    ULONG_PTR               New;
-
     ASSERT3U(Bit, <, sizeof (ULONG_PTR) * 8);
 
     KeMemoryBarrier();
 
-    do {
-        Old = *Mask;
-        New = Old | ((ULONG_PTR)1 << Bit);
-    } while (InterlockedCompareExchangePointer((PVOID *)Mask, (PVOID)New, (PVOID)Old) != (PVOID)Old);
-
-    KeMemoryBarrier();
-
-    return (Old & ((ULONG_PTR)1 << Bit)) ? FALSE : TRUE;    // return TRUE if we set the bit
+    // return TRUE if we set the bit
+    return (InterlockedBitTestAndSet((LONG *)Mask, Bit) == 0) ? TRUE : FALSE;
 }
 
 static BOOLEAN
@@ -97,21 +88,12 @@ SharedInfoClearBit(
     IN  ULONG               Bit
     )
 {
-    ULONG_PTR               Old;
-    ULONG_PTR               New;
-
     ASSERT3U(Bit, <, sizeof (ULONG_PTR) * 8);
 
     KeMemoryBarrier();
 
-    do {
-        Old = *Mask;
-        New = Old & ~((ULONG_PTR)1 << Bit);
-    } while (InterlockedCompareExchangePointer((PVOID *)Mask, (PVOID)New, (PVOID)Old) != (PVOID)Old);
-
-    KeMemoryBarrier();
-
-    return (Old & ((ULONG_PTR)1 << Bit)) ? TRUE : FALSE;    // return TRUE if we cleared the bit
+    // return TRUE if we cleared the bit
+    return (InterlockedBitTestAndReset((LONG *)Mask, Bit) != 0) ? TRUE : FALSE;
 }
 
 static BOOLEAN
