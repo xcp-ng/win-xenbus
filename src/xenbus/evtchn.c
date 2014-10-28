@@ -665,10 +665,20 @@ EvtchnInterrupt(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    return XENBUS_SHARED_INFO(EvtchnPoll,
+    BOOLEAN                     DoneSomething;
+
+    DoneSomething = FALSE;
+
+    while (XENBUS_SHARED_INFO(UpcallPending,
                               &Context->SharedInfoInterface,
-                              EvtchnPollCallback,
-                              Context);
+                              0))
+        DoneSomething |= XENBUS_SHARED_INFO(EvtchnPoll,
+                                            &Context->SharedInfoInterface,
+                                            0,
+                                            EvtchnPollCallback,
+                                            Context);
+
+    return DoneSomething;
 }
 
 static VOID

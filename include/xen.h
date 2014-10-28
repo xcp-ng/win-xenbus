@@ -257,4 +257,12 @@ LogPrintf(
     ...
     );
 
+// SYSTEM
+
+XEN_API
+ULONG
+SystemVirtualCpuIndex(
+    IN  ULONG   Index
+    );
+
 #endif  // _XEN_H

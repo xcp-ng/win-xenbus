@@ -29,6 +29,8 @@
  * SUCH DAMAGE.
  */
 
+#define XEN_API __declspec(dllexport)
+
 #include <ntddk.h>
 #include <ntstrsafe.h>
 #include <stdlib.h>
@@ -447,7 +449,7 @@ SystemPowerStateCallback(
     }
 }
 
-extern NTSTATUS
+NTSTATUS
 SystemInitialize(
     VOID
     )
@@ -503,7 +505,21 @@ fail1:
     return status;
 }
 
-extern VOID
+XEN_API
+ULONG
+SystemVirtualCpuIndex(
+    IN  ULONG           Index
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    PSYSTEM_CPU         Cpu = &Context->Cpu[Index];
+
+    ASSERT3U(Index, <, MAXIMUM_PROCESSORS);
+
+    return Cpu->ApicID / 2;
+}
+
+VOID
 SystemTeardown(
     VOID
     )

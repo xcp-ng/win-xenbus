@@ -44,6 +44,7 @@ struct _XENBUS_SHARED_INFO_CONTEXT {
     LONG                        References;
     PHYSICAL_ADDRESS            Address;
     shared_info_t               *Shared;
+    ULONG                       Port;
     XENBUS_SUSPEND_INTERFACE    SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
     XENBUS_DEBUG_INTERFACE      DebugInterface;
@@ -128,7 +129,7 @@ SharedInfoTestBit(
 }
 
 static VOID
-SharedInfoMaskAll(
+SharedInfoEvtchnMaskAll(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
     )
 {
@@ -149,69 +150,104 @@ SharedInfoMaskAll(
 }
 
 static BOOLEAN
+SharedInfoUpcallPending(
+    IN  PINTERFACE              Interface,
+    IN  ULONG                   Cpu
+    )
+{
+    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
+    shared_info_t               *Shared = Context->Shared;
+    int                         vcpu_id = SystemVirtualCpuIndex(Cpu);
+    UCHAR                       Pending;
+
+    KeMemoryBarrier();
+
+    Pending = _InterlockedExchange8((CHAR *)&Shared->vcpu_info[vcpu_id].evtchn_upcall_pending, 0);
+
+    return (Pending != 0) ? TRUE : FALSE;
+}
+
+static BOOLEAN
 SharedInfoEvtchnPoll(
+    IN  PINTERFACE                  Interface,
+    IN  ULONG                       Cpu,
+    IN  XENBUS_SHARED_INFO_EVENT    Event,
+    IN  PVOID                       Argument OPTIONAL
+    )
+{
+    PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
+    shared_info_t                   *Shared = Context->Shared;
+    int                             vcpu_id = SystemVirtualCpuIndex(Cpu);
+    ULONG                           Port;
+    ULONG_PTR                       SelectorMask;
+    BOOLEAN                         DoneSomething;
+
+    DoneSomething = FALSE;
+
+    KeMemoryBarrier();
+
+    SelectorMask = (ULONG_PTR)InterlockedExchangePointer((PVOID *)&Shared->vcpu_info[vcpu_id].evtchn_pending_sel, (PVOID)0);
+
+    KeMemoryBarrier();
+
+    Port = Context->Port;
+
+    while (SelectorMask != 0) {
+        ULONG   SelectorBit;
+        ULONG   PortBit;
+
+
+        SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+        PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+
+        if (SharedInfoTestBit(&SelectorMask, SelectorBit)) {
+            ULONG_PTR   PortMask;
+
+            PortMask = Shared->evtchn_pending[SelectorBit];
+            PortMask &= ~Shared->evtchn_mask[SelectorBit];
+
+            while (PortMask != 0 && PortBit < XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) {
+                if (SharedInfoTestBit(&PortMask, PortBit)) {
+                    DoneSomething |= Event(Argument, (SelectorBit * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) + PortBit);
+
+                    PortMask &= ~((ULONG_PTR)1 << PortBit);
+                }
+
+                PortBit++;
+            }
+
+            // Are we done with this selector?
+            if (PortMask == 0)
+                SelectorMask &= ~((ULONG_PTR)1 << SelectorBit);
+        }
+
+        Port = (SelectorBit + 1) * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
+
+        if (Port >= XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR)
+            Port = 0;
+    }
+
+    Context->Port = Port;
+
+    return DoneSomething;
+}
+
+static BOOLEAN
+SharedInfoEvtchnPollVersion1(
     IN  PINTERFACE              Interface,
     IN  BOOLEAN                 (*Function)(PVOID, ULONG),
     IN  PVOID                   Argument OPTIONAL
     )
 {
-    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
-    shared_info_t               *Shared;
-    static ULONG                Port;
     BOOLEAN                     DoneSomething;
-
-    Shared = Context->Shared;
 
     DoneSomething = FALSE;
 
-    for (;;) {
-        UCHAR       Pending;
-        ULONG_PTR   SelectorMask;
-
-        KeMemoryBarrier();
-
-        Pending = _InterlockedExchange8((CHAR *)&Shared->vcpu_info[0].evtchn_upcall_pending, 0);
-        if (Pending == 0)
-            break;
-
-        SelectorMask = (ULONG_PTR)InterlockedExchangePointer((PVOID *)&Shared->vcpu_info[0].evtchn_pending_sel, (PVOID)0);
-
-        KeMemoryBarrier();
-
-        while (SelectorMask != 0) {
-            ULONG   SelectorBit;
-            ULONG   PortBit;
-
-            SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
-            PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
-
-            if (SharedInfoTestBit(&SelectorMask, SelectorBit)) {
-                ULONG_PTR   PortMask;
-
-                PortMask = Shared->evtchn_pending[SelectorBit];
-                PortMask &= ~Shared->evtchn_mask[SelectorBit];
-
-                while (PortMask != 0 && PortBit < XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) {
-                    if (SharedInfoTestBit(&PortMask, PortBit)) {
-                        DoneSomething |= Function(Argument, (SelectorBit * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR) + PortBit);
-
-                        (VOID) SharedInfoClearBitUnlocked(&PortMask, PortBit);
-                    }
-
-                    PortBit++;
-                }
-
-                // Are we done with this selector?
-                if (PortMask == 0)
-                    (VOID) SharedInfoClearBitUnlocked(&SelectorMask, SelectorBit);
-            }
-
-            Port = (SelectorBit + 1) * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
-
-            if (Port >= XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR)
-                Port = 0;
-        }
-    }
+    while (SharedInfoUpcallPending(Interface, 0))
+        DoneSomething |= SharedInfoEvtchnPoll(Interface,
+                                              0,
+                                              Function,
+                                              Argument);
 
     return DoneSomething;
 }
@@ -404,7 +440,7 @@ SharedInfoSuspendCallbackEarly(
     PXENBUS_SHARED_INFO_CONTEXT Context = Argument;
 
     SharedInfoMap(Context);
-    SharedInfoMaskAll(Context);
+    SharedInfoEvtchnMaskAll(Context);
 }
 
 static VOID
@@ -423,17 +459,30 @@ SharedInfoDebugCallback(
 
     if (!Crashing) {
         shared_info_t   *Shared;
+        LONG            Cpu;
         ULONG           Selector;
 
         Shared = Context->Shared;
 
         KeMemoryBarrier();
 
-        XENBUS_DEBUG(Printf,
-                     &Context->DebugInterface,
-                     "CPU: PENDING: %s SELECTOR MASK: %p\n",
-                     Shared->vcpu_info[0].evtchn_upcall_pending ? "TRUE" : "FALSE",
-                     (PVOID)Shared->vcpu_info[0].evtchn_pending_sel);
+        for (Cpu = 0; Cpu < KeNumberProcessors; Cpu++) {
+            int vcpu_id = SystemVirtualCpuIndex(Cpu);
+
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "CPU %u: PENDING: %s\n",
+                         Cpu,
+                         Shared->vcpu_info[vcpu_id].evtchn_upcall_pending ?
+                         "TRUE" :
+                         "FALSE");
+
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "CPU %u: SELECTOR MASK: %p\n",
+                         Cpu,
+                         (PVOID)Shared->vcpu_info[vcpu_id].evtchn_pending_sel);
+        }
 
         for (Selector = 0; Selector < XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT; Selector += 4) {
             XENBUS_DEBUG(Printf,
@@ -490,7 +539,7 @@ SharedInfoAcquire(
     if (Context->Shared == NULL)
         goto fail2;
 
-    SharedInfoMaskAll(Context);
+    SharedInfoEvtchnMaskAll(Context);
 
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
@@ -583,6 +632,8 @@ SharedInfoRelease (
 
     Trace("====>\n");
 
+    Context->Port = 0;
+
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
                  Context->DebugCallback);
@@ -615,6 +666,18 @@ static struct _XENBUS_SHARED_INFO_INTERFACE_V1 SharedInfoInterfaceVersion1 = {
     { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V1), 1, NULL, NULL, NULL },
     SharedInfoAcquire,
     SharedInfoRelease,
+    SharedInfoEvtchnPollVersion1,
+    SharedInfoEvtchnAck,
+    SharedInfoEvtchnMask,
+    SharedInfoEvtchnUnmask,
+    SharedInfoGetTime
+};
+
+static struct _XENBUS_SHARED_INFO_INTERFACE_V2 SharedInfoInterfaceVersion2 = {
+    { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V2), 2, NULL, NULL, NULL },
+    SharedInfoAcquire,
+    SharedInfoRelease,
+    SharedInfoUpcallPending,
     SharedInfoEvtchnPoll,
     SharedInfoEvtchnAck,
     SharedInfoEvtchnMask,
@@ -689,6 +752,23 @@ SharedInfoGetInterface(
             break;
 
         *SharedInfoInterface = SharedInfoInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 2: {
+        struct _XENBUS_SHARED_INFO_INTERFACE_V2 *SharedInfoInterface;
+
+        SharedInfoInterface = (struct _XENBUS_SHARED_INFO_INTERFACE_V2 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V2))
+            break;
+
+        *SharedInfoInterface = SharedInfoInterfaceVersion2;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
