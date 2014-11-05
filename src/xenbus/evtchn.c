@@ -36,6 +36,7 @@
 
 #include "evtchn.h"
 #include "fdo.h"
+#include "hash_table.h"
 #include "dbg_print.h"
 #include "assert.h"
 
@@ -97,7 +98,7 @@ struct _XENBUS_EVTCHN_CONTEXT {
     XENBUS_DEBUG_INTERFACE          DebugInterface;
     PXENBUS_DEBUG_CALLBACK          DebugCallback;
     XENBUS_SHARED_INFO_INTERFACE    SharedInfoInterface;
-    PXENBUS_EVTCHN_CHANNEL          Channel[XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT * XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR];
+    PXENBUS_HASH_TABLE              Table;
     LIST_ENTRY                      List;
 };
 
@@ -351,13 +352,15 @@ EvtchnOpen(
 
     LocalPort = Channel->LocalPort;
 
-    ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
+    status = HashTableAdd(Context->Table,
+                          LocalPort,
+                          (ULONG_PTR)Channel);
+    if (!NT_SUCCESS(status))
+        goto fail3;
 
-    (VOID) __EvtchnAcquireInterruptLock(Context);
-
-    ASSERT3P(Context->Channel[LocalPort], ==, NULL);
-    Context->Channel[LocalPort] = Channel;
     Channel->Active = TRUE;
+
+    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
 
     InsertTailList(&Context->List, &Channel->ListEntry);
 
@@ -366,11 +369,17 @@ EvtchnOpen(
         Context->Enabled = TRUE;
     }
 
-    __EvtchnReleaseInterruptLock(Context, DISPATCH_LEVEL);
+    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 
     KeLowerIrql(Irql);
 
     return Channel;
+
+fail3:
+    Error("fail3\n");
+
+    Channel->LocalPort = 0;
+    RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
 
 fail2:
     Error("fail2\n");
@@ -398,7 +407,7 @@ static BOOLEAN
 EvtchnUnmask(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 Locked
+    IN  BOOLEAN                 InCallback
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
@@ -407,8 +416,10 @@ EvtchnUnmask(
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    if (!Locked)
-        Irql = __EvtchnAcquireInterruptLock(Context);
+    if (!InCallback)
+        KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Prevent suspend
+
+    ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
     if (Channel->Active) {
         Pending = XENBUS_SHARED_INFO(EvtchnUnmask,
@@ -446,8 +457,8 @@ EvtchnUnmask(
         }
     }
 
-    if (!Locked)
-        __EvtchnReleaseInterruptLock(Context, Irql);
+    if (!InCallback)
+        KeLowerIrql(Irql);
 
     return Pending;
 }
@@ -513,6 +524,8 @@ EvtchnTrigger(
 
     Irql = __EvtchnAcquireInterruptLock(Context);
 
+    ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
+
     if (Channel->Active) {
         DoneSomething = EvtchnCallback(Context, Channel);
     } else {
@@ -536,7 +549,9 @@ EvtchnClose(
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    Irql = __EvtchnAcquireInterruptLock(Context);
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Prevent suspend
+
+    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
 
     RemoveEntryList(&Channel->ListEntry);
 
@@ -545,12 +560,13 @@ EvtchnClose(
         Context->Enabled = FALSE;
     }
 
+    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
+
     RtlZeroMemory(&Channel->ListEntry, sizeof (LIST_ENTRY));
 
     if (Channel->Active) {
-        ULONG   LocalPort = Channel->LocalPort;
-
-        ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
+        ULONG       LocalPort = Channel->LocalPort;
+        NTSTATUS    status;
 
         Channel->Active = FALSE;
 
@@ -561,11 +577,9 @@ EvtchnClose(
         if (Channel->Type != XENBUS_EVTCHN_TYPE_FIXED)
             (VOID) EventChannelClose(LocalPort);
 
-        ASSERT(Context->Channel[LocalPort] != NULL);
-        Context->Channel[LocalPort] = NULL;
+        status = HashTableRemove(Context->Table, LocalPort);
+        ASSERT(NT_SUCCESS(status));
     }
-
-    __EvtchnReleaseInterruptLock(Context, Irql);
 
     Channel->LocalPort = 0;
     RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
@@ -580,6 +594,8 @@ EvtchnClose(
 
     ASSERT(IsZeroMemory(Channel, sizeof (XENBUS_EVTCHN_CHANNEL)));
     __EvtchnFree(Channel);
+
+    KeLowerIrql(Irql);
 }
 
 static ULONG
@@ -606,12 +622,13 @@ EvtchnPollCallback(
     PXENBUS_EVTCHN_CHANNEL  Channel;
     BOOLEAN                 Mask;
     BOOLEAN                 DoneSomething;
+    NTSTATUS                status;
 
-    ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
-
-    Channel = Context->Channel[LocalPort];
-
-    if (Channel == NULL) {
+    status = HashTableLookup(Context->Table,
+                             LocalPort,
+                             (PULONG_PTR)&Channel);
+    
+    if (!NT_SUCCESS(status)) {
         Warning("[%d]: INVALID PORT\n", LocalPort);
 
         XENBUS_SHARED_INFO(EvtchnMask,
@@ -697,14 +714,13 @@ EvtchnSuspendCallbackEarly(
         Channel = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_CHANNEL, ListEntry);
 
         if (Channel->Active) {
-            ULONG   LocalPort = Channel->LocalPort;
-
-            ASSERT3U(LocalPort, <, sizeof (Context->Channel) / sizeof (Context->Channel[0]));
+            ULONG       LocalPort = Channel->LocalPort;
+            NTSTATUS    status;
 
             Channel->Active = FALSE;
 
-            ASSERT(Context->Channel[LocalPort] != NULL);
-            Context->Channel[LocalPort] = NULL;
+            status = HashTableRemove(Context->Table, LocalPort);
+            ASSERT(NT_SUCCESS(status));
         }
     }
 
@@ -958,6 +974,10 @@ EvtchnInitialize(
     if (*Context == NULL)
         goto fail1;
 
+    status = HashTableCreate(&(*Context)->Table);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
     status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
                                  XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
                                  (PINTERFACE)&(*Context)->SuspendInterface,
@@ -987,6 +1007,12 @@ EvtchnInitialize(
     Trace("<====\n");
 
     return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    ASSERT(IsZeroMemory(Context, sizeof (XENBUS_EVTCHN_CONTEXT)));
+    __EvtchnFree(Context);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1052,6 +1078,9 @@ EvtchnTeardown(
 
     RtlZeroMemory(&Context->SuspendInterface,
                   sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    HashTableDestroy(Context->Table);
+    Context->Table = NULL;
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_EVTCHN_CONTEXT)));
     __EvtchnFree(Context);

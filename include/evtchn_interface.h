@@ -117,14 +117,14 @@ typedef PXENBUS_EVTCHN_CHANNEL
 
     \param Interface The interface header
     \param Channel The channel handle
-    \param Locked Set to TRUE if this method is invoked in context of the channel callback
+    \param InCallback Set to TRUE if this method is invoked in context of the channel callback
     \return TRUE if there was an event pending at the point of unmask, FALSE otherwise
 */
 typedef BOOLEAN
 (*XENBUS_EVTCHN_UNMASK)(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 Locked
+    IN  BOOLEAN                 InCallback
     );
 
 /*! \typedef XENBUS_EVTCHN_SEND

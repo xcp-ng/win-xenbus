@@ -38,6 +38,9 @@
 #include "dbg_print.h"
 #include "assert.h"
 
+#define XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR     (sizeof (ULONG_PTR) * 8)
+#define XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT   (RTL_FIELD_SIZE(shared_info_t, evtchn_pending) / sizeof (ULONG_PTR))
+
 struct _XENBUS_SHARED_INFO_CONTEXT {
     PXENBUS_FDO                 Fdo;
     KSPIN_LOCK                  Lock;

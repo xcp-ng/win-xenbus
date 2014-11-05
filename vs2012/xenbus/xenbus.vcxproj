@@ -99,6 +99,7 @@
 		<ClCompile Include="..\..\src\xenbus\range_set.c" />
 		<ClCompile Include="..\..\src\xenbus\balloon.c" />
 		<ClCompile Include="..\..\src\xenbus\cache.c" />
+		<ClCompile Include="..\..\src\xenbus\hash_table.c" />
 	</ItemGroup>
 	<ItemGroup>
 		<ResourceCompile Include="..\..\src\xenbus\xenbus.rc" />
