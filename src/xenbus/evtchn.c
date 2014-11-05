@@ -35,6 +35,7 @@
 #include <util.h>
 
 #include "evtchn.h"
+#include "evtchn_2l.h"
 #include "fdo.h"
 #include "hash_table.h"
 #include "dbg_print.h"
@@ -89,9 +90,12 @@ struct _XENBUS_EVTCHN_CONTEXT {
     BOOLEAN                         Enabled;
     XENBUS_SUSPEND_INTERFACE        SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackEarly;
+    PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
     XENBUS_DEBUG_INTERFACE          DebugInterface;
     PXENBUS_DEBUG_CALLBACK          DebugCallback;
     XENBUS_SHARED_INFO_INTERFACE    SharedInfoInterface;
+    PXENBUS_EVTCHN_ABI_CONTEXT      EvtchnTwoLevelContext;
+    XENBUS_EVTCHN_ABI               EvtchnAbi;
     PXENBUS_HASH_TABLE              Table;
     LIST_ENTRY                      List;
 };
@@ -345,11 +349,17 @@ EvtchnOpen(
 
     LocalPort = Channel->LocalPort;
 
+    status = XENBUS_EVTCHN_ABI(PortEnable,
+                               &Context->EvtchnAbi,
+                               LocalPort);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
     status = HashTableAdd(Context->Table,
                           LocalPort,
                           (ULONG_PTR)Channel);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     Channel->Active = TRUE;
 
@@ -367,6 +377,13 @@ EvtchnOpen(
     KeLowerIrql(Irql);
 
     return Channel;
+
+fail4:
+    Error("fail4\n");
+
+    XENBUS_EVTCHN_ABI(PortDisable,
+                      &Context->EvtchnAbi,
+                      LocalPort);
 
 fail3:
     Error("fail3\n");
@@ -415,14 +432,14 @@ EvtchnUnmask(
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
     if (Channel->Active) {
-        Pending = XENBUS_SHARED_INFO(EvtchnUnmask,
-                                     &Context->SharedInfoInterface,
-                                     Channel->LocalPort);
+        Pending = XENBUS_EVTCHN_ABI(PortUnmask,
+                                    &Context->EvtchnAbi,
+                                    Channel->LocalPort);
 
         if (Pending && Channel->Mask)
-            XENBUS_SHARED_INFO(EvtchnMask,
-                               &Context->SharedInfoInterface,
-                               Channel->LocalPort);
+            XENBUS_EVTCHN_ABI(PortMask,
+                              &Context->EvtchnAbi,
+                              Channel->LocalPort);
     }
 
     if (!InCallback)
@@ -538,9 +555,9 @@ EvtchnClose(
 
         Channel->Active = FALSE;
 
-        XENBUS_SHARED_INFO(EvtchnMask,
-                           &Context->SharedInfoInterface,
-                           LocalPort);
+        XENBUS_EVTCHN_ABI(PortMask,
+                          &Context->EvtchnAbi,
+                          LocalPort);
 
         if (Channel->Type != XENBUS_EVTCHN_TYPE_FIXED)
             (VOID) EventChannelClose(LocalPort);
@@ -598,22 +615,22 @@ EvtchnPollCallback(
     if (!NT_SUCCESS(status)) {
         Warning("[%d]: INVALID PORT\n", LocalPort);
 
-        XENBUS_SHARED_INFO(EvtchnMask,
-                           &Context->SharedInfoInterface,
-                           LocalPort);
+        XENBUS_EVTCHN_ABI(PortMask,
+                          &Context->EvtchnAbi,
+                          LocalPort);
 
         DoneSomething = FALSE;
         goto done;
     }
 
     if (Channel->Mask)
-        XENBUS_SHARED_INFO(EvtchnMask,
-                           &Context->SharedInfoInterface,
-                           LocalPort);
+        XENBUS_EVTCHN_ABI(PortMask,
+                          &Context->EvtchnAbi,
+                          LocalPort);
 
-    XENBUS_SHARED_INFO(EvtchnAck,
-                       &Context->SharedInfoInterface,
-                       LocalPort);
+    XENBUS_EVTCHN_ABI(PortAck,
+                      &Context->EvtchnAbi,
+                      LocalPort);
 
     DoneSomething = EvtchnCallback(Context, Channel);
 
@@ -633,13 +650,45 @@ EvtchnInterrupt(
     while (XENBUS_SHARED_INFO(UpcallPending,
                               &Context->SharedInfoInterface,
                               0))
-        DoneSomething |= XENBUS_SHARED_INFO(EvtchnPoll,
-                                            &Context->SharedInfoInterface,
-                                            0,
-                                            EvtchnPollCallback,
-                                            Context);
+        DoneSomething |= XENBUS_EVTCHN_ABI(Poll,
+                                           &Context->EvtchnAbi,
+                                           0,
+                                           EvtchnPollCallback,
+                                           Context);
 
     return DoneSomething;
+}
+
+static NTSTATUS
+EvtchnAbiAcquire(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    )
+{
+    NTSTATUS                    status;
+
+    EvtchnTwoLevelGetAbi(Context->EvtchnTwoLevelContext,
+                         &Context->EvtchnAbi);
+
+    status = XENBUS_EVTCHN_ABI(Acquire, &Context->EvtchnAbi);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+EvtchnAbiRelease(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    )
+{
+    XENBUS_EVTCHN_ABI(Release, &Context->EvtchnAbi);
+
+    RtlZeroMemory(&Context->EvtchnAbi, sizeof (XENBUS_EVTCHN_ABI));
 }
 
 static VOID
@@ -667,6 +716,20 @@ EvtchnSuspendCallbackEarly(
             ASSERT(NT_SUCCESS(status));
         }
     }
+}
+
+static VOID
+EvtchnSuspendCallbackLate(
+    IN  PVOID               Argument
+    )
+{
+    PXENBUS_EVTCHN_CONTEXT  Context = Argument;
+    NTSTATUS                status;
+
+    EvtchnAbiRelease(Context);
+
+    status = EvtchnAbiAcquire(Context);
+    ASSERT(NT_SUCCESS(status));
 
     if (Context->Enabled)
         EvtchnInterruptEnable(Context);
@@ -772,6 +835,8 @@ EvtchnAcquire(
 
     Trace("====>\n");
 
+    Context->Vector = FdoGetInterruptVector(Fdo);
+
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -785,9 +850,18 @@ EvtchnAcquire(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
+    status = XENBUS_SUSPEND(Register,
+                            &Context->SuspendInterface,
+                            SUSPEND_CALLBACK_LATE,
+                            EvtchnSuspendCallbackLate,
+                            Context,
+                            &Context->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
         goto fail3;
+
+    status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
+    if (!NT_SUCCESS(status))
+        goto fail4;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -796,13 +870,15 @@ EvtchnAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail5;
 
     status = XENBUS_SHARED_INFO(Acquire, &Context->SharedInfoInterface);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
-    Context->Vector = FdoGetInterruptVector(Fdo);
+    status = EvtchnAbiAcquire(Context);
+    if (!NT_SUCCESS(status))
+        goto fail7;
 
     Trace("<====\n");
 
@@ -811,18 +887,31 @@ done:
 
     return STATUS_SUCCESS;
 
-fail5:
-    Error("fail5\n");
+fail7:
+    Error("fail7\n");
+
+    XENBUS_SHARED_INFO(Release, &Context->SharedInfoInterface);
+
+fail6:
+    Error("fail6\n");
 
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
                  Context->DebugCallback);
     Context->DebugCallback = NULL;
 
+fail5:
+    Error("fail5\n");
+
+    XENBUS_DEBUG(Release, &Context->DebugInterface);
+
 fail4:
     Error("fail4\n");
 
-    XENBUS_DEBUG(Release, &Context->DebugInterface);
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
+                   Context->SuspendCallbackLate);
+    Context->SuspendCallbackLate = NULL;
 
 fail3:
     Error("fail3\n");
@@ -836,6 +925,8 @@ fail2:
     Error("fail2\n");
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
+
+    Context->Vector = 0;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -865,7 +956,7 @@ EvtchnRelease(
     if (!IsListEmpty(&Context->List))
         BUG("OUTSTANDING EVENT CHANNELS");
 
-    Context->Vector = 0;
+    EvtchnAbiRelease(Context);
 
     XENBUS_SHARED_INFO(Release, &Context->SharedInfoInterface);
 
@@ -878,10 +969,17 @@ EvtchnRelease(
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
+                   Context->SuspendCallbackLate);
+    Context->SuspendCallbackLate = NULL;
+
+    XENBUS_SUSPEND(Deregister,
+                   &Context->SuspendInterface,
                    Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
+
+    Context->Vector = 0;
 
     Trace("<====\n");
 
@@ -921,6 +1019,11 @@ EvtchnInitialize(
     if (!NT_SUCCESS(status))
         goto fail2;
 
+    status = EvtchnTwoLevelInitialize(Fdo,
+                                      &(*Context)->EvtchnTwoLevelContext);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
     status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
                                  XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
                                  (PINTERFACE)&(*Context)->SuspendInterface,
@@ -951,11 +1054,17 @@ EvtchnInitialize(
 
     return STATUS_SUCCESS;
 
+fail3:
+    Error("fail3\n");
+
+    HashTableDestroy((*Context)->Table);
+    (*Context)->Table = NULL;
+
 fail2:
     Error("fail2\n");
 
-    ASSERT(IsZeroMemory(Context, sizeof (XENBUS_EVTCHN_CONTEXT)));
-    __EvtchnFree(Context);
+    ASSERT(IsZeroMemory(*Context, sizeof (XENBUS_EVTCHN_CONTEXT)));
+    __EvtchnFree(*Context);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1021,6 +1130,9 @@ EvtchnTeardown(
 
     RtlZeroMemory(&Context->SuspendInterface,
                   sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    EvtchnTwoLevelTeardown(Context->EvtchnTwoLevelContext);
+    Context->EvtchnTwoLevelContext = NULL;
 
     HashTableDestroy(Context->Table);
     Context->Table = NULL;
