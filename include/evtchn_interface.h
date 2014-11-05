@@ -191,7 +191,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V1 {
     XENBUS_EVTCHN_OPEN      EvtchnOpen;
     XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
     XENBUS_EVTCHN_SEND      EvtchnSend;
-    XENBUS_EVTCHN_SEND      EvtchnTrigger;
+    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
     XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
