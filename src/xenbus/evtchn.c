@@ -720,8 +720,8 @@ EvtchnDebugCallback(
                      "EVENT CHANNELS:\n");
 
         for (ListEntry = Context->List.Flink;
-                ListEntry != &Context->List;
-                ListEntry = ListEntry->Flink) {
+             ListEntry != &Context->List;
+             ListEntry = ListEntry->Flink) {
             PXENBUS_EVTCHN_CHANNEL  Channel;
             PCHAR                   Name;
             ULONG_PTR               Offset;
