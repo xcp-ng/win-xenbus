@@ -40,19 +40,13 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-typedef struct _XENBUS_EVTCHN_FIXED_PARAMETERS {
-    BOOLEAN Mask;
-} XENBUS_EVTCHN_FIXED_PARAMETERS, *PXENBUS_EVTCHN_FIXED_PARAMETERS;
-
 typedef struct _XENBUS_EVTCHN_UNBOUND_PARAMETERS {
     USHORT  RemoteDomain;
-    BOOLEAN Mask;
 } XENBUS_EVTCHN_UNBOUND_PARAMETERS, *PXENBUS_EVTCHN_UNBOUND_PARAMETERS;
 
 typedef struct _XENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS {
     USHORT  RemoteDomain;
     ULONG   RemotePort;
-    BOOLEAN Mask;
 } XENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS, *PXENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS;
 
 typedef struct _XENBUS_EVTCHN_VIRQ_PARAMETERS {
@@ -64,7 +58,6 @@ typedef struct _XENBUS_EVTCHN_VIRQ_PARAMETERS {
 
 typedef struct _XENBUS_EVTCHN_PARAMETERS {
     union {
-        XENBUS_EVTCHN_FIXED_PARAMETERS         Fixed;
         XENBUS_EVTCHN_UNBOUND_PARAMETERS       Unbound;
         XENBUS_EVTCHN_INTER_DOMAIN_PARAMETERS  InterDomain;
         XENBUS_EVTCHN_VIRQ_PARAMETERS          Virq;
@@ -84,6 +77,7 @@ struct _XENBUS_EVTCHN_CHANNEL {
     BOOLEAN                     Active; // Must be tested at >= DISPATCH_LEVEL
     XENBUS_EVTCHN_TYPE          Type;
     XENBUS_EVTCHN_PARAMETERS    Parameters;
+    BOOLEAN                     Mask;
     ULONG                       LocalPort;
 };
 
@@ -183,8 +177,7 @@ EvtchnOpenFixed(
     LocalPort = va_arg(Arguments, ULONG);
     Mask = va_arg(Arguments, BOOLEAN);
 
-    Channel->Parameters.Fixed.Mask = Mask;
-
+    Channel->Mask = Mask;
     Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
@@ -209,8 +202,8 @@ EvtchnOpenUnbound(
         goto fail1;
 
     Channel->Parameters.Unbound.RemoteDomain = RemoteDomain;
-    Channel->Parameters.Unbound.Mask = Mask;
 
+    Channel->Mask = Mask;
     Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
@@ -243,8 +236,8 @@ EvtchnOpenInterDomain(
 
     Channel->Parameters.InterDomain.RemoteDomain = RemoteDomain;
     Channel->Parameters.InterDomain.RemotePort = RemotePort;
-    Channel->Parameters.InterDomain.Mask = Mask;
 
+    Channel->Mask = Mask;
     Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
@@ -426,35 +419,10 @@ EvtchnUnmask(
                                      &Context->SharedInfoInterface,
                                      Channel->LocalPort);
 
-        if (Pending) {
-            BOOLEAN Mask = FALSE;
-
-            switch (Channel->Type) {
-            case XENBUS_EVTCHN_TYPE_FIXED:
-                Mask = Channel->Parameters.Fixed.Mask;
-                break;
-
-            case XENBUS_EVTCHN_TYPE_UNBOUND:
-                Mask = Channel->Parameters.Unbound.Mask;
-                break;
-
-            case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
-                Mask = Channel->Parameters.InterDomain.Mask;
-                break;
-
-            case XENBUS_EVTCHN_TYPE_VIRQ:
-                break;
-
-            default:
-                ASSERT(FALSE);
-                break;
-            }
-
-            if (Mask)
-                XENBUS_SHARED_INFO(EvtchnMask,
-                                   &Context->SharedInfoInterface,
-                                   Channel->LocalPort);
-        }
+        if (Pending && Channel->Mask)
+            XENBUS_SHARED_INFO(EvtchnMask,
+                               &Context->SharedInfoInterface,
+                               Channel->LocalPort);
     }
 
     if (!InCallback)
@@ -620,7 +588,6 @@ EvtchnPollCallback(
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Argument;
     PXENBUS_EVTCHN_CHANNEL  Channel;
-    BOOLEAN                 Mask;
     BOOLEAN                 DoneSomething;
     NTSTATUS                status;
 
@@ -639,30 +606,7 @@ EvtchnPollCallback(
         goto done;
     }
 
-    Mask = FALSE;
-
-    switch (Channel->Type) {
-    case XENBUS_EVTCHN_TYPE_FIXED:
-        Mask = Channel->Parameters.Fixed.Mask;
-        break;
-
-    case XENBUS_EVTCHN_TYPE_UNBOUND:
-        Mask = Channel->Parameters.Unbound.Mask;
-        break;
-
-    case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
-        Mask = Channel->Parameters.InterDomain.Mask;
-        break;
-
-    case XENBUS_EVTCHN_TYPE_VIRQ:
-        break;
-
-    default:
-        ASSERT(FALSE);
-        break;
-    }
-
-    if (Mask)
+    if (Channel->Mask)
         XENBUS_SHARED_INFO(EvtchnMask,
                            &Context->SharedInfoInterface,
                            LocalPort);
@@ -759,43 +703,42 @@ EvtchnDebugCallback(
             if (Name != NULL) {
                 XENBUS_DEBUG(Printf,
                              &Context->DebugInterface,
-                             "- (%04x) BY %s + %p [%s]\n",
+                             "- (%04x) BY %s + %p %s%s\n",
                              Channel->LocalPort,
                              Name,
                              (PVOID)Offset,
-                             (Channel->Active) ? "TRUE" : "FALSE");
+                             (Channel->Mask) ? "AUTO-MASK " : "",
+                             (Channel->Active) ? "ACTIVE" : "");
             } else {
                 XENBUS_DEBUG(Printf,
                              &Context->DebugInterface,
-                             "- (%04x) BY %p [%s]\n",
+                             "- (%04x) BY %p %s%s\n",
                              Channel->LocalPort,
                              (PVOID)Channel->Caller,
-                             (Channel->Active) ? "TRUE" : "FALSE");
+                             (Channel->Mask) ? "AUTO-MASK " : "",
+                             (Channel->Active) ? "ACTIVE" : "");
             }
 
             switch (Channel->Type) {
             case XENBUS_EVTCHN_TYPE_FIXED:
                 XENBUS_DEBUG(Printf,
                              &Context->DebugInterface,
-                             "FIXED: Mask = %s\n",
-                             (Channel->Parameters.Fixed.Mask) ? "TRUE" : "FALSE");
+                             "FIXED\n");
                 break;
 
             case XENBUS_EVTCHN_TYPE_UNBOUND:
                 XENBUS_DEBUG(Printf,
                              &Context->DebugInterface,
-                             "UNBOUND: RemoteDomain = %u Mask = %s\n",
-                             Channel->Parameters.Unbound.RemoteDomain,
-                             (Channel->Parameters.Unbound.Mask) ? "TRUE" : "FALSE");
+                             "UNBOUND: RemoteDomain = %u\n",
+                             Channel->Parameters.Unbound.RemoteDomain);
                 break;
 
             case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
                 XENBUS_DEBUG(Printf,
                              &Context->DebugInterface,
-                             "INTER_DOMAIN: RemoteDomain = %u RemotePort = %u Mask = %s\n",
+                             "INTER_DOMAIN: RemoteDomain = %u RemotePort = %u\n",
                              Channel->Parameters.InterDomain.RemoteDomain,
-                             Channel->Parameters.InterDomain.RemotePort,
-                             (Channel->Parameters.InterDomain.Mask) ? "TRUE" : "FALSE");
+                             Channel->Parameters.InterDomain.RemotePort);
                 break;
 
             case XENBUS_EVTCHN_TYPE_VIRQ:
