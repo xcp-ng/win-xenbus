@@ -129,6 +129,7 @@
     <ClCompile Include="..\..\src\xenbus\driver.c" />
     <ClCompile Include="..\..\src\xenbus\evtchn.c" />
     <ClCompile Include="..\..\src\xenbus\evtchn_2l.c" />
+    <ClCompile Include="..\..\src\xenbus\evtchn_fifo.c" />
     <ClCompile Include="..\..\src\xenbus\fdo.c" />
     <ClCompile Include="..\..\src\xenbus\gnttab.c" />
     <ClCompile Include="..\..\src\xenbus\pdo.c" />

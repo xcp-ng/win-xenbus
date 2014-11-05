@@ -136,17 +136,26 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindInterDomain(
-    IN  domid_t                     RemoteDomain,
-    IN  evtchn_port_t               RemotePort,
-    OUT evtchn_port_t               *LocalPort
+    IN  domid_t         RemoteDomain,
+    IN  evtchn_port_t   RemotePort,
+    OUT evtchn_port_t   *LocalPort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindVirq(
-    IN  uint32_t            Virq,
-    OUT evtchn_port_t       *LocalPort
+    IN  uint32_t        Virq,
+    OUT evtchn_port_t   *LocalPort
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelQueryInterDomain(
+    IN  evtchn_port_t   LocalPort,
+    OUT domid_t         *RemoteDomain,
+    OUT evtchn_port_t   *RemotePort
     );
 
 __checkReturn
@@ -154,6 +163,28 @@ XEN_API
 NTSTATUS
 EventChannelClose(
     IN  evtchn_port_t   LocalPort
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelExpandArray(
+    IN  PFN_NUMBER              Pfn
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelInitControl(
+    IN  PFN_NUMBER              Pfn,
+    IN  unsigned int            vcpu_id
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelReset(
+    VOID
     );
 
 // GRANT TABLE

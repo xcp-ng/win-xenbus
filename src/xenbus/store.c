@@ -1825,12 +1825,19 @@ StoreEnable(
     IN PXENBUS_STORE_CONTEXT    Context
     )
 {
-    ULONGLONG                   Port;
+    ULONGLONG                   Value;
+    ULONG                       Port;
     BOOLEAN                     Pending;
     NTSTATUS                    status;
 
-    status = HvmGetParam(HVM_PARAM_STORE_EVTCHN, &Port);
+    status = HvmGetParam(HVM_PARAM_STORE_EVTCHN, &Value);
     ASSERT(NT_SUCCESS(status));
+
+    Port = (ULONG)Value;
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "STORE: EVTCHN %u\n",
+              Port);
 
     Context->Channel = XENBUS_EVTCHN(Open,
                                      &Context->EvtchnInterface,

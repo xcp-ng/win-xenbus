@@ -36,6 +36,7 @@
 
 #include "evtchn.h"
 #include "evtchn_2l.h"
+#include "evtchn_fifo.h"
 #include "fdo.h"
 #include "hash_table.h"
 #include "dbg_print.h"
@@ -95,6 +96,7 @@ struct _XENBUS_EVTCHN_CONTEXT {
     PXENBUS_DEBUG_CALLBACK          DebugCallback;
     XENBUS_SHARED_INFO_INTERFACE    SharedInfoInterface;
     PXENBUS_EVTCHN_ABI_CONTEXT      EvtchnTwoLevelContext;
+    PXENBUS_EVTCHN_ABI_CONTEXT      EvtchnFifoContext;
     XENBUS_EVTCHN_ABI               EvtchnAbi;
     PXENBUS_HASH_TABLE              Table;
     LIST_ENTRY                      List;
@@ -234,7 +236,9 @@ EvtchnOpenInterDomain(
     RemotePort = va_arg(Arguments, ULONG);
     Mask = va_arg(Arguments, BOOLEAN);
 
-    status = EventChannelBindInterDomain(RemoteDomain, RemotePort, &LocalPort);
+    status = EventChannelBindInterDomain(RemoteDomain,
+                                         RemotePort,
+                                         &LocalPort);
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -666,6 +670,13 @@ EvtchnAbiAcquire(
 {
     NTSTATUS                    status;
 
+    EvtchnFifoGetAbi(Context->EvtchnFifoContext,
+                     &Context->EvtchnAbi);
+
+    status = XENBUS_EVTCHN_ABI(Acquire, &Context->EvtchnAbi);
+    if (NT_SUCCESS(status))
+        goto done;
+
     EvtchnTwoLevelGetAbi(Context->EvtchnTwoLevelContext,
                          &Context->EvtchnAbi);
 
@@ -673,6 +684,7 @@ EvtchnAbiAcquire(
     if (!NT_SUCCESS(status))
         goto fail1;
 
+done:
     return STATUS_SUCCESS;
 
 fail1:
@@ -1024,6 +1036,10 @@ EvtchnInitialize(
     if (!NT_SUCCESS(status))
         goto fail3;
 
+    status = EvtchnFifoInitialize(Fdo, &(*Context)->EvtchnFifoContext);
+    if (!NT_SUCCESS(status))
+        goto fail4;
+
     status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
                                  XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
                                  (PINTERFACE)&(*Context)->SuspendInterface,
@@ -1053,6 +1069,12 @@ EvtchnInitialize(
     Trace("<====\n");
 
     return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
+
+    EvtchnTwoLevelTeardown((*Context)->EvtchnTwoLevelContext);
+    (*Context)->EvtchnTwoLevelContext = NULL;
 
 fail3:
     Error("fail3\n");
@@ -1130,6 +1152,9 @@ EvtchnTeardown(
 
     RtlZeroMemory(&Context->SuspendInterface,
                   sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    EvtchnFifoTeardown(Context->EvtchnFifoContext);
+    Context->EvtchnFifoContext = NULL;
 
     EvtchnTwoLevelTeardown(Context->EvtchnTwoLevelContext);
     Context->EvtchnTwoLevelContext = NULL;

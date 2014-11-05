@@ -175,6 +175,47 @@ fail1:
 __checkReturn
 XEN_API
 NTSTATUS
+EventChannelQueryInterDomain(
+    IN  evtchn_port_t               LocalPort,
+    OUT domid_t                     *RemoteDomain,
+    OUT evtchn_port_t               *RemotePort
+    )
+{
+    struct evtchn_status            op;
+    LONG_PTR                        rc;
+    NTSTATUS                        status;
+
+    op.dom = DOMID_SELF;
+    op.port = LocalPort;
+
+    rc = EventChannelOp(EVTCHNOP_status, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    status = STATUS_INVALID_PARAMETER;
+    if (op.status != EVTCHNSTAT_interdomain)
+        goto fail2;
+
+    *RemoteDomain = op.u.interdomain.dom;
+    *RemotePort = op.u.interdomain.port;
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__checkReturn
+XEN_API
+NTSTATUS
 EventChannelClose(
     IN  evtchn_port_t   LocalPort
     )
@@ -186,6 +227,93 @@ EventChannelClose(
     op.port = LocalPort;
 
     rc = EventChannelOp(EVTCHNOP_close, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelExpandArray(
+    IN  PFN_NUMBER              Pfn
+    )
+{
+    struct evtchn_expand_array  op;
+    LONG_PTR                    rc;
+    NTSTATUS                    status;
+
+    op.array_gfn = Pfn;
+
+    rc = EventChannelOp(EVTCHNOP_expand_array, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelInitControl(
+    IN  PFN_NUMBER              Pfn,
+    IN  unsigned int            vcpu_id
+    )
+{
+    struct evtchn_init_control  op;
+    LONG_PTR                    rc;
+    NTSTATUS                    status;
+
+    op.control_gfn = Pfn;
+    op.offset = 0;
+    op.vcpu = vcpu_id;
+
+    rc = EventChannelOp(EVTCHNOP_init_control, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelReset(
+    VOID
+    )
+{
+    struct evtchn_reset op;
+    LONG_PTR            rc;
+    NTSTATUS            status;
+
+    op.dom = DOMID_SELF;
+
+    rc = EventChannelOp(EVTCHNOP_reset, &op);
 
     if (rc < 0) {
         ERRNO_TO_STATUS(-rc, status);
