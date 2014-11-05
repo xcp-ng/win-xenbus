@@ -44,6 +44,7 @@
 #include <xen/sched.h>
 #include <xen/hvm/params.h>
 #include <xen/io/xs_wire.h>
+#include <xen/version.h>
 
 #ifndef XEN_API
 #define XEN_API __declspec(dllimport)
@@ -53,6 +54,14 @@
 XEN_API
 VOID
 XenTouch(
+    VOID
+    );
+
+// HYPERCALL
+
+XEN_API
+VOID
+HypercallPopulate(
     VOID
     );
 
@@ -231,6 +240,23 @@ XEN_API
 VOID
 SchedYield(
     VOID
+    );
+
+// XEN VERSION
+
+__checkReturn
+XEN_API
+NTSTATUS
+XenVersion(
+    OUT PULONG  Major,
+    OUT PULONG  Minor
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+XenVersionExtra(
+    OUT PCHAR   Extra
     );
 
 // MODULE

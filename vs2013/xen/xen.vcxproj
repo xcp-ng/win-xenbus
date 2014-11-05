@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\configs.props" />
   <PropertyGroup Label="Globals">
@@ -128,6 +128,7 @@
     <ClCompile Include="..\..\src\xen\event_channel.c" />
     <ClCompile Include="..\..\src\xen\grant_table.c" />
     <ClCompile Include="..\..\src\xen\hvm.c" />
+    <ClCompile Include="..\..\src\xen\xen_version.c" />
     <ClCompile Include="..\..\src\xen\hypercall.c" />
     <ClCompile Include="..\..\src\xen\memory.c" />
     <ClCompile Include="..\..\src\xen\sched.c" />

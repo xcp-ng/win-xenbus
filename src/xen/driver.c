@@ -59,6 +59,26 @@ XenTouch(
     VOID
     )
 {
+    static ULONG    Reference;
+    ULONG           Major;
+    ULONG           Minor;
+    CHAR            Extra[XEN_EXTRAVERSION_LEN];
+    NTSTATUS        status;
+
+    if (Reference++ != 0)
+        return;
+
+    status = XenVersion(&Major, &Minor);
+    ASSERT(NT_SUCCESS(status));
+
+    status = XenVersionExtra(Extra);
+    ASSERT(NT_SUCCESS(status));
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "XEN: %u.%u%s\n",
+              Major,
+              Minor,
+              Extra);
 }
 
 static VOID

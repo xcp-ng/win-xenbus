@@ -29,6 +29,9 @@
  * SUCH DAMAGE.
  */
 
+#undef  XEN_API
+#define XEN_API __declspec(dllexport)
+
 #include <ntddk.h>
 #include <xen.h>
 #include <util.h>
@@ -37,24 +40,41 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-#define MAXIMUM_HYPERCALL_PFN_COUNT 2
+#define MAXIMUM_HYPERCALL_PAGE_COUNT 2
 
 #pragma code_seg("hypercall")
 __declspec(allocate("hypercall"))
-static UCHAR        __Section[(MAXIMUM_HYPERCALL_PFN_COUNT + 1) * PAGE_SIZE];
+static UCHAR        __Section[(MAXIMUM_HYPERCALL_PAGE_COUNT + 1) * PAGE_SIZE];
 
 static ULONG        XenBaseLeaf = 0x40000000;
 
-static USHORT       XenMajorVersion;
-static USHORT       XenMinorVersion;
-
-static PFN_NUMBER   HypercallPfn[MAXIMUM_HYPERCALL_PFN_COUNT];
-static ULONG        HypercallPfnCount;
+static PHYSICAL_ADDRESS HypercallPage[MAXIMUM_HYPERCALL_PAGE_COUNT];
+static ULONG            HypercallPageCount;
 
 typedef UCHAR           HYPERCALL_GATE[32];
 typedef HYPERCALL_GATE  *PHYPERCALL_GATE;
 
 PHYPERCALL_GATE     Hypercall;
+ULONG               HypercallMsr;
+
+XEN_API
+VOID
+HypercallPopulate(
+    VOID
+    )
+{
+    ULONG       Index;
+
+    for (Index = 0; Index < HypercallPageCount; Index++) {
+        LogPrintf(LOG_LEVEL_INFO,
+                  "XEN: HYPERCALL PAGE %d @ %08x.%08x\n",
+                  Index,
+                  HypercallPage[Index].HighPart,
+                  HypercallPage[Index].LowPart);
+
+        __writemsr(HypercallMsr, HypercallPage[Index].QuadPart);
+    }
+}
 
 NTSTATUS
 HypercallInitialize(
@@ -66,7 +86,6 @@ HypercallInitialize(
     ULONG       ECX = 'DEAD';
     ULONG       EDX = 'DEAD';
     ULONG       Index;
-    ULONG       HypercallMsr;
     NTSTATUS    status;
 
     status = STATUS_UNSUCCESSFUL;
@@ -88,13 +107,6 @@ HypercallInitialize(
             goto fail1;
     }
 
-    __CpuId(XenBaseLeaf + 1, &EAX, NULL, NULL, NULL);
-    XenMajorVersion = (USHORT)(EAX >> 16);
-    XenMinorVersion = (USHORT)(EAX & 0xFFFF);
-
-    Info("XEN %d.%d\n", XenMajorVersion, XenMinorVersion);
-    Info("INTERFACE 0x%08x\n", __XEN_INTERFACE_VERSION__);
-
     if ((ULONG_PTR)__Section & (PAGE_SIZE - 1))
         Hypercall = (PVOID)(((ULONG_PTR)__Section + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1));
     else
@@ -102,22 +114,16 @@ HypercallInitialize(
 
     ASSERT3U(((ULONG_PTR)Hypercall & (PAGE_SIZE - 1)), ==, 0);
 
-    for (Index = 0; Index < MAXIMUM_HYPERCALL_PFN_COUNT; Index++) {
-        PHYSICAL_ADDRESS    PhysicalAddress;
-
-        PhysicalAddress = MmGetPhysicalAddress((PUCHAR)Hypercall + (Index << PAGE_SHIFT));
-        HypercallPfn[Index] = (PFN_NUMBER)(PhysicalAddress.QuadPart >> PAGE_SHIFT);
-    }
+    for (Index = 0; Index < MAXIMUM_HYPERCALL_PAGE_COUNT; Index++)
+        HypercallPage[Index] = MmGetPhysicalAddress((PUCHAR)Hypercall +
+                                                    (Index << PAGE_SHIFT));
 
     __CpuId(XenBaseLeaf + 2, &EAX, &EBX, NULL, NULL);
-    HypercallPfnCount = EAX;
-    ASSERT(HypercallPfnCount <= MAXIMUM_HYPERCALL_PFN_COUNT);
+    HypercallPageCount = EAX;
+    ASSERT(HypercallPageCount <= MAXIMUM_HYPERCALL_PAGE_COUNT);
     HypercallMsr = EBX;
 
-    for (Index = 0; Index < HypercallPfnCount; Index++) {
-        Info("HypercallPfn[%d]: %p\n", Index, (PVOID)HypercallPfn[Index]);
-        __writemsr(HypercallMsr, (ULONG64)HypercallPfn[Index] << PAGE_SHIFT);
-    }
+    HypercallPopulate();
 
     return STATUS_SUCCESS;
 
@@ -177,8 +183,8 @@ HypercallTeardown(
 
     Hypercall = NULL;
 
-    for (Index = 0; Index < MAXIMUM_HYPERCALL_PFN_COUNT; Index++)
-        HypercallPfn[Index] = 0;
+    for (Index = 0; Index < MAXIMUM_HYPERCALL_PAGE_COUNT; Index++)
+        HypercallPage[Index].QuadPart = 0;
 
-    HypercallPfnCount = 0;
+    HypercallPageCount = 0;
 }

@@ -88,6 +88,7 @@
 		<ClCompile Include="..\..\src\xen\event_channel.c" />
 		<ClCompile Include="..\..\src\xen\grant_table.c" />
 		<ClCompile Include="..\..\src\xen\hvm.c" />
+		<ClCompile Include="..\..\src\xen\xen_version.c" />
 		<ClCompile Include="..\..\src\xen\hypercall.c" />
 		<ClCompile Include="..\..\src\xen\memory.c" />
 		<ClCompile Include="..\..\src\xen\sched.c" />

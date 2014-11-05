@@ -173,6 +173,8 @@ SuspendTrigger(
 
         Context->Count++;
 
+        HypercallPopulate();
+
         if (Context->UnplugInterface.Interface.Context != NULL)
             XENFILT_UNPLUG(Replay, &Context->UnplugInterface);
 

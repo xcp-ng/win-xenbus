@@ -2186,6 +2186,8 @@ FdoS4ToS3(
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
+    HypercallPopulate();
+
     if (Fdo->UnplugInterface.Interface.Context != NULL)
         XENFILT_UNPLUG(Replay, &Fdo->UnplugInterface);
 

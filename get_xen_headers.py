@@ -61,6 +61,8 @@ if __name__ == '__main__':
     copy_file(working, 'public', '.', 'sched.h')
     copy_file(working, 'public', '.', 'event_channel.h')
     copy_file(working, 'public', '.', 'grant_table.h')
+    copy_file(working, 'public', '.', 'version.h')
+    copy_file(working, 'public', '.', 'features.h')
 
     copy_file(working, 'xen', '.', 'errno.h')
 
