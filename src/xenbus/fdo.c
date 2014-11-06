@@ -45,6 +45,7 @@
 #include "fdo.h"
 #include "pdo.h"
 #include "thread.h"
+#include "high.h"
 #include "mutex.h"
 #include "shared_info.h"
 #include "evtchn.h"
@@ -64,16 +65,17 @@
 
 #define MAXNAMELEN  128
 
-typedef enum _XENBUS_RESOURCE_TYPE {
-    MEMORY_RESOURCE = 0,
-    INTERRUPT_RESOURCE,
-    RESOURCE_COUNT
-} XENBUS_RESOURCE_TYPE, *PXENBUS_RESOURCE_TYPE;
-
-typedef struct _XENBUS_RESOURCE {
-    CM_PARTIAL_RESOURCE_DESCRIPTOR Raw;
-    CM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
-} XENBUS_RESOURCE, *PXENBUS_RESOURCE;
+struct _XENBUS_INTERRUPT {
+    PXENBUS_FDO         Fdo;
+    LIST_ENTRY          ListEntry;
+    KINTERRUPT_MODE     InterruptMode;
+    PKINTERRUPT         InterruptObject;
+    ULONG               Cpu;
+    UCHAR               Vector;
+    ULONG               Line;
+    PKSERVICE_ROUTINE   Callback;
+    PVOID               Argument;
+};
 
 struct _XENBUS_FDO {
     PXENBUS_DX                      Dx;
@@ -108,8 +110,8 @@ struct _XENBUS_FDO {
     PXENBUS_STORE_WATCH             BalloonWatch;
     MUTEX                           BalloonSuspendMutex;
 
-    XENBUS_RESOURCE                 Resource[RESOURCE_COUNT];
-    PKINTERRUPT                     InterruptObject;
+    PCM_PARTIAL_RESOURCE_LIST       RawResourceList;
+    PCM_PARTIAL_RESOURCE_LIST       TranslatedResourceList;
 
     PXENBUS_SUSPEND_CONTEXT         SuspendContext;
     PXENBUS_SHARED_INFO_CONTEXT     SharedInfoContext;
@@ -129,9 +131,11 @@ struct _XENBUS_FDO {
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
     XENFILT_UNPLUG_INTERFACE        UnplugInterface;
 
+    PXENBUS_RANGE_SET               RangeSet;
+    LIST_ENTRY                      List;
+
     PXENBUS_EVTCHN_CHANNEL          Channel;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
-    PXENBUS_RANGE_SET               RangeSet;
 };
 
 static FORCEINLINE PVOID
@@ -185,6 +189,16 @@ __FdoGetDevicePnpState(
     PXENBUS_DX      Dx = Fdo->Dx;
 
     return Dx->DevicePnpState;
+}
+
+static FORCEINLINE DEVICE_PNP_STATE
+__FdoGetPreviousDevicePnpState(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    PXENBUS_DX      Dx = Fdo->Dx;
+
+    return Dx->PreviousDevicePnpState;
 }
 
 static FORCEINLINE VOID
@@ -1383,153 +1397,523 @@ loop:
 }
 
 static VOID
-FdoParseResources(
+FdoDumpIoResourceDescriptor(
     IN  PXENBUS_FDO             Fdo,
-    IN  PCM_RESOURCE_LIST       RawResourceList,
-    IN  PCM_RESOURCE_LIST       TranslatedResourceList
+    IN  PIO_RESOURCE_DESCRIPTOR Descriptor
     )
 {
-    PCM_PARTIAL_RESOURCE_LIST   RawPartialList;
-    PCM_PARTIAL_RESOURCE_LIST   TranslatedPartialList;
-    ULONG                       Index;
+    Trace("%s: %s\n",
+          __FdoGetName(Fdo),
+          ResourceDescriptorTypeName(Descriptor->Type));
 
-    ASSERT3U(RawResourceList->Count, ==, 1);
-    RawPartialList = &RawResourceList->List[0].PartialResourceList;
+    if (Descriptor->Option == 0)
+        Trace("Required\n");
+    else if (Descriptor->Option == IO_RESOURCE_ALTERNATIVE)
+        Trace("Alternative\n");
+    else if (Descriptor->Option == IO_RESOURCE_PREFERRED)
+        Trace("Preferred\n");
+    else if (Descriptor->Option == (IO_RESOURCE_ALTERNATIVE | IO_RESOURCE_PREFERRED))
+        Trace("Preferred Alternative\n");
 
-    ASSERT3U(RawPartialList->Version, ==, 1);
-    ASSERT3U(RawPartialList->Revision, ==, 1);
+    Trace("ShareDisposition=%s Flags=%04x\n",
+          ResourceDescriptorShareDispositionName(Descriptor->ShareDisposition),
+          Descriptor->Flags);
 
-    ASSERT3U(TranslatedResourceList->Count, ==, 1);
-    TranslatedPartialList = &TranslatedResourceList->List[0].PartialResourceList;
+    switch (Descriptor->Type) {
+    case CmResourceTypeMemory:
+        Trace("Length = %08x Alignment = %08x\n MinimumAddress = %08x.%08x MaximumAddress = %08x.%08x\n",
+              Descriptor->u.Memory.Length,
+              Descriptor->u.Memory.Alignment,
+              Descriptor->u.Memory.MinimumAddress.HighPart,
+              Descriptor->u.Memory.MinimumAddress.LowPart,
+              Descriptor->u.Memory.MaximumAddress.HighPart,
+              Descriptor->u.Memory.MaximumAddress.LowPart);
+        break;
 
-    ASSERT3U(TranslatedPartialList->Version, ==, 1);
-    ASSERT3U(TranslatedPartialList->Revision, ==, 1);
+    case CmResourceTypeInterrupt:
+        Trace("MinimumVector=%08x MaximumVector=%08x AffinityPolicy=%s PriorityPolicy=%s TargettedProcessors = %p\n",
+              Descriptor->u.Interrupt.MinimumVector,
+              Descriptor->u.Interrupt.MaximumVector,
+              IrqDevicePolicyName(Descriptor->u.Interrupt.AffinityPolicy),
+              IrqPriorityName(Descriptor->u.Interrupt.PriorityPolicy),
+              (PVOID)Descriptor->u.Interrupt.TargetedProcessors);
+        break;
 
-    for (Index = 0; Index < TranslatedPartialList->Count; Index++) {
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR RawPartialDescriptor;
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR TranslatedPartialDescriptor;
-
-        RawPartialDescriptor = &RawPartialList->PartialDescriptors[Index];
-        TranslatedPartialDescriptor = &TranslatedPartialList->PartialDescriptors[Index];
-
-        Trace("%s: [%d] %02x:%s\n",
-              __FdoGetName(Fdo),
-              Index,
-              TranslatedPartialDescriptor->Type,
-              PartialResourceDescriptorTypeName(TranslatedPartialDescriptor->Type));
-
-        switch (TranslatedPartialDescriptor->Type) {
-        case CmResourceTypeMemory:
-            Trace("RAW: SharedDisposition=%02x Flags=%04x Start = %08x.%08x Length = %08x\n",
-                  RawPartialDescriptor->ShareDisposition,
-                  RawPartialDescriptor->Flags,
-                  RawPartialDescriptor->u.Memory.Start.HighPart,
-                  RawPartialDescriptor->u.Memory.Start.LowPart,
-                  RawPartialDescriptor->u.Memory.Length);
-
-            Trace("TRANSLATED: SharedDisposition=%02x Flags=%04x Start = %08x.%08x Length = %08x\n",
-                  TranslatedPartialDescriptor->ShareDisposition,
-                  TranslatedPartialDescriptor->Flags,
-                  TranslatedPartialDescriptor->u.Memory.Start.HighPart,
-                  TranslatedPartialDescriptor->u.Memory.Start.LowPart,
-                  TranslatedPartialDescriptor->u.Memory.Length);
-
-            Fdo->Resource[MEMORY_RESOURCE].Raw = *RawPartialDescriptor;
-            Fdo->Resource[MEMORY_RESOURCE].Translated = *TranslatedPartialDescriptor;
-
-            break;
-
-        case CmResourceTypeInterrupt:
-            Trace("RAW: SharedDisposition=%02x Flags=%04x Level = %08x Vector = %08x Affinity = %p\n",
-                  RawPartialDescriptor->ShareDisposition,
-                  RawPartialDescriptor->Flags,
-                  RawPartialDescriptor->u.Interrupt.Level,
-                  RawPartialDescriptor->u.Interrupt.Vector,
-                  (PVOID)RawPartialDescriptor->u.Interrupt.Affinity);
-
-            Trace("TRANSLATED: SharedDisposition=%02x Flags=%04x Level = %08x Vector = %08x Affinity = %p\n",
-                  TranslatedPartialDescriptor->ShareDisposition,
-                  TranslatedPartialDescriptor->Flags,
-                  TranslatedPartialDescriptor->u.Interrupt.Level,
-                  TranslatedPartialDescriptor->u.Interrupt.Vector,
-                  (PVOID)TranslatedPartialDescriptor->u.Interrupt.Affinity);
-
-            Fdo->Resource[INTERRUPT_RESOURCE].Raw = *RawPartialDescriptor;
-            Fdo->Resource[INTERRUPT_RESOURCE].Translated = *TranslatedPartialDescriptor;
-
-            break;
-
-        default:
-            break;
-        }
+    default:
+        break;
     }
-
-    Trace("<====\n");
 }
 
-static FORCEINLINE PXENBUS_RESOURCE
-__FdoGetResource(
-    IN  PXENBUS_FDO             Fdo,
-    IN  XENBUS_RESOURCE_TYPE    Type
+static VOID
+FdoDumpIoResourceList(
+    IN  PXENBUS_FDO         Fdo,
+    IN  PIO_RESOURCE_LIST   List
     )
 {
-    ASSERT3U(Type, <, RESOURCE_COUNT);
+    ULONG                   Index;
 
-    return &Fdo->Resource[Type];
+    for (Index = 0; Index < List->Count; Index++) {
+        PIO_RESOURCE_DESCRIPTOR Descriptor = &List->Descriptors[Index];
+
+        Trace("%s: %d\n",
+              __FdoGetName(Fdo),
+              Index);
+
+        FdoDumpIoResourceDescriptor(Fdo, Descriptor);
+    }
+}
+
+static NTSTATUS
+FdoFilterResourceRequirements(
+    IN  PXENBUS_FDO                 Fdo,
+    IN  PIRP                        Irp
+    )
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST  Old;
+    ULONG                           Size;
+    PIO_RESOURCE_REQUIREMENTS_LIST  New;
+    IO_RESOURCE_DESCRIPTOR          Interrupt;
+    PIO_RESOURCE_LIST               List;
+    ULONG                           Index;
+    NTSTATUS                        status;
+
+    status = FdoForwardIrpSynchronously(Fdo, Irp);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    if (!__FdoIsActive(Fdo))
+        goto not_active;
+
+    Old = (PIO_RESOURCE_REQUIREMENTS_LIST)Irp->IoStatus.Information;
+    ASSERT3U(Old->AlternativeLists, ==, 1);
+
+    Size = Old->ListSize +
+        (sizeof (IO_RESOURCE_DESCRIPTOR) * KeNumberProcessors);
+
+    New = __AllocatePoolWithTag(PagedPool, Size, 'SUB');
+
+    status = STATUS_NO_MEMORY;
+    if (New == NULL)
+        goto fail2;
+
+    RtlCopyMemory(New, Old, Old->ListSize);
+    New->ListSize = Size;
+
+    List = &New->List[0];
+
+    for (Index = 0; Index < List->Count; Index++) {
+        PIO_RESOURCE_DESCRIPTOR Descriptor = &List->Descriptors[Index];
+
+        if (Descriptor->Type != CmResourceTypeInterrupt)
+            continue;
+
+        Descriptor->Flags |= CM_RESOURCE_INTERRUPT_POLICY_INCLUDED;
+        Descriptor->u.Interrupt.AffinityPolicy = IrqPolicySpecifiedProcessors;
+        Descriptor->u.Interrupt.TargetedProcessors = (KAFFINITY)1;
+    }
+
+    RtlZeroMemory(&Interrupt, sizeof (IO_RESOURCE_DESCRIPTOR));
+    Interrupt.Option = 0; // Required
+    Interrupt.Type = CmResourceTypeInterrupt;
+    Interrupt.ShareDisposition = CmResourceShareDeviceExclusive;
+    Interrupt.Flags = CM_RESOURCE_INTERRUPT_LATCHED |
+                      CM_RESOURCE_INTERRUPT_MESSAGE |
+                      CM_RESOURCE_INTERRUPT_POLICY_INCLUDED;
+
+    Interrupt.u.Interrupt.MinimumVector = CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN;
+    Interrupt.u.Interrupt.MaximumVector = CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN;
+    Interrupt.u.Interrupt.AffinityPolicy = IrqPolicySpecifiedProcessors;
+    Interrupt.u.Interrupt.PriorityPolicy = IrqPriorityUndefined;
+
+    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++) {
+        Interrupt.u.Interrupt.TargetedProcessors = (KAFFINITY)1 << Index;
+        List->Descriptors[List->Count++] = Interrupt;
+    }
+
+    FdoDumpIoResourceList(Fdo, List);
+
+    Irp->IoStatus.Information = (ULONG_PTR)New;
+    status = STATUS_SUCCESS;
+
+    ExFreePool(Old);
+
+not_active:
+    status = Irp->IoStatus.Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    return status;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    Irp->IoStatus.Status = status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    return status;
+}
+
+static VOID
+FdoDumpCmPartialResourceDescriptor(
+    IN  PXENBUS_FDO                     Fdo,
+    IN  BOOLEAN                         Translated,
+    IN  PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor
+    )
+{
+    Trace("%s: %s: %s SharedDisposition=%s Flags=%04x\n",
+          __FdoGetName(Fdo),
+          (Translated) ? "TRANSLATED" : "RAW",
+          ResourceDescriptorTypeName(Descriptor->Type),
+          ResourceDescriptorShareDispositionName(Descriptor->ShareDisposition),
+          Descriptor->Flags);
+    
+    switch (Descriptor->Type) {
+    case CmResourceTypeMemory:
+        Trace("%s: %s: Start = %08x.%08x Length = %08x\n",
+              __FdoGetName(Fdo),
+              (Translated) ? "TRANSLATED" : "RAW",
+              Descriptor->u.Memory.Start.HighPart,
+              Descriptor->u.Memory.Start.LowPart,
+              Descriptor->u.Memory.Length);
+        break;
+
+    case CmResourceTypeInterrupt:
+        if (Descriptor->Flags & CM_RESOURCE_INTERRUPT_MESSAGE) {
+            if (Translated)
+                Trace("%s: TRANSLATED: Level = %08x Vector = %08x Affinity = %p\n",
+                      __FdoGetName(Fdo),
+                      Descriptor->u.MessageInterrupt.Translated.Level,
+                      Descriptor->u.MessageInterrupt.Translated.Vector,
+                      (PVOID)Descriptor->u.MessageInterrupt.Translated.Affinity);
+            else
+                Trace("%s: RAW: MessageCount = %08x Vector = %08x Affinity = %p\n",
+                      __FdoGetName(Fdo),
+                      Descriptor->u.MessageInterrupt.Raw.MessageCount,
+                      Descriptor->u.MessageInterrupt.Raw.Vector,
+                      (PVOID)Descriptor->u.MessageInterrupt.Raw.Affinity);
+        } else {
+            Trace("%s: %s: Level = %08x Vector = %08x Affinity = %p\n",
+                  __FdoGetName(Fdo),
+                  (Translated) ? "TRANSLATED" : "RAW",
+                  Descriptor->u.Interrupt.Level,
+                  Descriptor->u.Interrupt.Vector,
+                  (PVOID)Descriptor->u.Interrupt.Affinity);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static VOID
+FdoDumpCmPartialResourceList(
+    IN  PXENBUS_FDO                 Fdo,
+    IN  BOOLEAN                     Translated,
+    IN  PCM_PARTIAL_RESOURCE_LIST   List
+    )
+{
+    ULONG                           Index;
+
+    Trace("%s: %s: Version = %d Revision = %d Count = %d\n",
+          __FdoGetName(Fdo),
+          (Translated) ? "TRANSLATED" : "RAW",
+          List->Version,
+          List->Revision,
+          List->Count);
+
+    for (Index = 0; Index < List->Count; Index++) {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor = &List->PartialDescriptors[Index];
+
+        Trace("%s: %s: %d\n",
+              __FdoGetName(Fdo),
+              (Translated) ? "TRANSLATED" : "RAW",
+              Index);
+
+        FdoDumpCmPartialResourceDescriptor(Fdo, Translated, Descriptor);
+    }
+}
+
+static VOID
+FdoDumpCmFullResourceDescriptor(
+    IN  PXENBUS_FDO                     Fdo,
+    IN  BOOLEAN                         Translated,
+    IN  PCM_FULL_RESOURCE_DESCRIPTOR    Descriptor
+    )
+{
+    Trace("%s: %s: InterfaceType = %s BusNumber = %d\n",
+          __FdoGetName(Fdo),
+          (Translated) ? "TRANSLATED" : "RAW",
+          InterfaceTypeName(Descriptor->InterfaceType),
+          Descriptor->BusNumber);
+
+    FdoDumpCmPartialResourceList(Fdo, Translated, &Descriptor->PartialResourceList);
+}
+
+static VOID
+FdoDumpCmResourceList(
+    IN  PXENBUS_FDO         Fdo,
+    IN  BOOLEAN             Translated,
+    IN  PCM_RESOURCE_LIST   List
+    )
+{
+    FdoDumpCmFullResourceDescriptor(Fdo, Translated, &List->List[0]);
+}
+
+_IRQL_requires_max_(HIGH_LEVEL)
+_IRQL_saves_
+_IRQL_raises_(HIGH_LEVEL)
+KIRQL
+FdoAcquireInterruptLock(
+    IN  PXENBUS_FDO         Fdo,
+    IN  PXENBUS_INTERRUPT   Interrupt
+    )
+{
+    UNREFERENCED_PARAMETER(Fdo);
+
+    return KeAcquireInterruptSpinLock(Interrupt->InterruptObject);
+}
+
+_IRQL_requires_(HIGH_LEVEL)
+VOID
+FdoReleaseInterruptLock(
+    IN  PXENBUS_FDO                 Fdo,
+    IN  PXENBUS_INTERRUPT           Interrupt,
+    IN  __drv_restoresIRQL KIRQL    Irql
+    )
+{
+    UNREFERENCED_PARAMETER(Fdo);
+
+    KeReleaseInterruptSpinLock(Interrupt->InterruptObject, Irql);
 }
 
 static
 _Function_class_(KSERVICE_ROUTINE)
-_IRQL_requires_(HIGH_LEVEL)
-_IRQL_requires_same_
+__drv_requiresIRQL(HIGH_LEVEL)
 BOOLEAN
-FdoInterrupt(
+FdoInterruptCallback(
     IN  PKINTERRUPT             InterruptObject,
     IN  PVOID                   Context
     )
 {
-    PXENBUS_FDO                 Fdo = Context;
+    PXENBUS_INTERRUPT           Interrupt = Context;
 
-    UNREFERENCED_PARAMETER(InterruptObject);
+    if (Interrupt->Callback == NULL)
+        return FALSE;
 
-    ASSERT(Fdo != NULL);
-
-    return EvtchnInterrupt(__FdoGetEvtchnContext(Fdo));
+    return Interrupt->Callback(InterruptObject,
+                               Interrupt->Argument);
 }
 
 static NTSTATUS
 FdoConnectInterrupt(
-    IN  PXENBUS_FDO                 Fdo
+    IN  PXENBUS_FDO                     Fdo,
+    IN  PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw,
+    IN  PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated,
+    OUT PXENBUS_INTERRUPT               *Interrupt
     )
 {
-    PXENBUS_RESOURCE                Interrupt;
-    IO_CONNECT_INTERRUPT_PARAMETERS Connect;
-    NTSTATUS                        status;
+    IO_CONNECT_INTERRUPT_PARAMETERS     Connect;
+    ULONG                               Cpu;
+    NTSTATUS                            status;
 
     Trace("====>\n");
 
-    Interrupt = __FdoGetResource(Fdo, INTERRUPT_RESOURCE);
+    *Interrupt = __FdoAllocate(sizeof (XENBUS_INTERRUPT));
+
+    status = STATUS_NO_MEMORY;
+    if (*Interrupt == NULL)
+        goto fail1;
+
+    (*Interrupt)->Fdo = Fdo;
+    (*Interrupt)->InterruptMode = (Translated->Flags & CM_RESOURCE_INTERRUPT_LATCHED) ?
+                                  Latched :
+                                  LevelSensitive;
+
+    if (~Translated->Flags & CM_RESOURCE_INTERRUPT_MESSAGE)
+        (*Interrupt)->Line = Raw->u.Interrupt.Vector;
 
     RtlZeroMemory(&Connect, sizeof (IO_CONNECT_INTERRUPT_PARAMETERS));
     Connect.Version = CONNECT_FULLY_SPECIFIED;
     Connect.FullySpecified.PhysicalDeviceObject = __FdoGetPhysicalDeviceObject(Fdo);
-    Connect.FullySpecified.SynchronizeIrql = (KIRQL)Interrupt->Translated.u.Interrupt.Level;
-    Connect.FullySpecified.ShareVector = (BOOLEAN)(Interrupt->Translated.ShareDisposition == CmResourceShareShared);
-    Connect.FullySpecified.Vector = Interrupt->Translated.u.Interrupt.Vector;
-    Connect.FullySpecified.Irql = (KIRQL)Interrupt->Translated.u.Interrupt.Level;
-    Connect.FullySpecified.InterruptMode = (Interrupt->Translated.Flags & CM_RESOURCE_INTERRUPT_LATCHED) ?
-                                           Latched :
-                                           LevelSensitive;
-    Connect.FullySpecified.ProcessorEnableMask = Interrupt->Translated.u.Interrupt.Affinity;
-    Connect.FullySpecified.InterruptObject = &Fdo->InterruptObject;
-    Connect.FullySpecified.ServiceRoutine = FdoInterrupt;
-    Connect.FullySpecified.ServiceContext = Fdo;
+    Connect.FullySpecified.ShareVector = (BOOLEAN)(Translated->ShareDisposition == CmResourceShareShared);
+    Connect.FullySpecified.InterruptMode = (*Interrupt)->InterruptMode;
+    Connect.FullySpecified.InterruptObject = &(*Interrupt)->InterruptObject;
+    Connect.FullySpecified.ServiceRoutine = FdoInterruptCallback;
+    Connect.FullySpecified.ServiceContext = *Interrupt;
+
+    if (Translated->Flags & CM_RESOURCE_INTERRUPT_MESSAGE) {
+        Connect.FullySpecified.Vector = Translated->u.MessageInterrupt.Translated.Vector;
+        Connect.FullySpecified.Irql = (KIRQL)Translated->u.MessageInterrupt.Translated.Level;
+        Connect.FullySpecified.SynchronizeIrql = (KIRQL)Translated->u.MessageInterrupt.Translated.Level;
+        Connect.FullySpecified.ProcessorEnableMask = Translated->u.MessageInterrupt.Translated.Affinity;
+    } else {
+        Connect.FullySpecified.Vector = Translated->u.Interrupt.Vector;
+        Connect.FullySpecified.Irql = (KIRQL)Translated->u.Interrupt.Level;
+        Connect.FullySpecified.SynchronizeIrql = (KIRQL)Translated->u.Interrupt.Level;
+        Connect.FullySpecified.ProcessorEnableMask = Translated->u.Interrupt.Affinity;
+    }
 
     status = IoConnectInterruptEx(&Connect);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
+
+    (*Interrupt)->Vector = (UCHAR)Connect.FullySpecified.Vector;
+
+#if defined(__i386__)
+    (VOID)_BitScanReverse(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
+#elif defined(__x86_64__)
+    (VOID)_BitScanReverse64(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
+#else
+#error 'Unrecognised architecture'
+#endif
+
+    (*Interrupt)->Cpu = Cpu;
+
+    Info("%p: %s %s CPU %u VECTOR %02x\n",
+         (*Interrupt)->InterruptObject,
+         ResourceDescriptorShareDispositionName(Translated->ShareDisposition),
+         InterruptModeName((*Interrupt)->InterruptMode),
+         (*Interrupt)->Cpu,
+         (*Interrupt)->Vector);
 
     Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    __FdoFree(*Interrupt);
+    *Interrupt = NULL;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+FdoDisconnectInterrupt(
+    IN  PXENBUS_FDO                     Fdo,
+    IN  PXENBUS_INTERRUPT               Interrupt
+    )
+{
+    IO_DISCONNECT_INTERRUPT_PARAMETERS  Disconnect;
+
+    UNREFERENCED_PARAMETER(Fdo);
+
+    Trace("====>\n");
+
+    Info("%p: CPU %u VECTOR %02x\n",
+         Interrupt->InterruptObject,
+         Interrupt->Cpu,
+         Interrupt->Vector);
+
+    Interrupt->Cpu = 0;
+    Interrupt->Vector = 0;
+
+    RtlZeroMemory(&Disconnect, sizeof (IO_DISCONNECT_INTERRUPT_PARAMETERS));
+    Disconnect.Version = CONNECT_FULLY_SPECIFIED;
+    Disconnect.ConnectionContext.InterruptObject = Interrupt->InterruptObject;
+
+    IoDisconnectInterruptEx(&Disconnect);
+
+    Interrupt->Line = 0;
+    Interrupt->InterruptObject = NULL;
+    Interrupt->InterruptMode = 0;
+    Interrupt->Fdo = NULL;
+
+    ASSERT(IsZeroMemory(Interrupt, sizeof (XENBUS_INTERRUPT)));
+    __FdoFree(Interrupt);
+
+    Trace("<====\n");
+}
+
+static NTSTATUS
+FdoCreateInterrupt(
+    IN  PXENBUS_FDO     Fdo
+    )
+{
+    ULONG               Index;
+    PXENBUS_INTERRUPT   Interrupt;
+    NTSTATUS            status;
+
+    InitializeListHead(&Fdo->List);
+
+    for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw = &Fdo->RawResourceList->PartialDescriptors[Index];
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated = &Fdo->TranslatedResourceList->PartialDescriptors[Index];
+
+        if (Translated->Type != CmResourceTypeInterrupt)
+            continue;
+
+        status = FdoConnectInterrupt(Fdo, Raw, Translated, &Interrupt);
+        if (!NT_SUCCESS(status))
+            goto fail1;
+
+        InsertTailList(&Fdo->List, &Interrupt->ListEntry);
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    while (!IsListEmpty(&Fdo->List)) {
+        PLIST_ENTRY ListEntry;
+
+        ListEntry = RemoveHeadList(&Fdo->List);
+        ASSERT(ListEntry != &Fdo->List);
+
+        RtlZeroMemory(ListEntry, sizeof (LIST_ENTRY));
+
+        Interrupt = CONTAINING_RECORD(ListEntry, XENBUS_INTERRUPT, ListEntry);
+
+        FdoDisconnectInterrupt(Fdo, Interrupt);
+    }
+
+    RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
+
+    return status;
+}
+
+NTSTATUS
+FdoAllocateInterrupt(
+    IN  PXENBUS_FDO         Fdo,
+    IN  KINTERRUPT_MODE     InterruptMode,
+    IN  ULONG               Cpu,
+    IN  KSERVICE_ROUTINE    Callback,
+    IN  PVOID               Argument OPTIONAL,
+    OUT PXENBUS_INTERRUPT   *Interrupt
+    )
+{
+    PLIST_ENTRY             ListEntry;
+    KIRQL                   Irql;
+    NTSTATUS                status;
+
+    for (ListEntry = Fdo->List.Flink;
+         ListEntry != &Fdo->List;
+         ListEntry = ListEntry->Flink) {
+        *Interrupt = CONTAINING_RECORD(ListEntry, XENBUS_INTERRUPT, ListEntry);
+
+        if ((*Interrupt)->Callback == NULL &&
+            (*Interrupt)->InterruptMode == InterruptMode &&
+            (*Interrupt)->Cpu == Cpu)
+            goto found;
+    }
+
+    *Interrupt = NULL;
+
+    status = STATUS_OBJECT_NAME_NOT_FOUND;
+    goto fail1;
+
+found:
+    Irql = FdoAcquireInterruptLock(Fdo, *Interrupt);
+    (*Interrupt)->Callback = Callback;
+    (*Interrupt)->Argument = Argument;
+    FdoReleaseInterruptLock(Fdo, *Interrupt, Irql);
 
     return STATUS_SUCCESS;
 
@@ -1539,63 +1923,69 @@ fail1:
     return status;
 }
 
-_IRQL_requires_max_(HIGH_LEVEL)
-_IRQL_saves_
-_IRQL_raises_(HIGH_LEVEL)
-KIRQL
-FdoAcquireInterruptLock(
-    IN  PXENBUS_FDO Fdo
+UCHAR
+FdoGetInterruptVector(
+    IN  PXENBUS_FDO         Fdo,
+    IN  PXENBUS_INTERRUPT   Interrupt
     )
 {
-    PKINTERRUPT     InterruptObject = Fdo->InterruptObject;
+    UNREFERENCED_PARAMETER(Fdo);
 
-    return KeAcquireInterruptSpinLock(InterruptObject);
-}
-                      
-_IRQL_requires_(HIGH_LEVEL)
-VOID
-FdoReleaseInterruptLock(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  __drv_restoresIRQL KIRQL    Irql
-    )
-{
-    PKINTERRUPT                     InterruptObject = Fdo->InterruptObject;
-
-    KeReleaseInterruptSpinLock(InterruptObject, Irql);
+    return Interrupt->Vector;
 }
 
 ULONG
-FdoGetInterruptVector(
-    IN  PXENBUS_FDO     Fdo
+FdoGetInterruptLine(
+    IN  PXENBUS_FDO         Fdo,
+    IN  PXENBUS_INTERRUPT   Interrupt
     )
 {
-    PXENBUS_RESOURCE    Interrupt;
+    UNREFERENCED_PARAMETER(Fdo);
 
-    Interrupt = __FdoGetResource(Fdo, INTERRUPT_RESOURCE);
+    return Interrupt->Line;
+}
 
-    return Interrupt->Raw.u.Interrupt.Vector;
+VOID
+FdoFreeInterrupt(
+    IN  PXENBUS_FDO         Fdo,
+    IN  PXENBUS_INTERRUPT   Interrupt
+    )
+{
+    KIRQL                   Irql;
+
+    Irql = FdoAcquireInterruptLock(Fdo, Interrupt);
+    Interrupt->Callback = NULL;
+    Interrupt->Argument = NULL;
+    FdoReleaseInterruptLock(Fdo, Interrupt, Irql);
 }
 
 static VOID
-FdoDisconnectInterrupt(
-    IN  PXENBUS_FDO                     Fdo
+FdoDestroyInterrupt(
+    IN  PXENBUS_FDO     Fdo
     )
 {
-    PKINTERRUPT                         InterruptObject;
-    IO_DISCONNECT_INTERRUPT_PARAMETERS  Disconnect;
+    while (!IsListEmpty(&Fdo->List)) {
+        PLIST_ENTRY         ListEntry;
+        PXENBUS_INTERRUPT   Interrupt;
 
-    Trace("====>\n");
+        ListEntry = RemoveHeadList(&Fdo->List);
+        ASSERT(ListEntry != &Fdo->List);
 
-    InterruptObject = Fdo->InterruptObject;
-    Fdo->InterruptObject = NULL;
+        RtlZeroMemory(ListEntry, sizeof (LIST_ENTRY));
 
-    RtlZeroMemory(&Disconnect, sizeof (IO_DISCONNECT_INTERRUPT_PARAMETERS));
-    Disconnect.Version = CONNECT_FULLY_SPECIFIED;
-    Disconnect.ConnectionContext.InterruptObject = InterruptObject;
+        Interrupt = CONTAINING_RECORD(ListEntry, XENBUS_INTERRUPT, ListEntry);
 
-    IoDisconnectInterruptEx(&Disconnect);
+#pragma warning(push)
+#pragma warning(disable:4054)   // 'type cast' : from function pointer to data pointer
+        ASSERT3P(Interrupt->Callback, ==, NULL);
+#pragma warning(pop)
 
-    Trace("<====\n");
+        ASSERT3P(Interrupt->Argument, ==, NULL);
+
+        FdoDisconnectInterrupt(Fdo, Interrupt);
+    }
+
+    RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
 }
 
 static
@@ -1800,38 +2190,60 @@ FdoSuspendCallbackLate(
 
 static NTSTATUS
 FdoCreateIoSpace(
-    IN  PXENBUS_FDO     Fdo
+    IN  PXENBUS_FDO                 Fdo
     )
 {
-    PXENBUS_RESOURCE    Memory;
-    NTSTATUS            status;
+    ULONG                           Index;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
+    PHYSICAL_ADDRESS                End;
+    NTSTATUS                        status;
 
-    Memory = __FdoGetResource(Fdo, MEMORY_RESOURCE);
+    for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
+        Translated = &Fdo->TranslatedResourceList->PartialDescriptors[Index];
 
+        if (Translated->Type == CmResourceTypeMemory)
+            goto found;
+    }
+
+    status = STATUS_OBJECT_NAME_NOT_FOUND;
+    goto fail1;
+
+found:
     status = XENBUS_RANGE_SET(Create,
                               &Fdo->RangeSetInterface,
                               "io_space",
                               &Fdo->RangeSet);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
                               Fdo->RangeSet,
-                              Memory->Translated.u.Memory.Start.QuadPart,
-                              Memory->Translated.u.Memory.Length);
+                              Translated->u.Memory.Start.QuadPart,
+                              Translated->u.Memory.Length);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
+
+    End.QuadPart = Translated->u.Memory.Start.QuadPart + Translated->u.Memory.Length - 1;
+
+    Info("%08x.%08x - %08x.%08x\n",
+         Translated->u.Memory.Start.HighPart,
+         Translated->u.Memory.Start.LowPart,
+         End.HighPart,
+         End.LowPart);
 
     return STATUS_SUCCESS;
 
-fail2:
-    Error("fail2\n");
+fail3:
+    Error("fail3\n");
 
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
                      Fdo->RangeSet);
     Fdo->RangeSet = NULL;
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1890,19 +2302,29 @@ FdoFreeIoSpace(
 
 static VOID
 FdoDestroyIoSpace(
-    IN  PXENBUS_FDO     Fdo
+    IN  PXENBUS_FDO                 Fdo
     )
 {
-    PXENBUS_RESOURCE    Memory;
-    NTSTATUS            status;
+    ULONG                           Index;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
+    NTSTATUS                        status;
 
-    Memory = __FdoGetResource(Fdo, MEMORY_RESOURCE);
+    for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
+        Translated = &Fdo->TranslatedResourceList->PartialDescriptors[Index];
 
+        if (Translated->Type == CmResourceTypeMemory)
+            goto found;
+    }
+
+    ASSERT(FALSE);
+    return;
+
+found:
     status = XENBUS_RANGE_SET(Get,
                               &Fdo->RangeSetInterface,
                               Fdo->RangeSet,
-                              Memory->Translated.u.Memory.Start.QuadPart,
-                              Memory->Translated.u.Memory.Length);
+                              Translated->u.Memory.Start.QuadPart,
+                              Translated->u.Memory.Length);
     ASSERT(NT_SUCCESS(status));
 
     XENBUS_RANGE_SET(Destroy,
@@ -2214,39 +2636,111 @@ FdoS3ToS4(
     Trace("<====\n");
 }
 
-static NTSTATUS
-FdoStartDevice(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+static VOID
+FdoFilterCmPartialResourceList(
+    IN  PXENBUS_FDO                 Fdo,
+    IN  PCM_PARTIAL_RESOURCE_LIST   List
     )
 {
-    PIO_STACK_LOCATION  StackLocation;
-    NTSTATUS            status;
+    ULONG                           Index;
+
+    UNREFERENCED_PARAMETER(Fdo);
+
+    for (Index = 0; Index < List->Count; Index++) {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor = &List->PartialDescriptors[Index];
+
+        //
+        // These are additional resources that XENBUS requested, so they must
+        // be filtered out before the underlying PCI bus driver sees them. Happily
+        // it appears that swapping the type to DevicePrivate causes PCI.SYS to ignore
+        // them.
+        //
+        if (Descriptor->Type == CmResourceTypeInterrupt &&
+            (Descriptor->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
+            Descriptor->Type = CmResourceTypeDevicePrivate;
+    }
+}
+
+static NTSTATUS
+FdoStartDevice(
+    IN  PXENBUS_FDO                 Fdo,
+    IN  PIRP                        Irp
+    )
+{
+    PIO_STACK_LOCATION              StackLocation;
+    PCM_RESOURCE_LIST               ResourceList;
+    PCM_FULL_RESOURCE_DESCRIPTOR    Descriptor;
+    ULONG                           Size;
+    NTSTATUS                        status;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
 
-    FdoParseResources(Fdo,
-                      StackLocation->Parameters.StartDevice.AllocatedResources,
-                      StackLocation->Parameters.StartDevice.AllocatedResourcesTranslated);
+    // Raw
+
+    ResourceList = StackLocation->Parameters.StartDevice.AllocatedResources;
+    FdoDumpCmResourceList(Fdo, FALSE, ResourceList);
+
+    ASSERT3U(ResourceList->Count, ==, 1);
+    Descriptor = &ResourceList->List[0];
+
+    ASSERT3U(Descriptor->InterfaceType, ==, PCIBus);
+    ASSERT3U(Descriptor->BusNumber, ==, 0);
+
+    Size = FIELD_OFFSET(CM_PARTIAL_RESOURCE_LIST, PartialDescriptors) +
+           (Descriptor->PartialResourceList.Count) * sizeof (CM_PARTIAL_RESOURCE_DESCRIPTOR);
+
+    Fdo->RawResourceList = __FdoAllocate(Size);
+
+    status = STATUS_NO_MEMORY;
+    if (Fdo->RawResourceList == NULL)
+        goto fail1;
+
+    RtlCopyMemory(Fdo->RawResourceList, &Descriptor->PartialResourceList, Size);
+
+    FdoFilterCmPartialResourceList(Fdo, &Descriptor->PartialResourceList);
+
+    // Translated
+
+    ResourceList = StackLocation->Parameters.StartDevice.AllocatedResourcesTranslated;
+    FdoDumpCmResourceList(Fdo, TRUE, ResourceList);
+
+    ASSERT3U(ResourceList->Count, ==, 1);
+    Descriptor = &ResourceList->List[0];
+
+    ASSERT3U(Descriptor->InterfaceType, ==, PCIBus);
+    ASSERT3U(Descriptor->BusNumber, ==, 0);
+
+    Size = FIELD_OFFSET(CM_PARTIAL_RESOURCE_LIST, PartialDescriptors) +
+           (Descriptor->PartialResourceList.Count) * sizeof (CM_PARTIAL_RESOURCE_DESCRIPTOR);
+
+    Fdo->TranslatedResourceList = __FdoAllocate(Size);
+
+    status = STATUS_NO_MEMORY;
+    if (Fdo->TranslatedResourceList == NULL)
+        goto fail2;
+
+    RtlCopyMemory(Fdo->TranslatedResourceList, &Descriptor->PartialResourceList, Size);
+
+    FdoFilterCmPartialResourceList(Fdo, &Descriptor->PartialResourceList);
+
+    status = FdoForwardIrpSynchronously(Fdo, Irp);
+    if (!NT_SUCCESS(status))
+        goto fail3;
 
     if (!__FdoIsActive(Fdo))
         goto not_active;
 
-    status = FdoConnectInterrupt(Fdo);
+    status = FdoCreateInterrupt(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail4;
 
     KeInitializeEvent(&Fdo->ScanEvent, NotificationEvent, FALSE);
 
     status = ThreadCreate(FdoScan, Fdo, &Fdo->ScanThread);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail5;
 
     InitializeMutex(&Fdo->BalloonSuspendMutex);
 
@@ -2254,20 +2748,20 @@ FdoStartDevice(
 
     status = ThreadCreate(FdoSuspend, Fdo, &Fdo->SuspendThread);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail6;
 
     if (Fdo->BalloonInterface.Interface.Context != NULL) {
         KeInitializeEvent(&Fdo->BalloonEvent, NotificationEvent, FALSE);
 
         status = ThreadCreate(FdoBalloon, Fdo, &Fdo->BalloonThread);
         if (!NT_SUCCESS(status))
-            goto fail5;
+            goto fail7;
     }
 
 not_active:
     status = FdoD3ToD0(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail8;
 
     if (Fdo->BalloonInterface.Interface.Context != NULL) {
         BOOLEAN Warned;
@@ -2306,11 +2800,11 @@ not_active:
 
     return status;
 
-fail6:
-    Error("fail6\n");
+fail8:
+    Error("fail8\n");
 
     if (!__FdoIsActive(Fdo))
-        goto fail2;
+        goto fail4;
     
     if (Fdo->BalloonInterface.Interface.Context != NULL) {
         ThreadAlert(Fdo->BalloonThread);
@@ -2318,8 +2812,8 @@ fail6:
         Fdo->BalloonThread = NULL;
     }
 
-fail5:
-    Error("fail5\n");
+fail7:
+    Error("fail7\n");
 
     if (Fdo->BalloonInterface.Interface.Context != NULL)
         RtlZeroMemory(&Fdo->BalloonEvent, sizeof (KEVENT));
@@ -2328,8 +2822,8 @@ fail5:
     ThreadJoin(Fdo->SuspendThread);
     Fdo->SuspendThread = NULL;
 
-fail4:
-    Error("fail4\n");
+fail6:
+    Error("fail6\n");
 
     RtlZeroMemory(&Fdo->SuspendEvent, sizeof (KEVENT));
 
@@ -2339,17 +2833,27 @@ fail4:
     ThreadJoin(Fdo->ScanThread);
     Fdo->ScanThread = NULL;
 
-fail3:
-    Error("fail3\n");
+fail5:
+    Error("fail5\n");
 
     RtlZeroMemory(&Fdo->ScanEvent, sizeof (KEVENT));
 
-    FdoDisconnectInterrupt(Fdo);
+    FdoDestroyInterrupt(Fdo);
+
+fail4:
+    Error("fail4\n");
+
+fail3:
+    Error("fail3\n");
+
+    __FdoFree(Fdo->TranslatedResourceList);
+    Fdo->TranslatedResourceList = NULL;
 
 fail2:
     Error("fail2\n");
 
-    RtlZeroMemory(&Fdo->Resource, sizeof (XENBUS_RESOURCE) * RESOURCE_COUNT);
+    __FdoFree(Fdo->RawResourceList);
+    Fdo->RawResourceList = NULL;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -2445,10 +2949,14 @@ FdoStopDevice(
 
     RtlZeroMemory(&Fdo->ScanEvent, sizeof (KEVENT));
 
-    FdoDisconnectInterrupt(Fdo);
+    FdoDestroyInterrupt(Fdo);
 
 not_active:
-    RtlZeroMemory(&Fdo->Resource, sizeof (XENBUS_RESOURCE) * RESOURCE_COUNT);
+    __FdoFree(Fdo->TranslatedResourceList);
+    Fdo->TranslatedResourceList = NULL;
+
+    __FdoFree(Fdo->RawResourceList);
+    Fdo->RawResourceList = NULL;
 
     __FdoSetDevicePnpState(Fdo, Stopped);
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -2554,6 +3062,9 @@ FdoRemoveDevice(
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
+    if (__FdoGetPreviousDevicePnpState(Fdo) != Started)
+        goto done;
+
     if (__FdoIsActive(Fdo)) {
         Trace("waiting for scan thread...\n");
 
@@ -2621,11 +3132,16 @@ FdoRemoveDevice(
 
     RtlZeroMemory(&Fdo->ScanEvent, sizeof (KEVENT));
 
-    FdoDisconnectInterrupt(Fdo);
+    FdoDestroyInterrupt(Fdo);
 
 not_active:
-    RtlZeroMemory(&Fdo->Resource, sizeof (XENBUS_RESOURCE) * RESOURCE_COUNT);
+    __FdoFree(Fdo->TranslatedResourceList);
+    Fdo->TranslatedResourceList = NULL;
 
+    __FdoFree(Fdo->RawResourceList);
+    Fdo->RawResourceList = NULL;
+
+done:
     __FdoSetDevicePnpState(Fdo, Deleted);
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -2937,6 +3453,10 @@ FdoDispatchPnp(
           PnpMinorFunctionName(MinorFunction)); 
 
     switch (StackLocation->MinorFunction) {
+    case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
+        status = FdoFilterResourceRequirements(Fdo, Irp);
+        break;
+
     case IRP_MN_START_DEVICE:
         status = FdoStartDevice(Fdo, Irp);
         break;

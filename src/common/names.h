@@ -196,32 +196,124 @@ PnpMinorFunctionName(
 }
 
 static FORCEINLINE const CHAR *
-PartialResourceDescriptorTypeName(
+ResourceDescriptorTypeName(
     IN  UCHAR   Type
     )
 {
-#define _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(_Type)   \
-    case CmResourceType ## _Type:                       \
+#define _RESOURCE_DESCRIPTOR_TYPE_NAME(_Type)   \
+    case CmResourceType ## _Type:               \
         return #_Type;
 
     switch (Type) {
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(Null);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(Port);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(Interrupt);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(Memory);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(Dma);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(DeviceSpecific);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(BusNumber);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(MemoryLarge);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(ConfigData);
-    _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME(DevicePrivate);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(Null);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(Port);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(Interrupt);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(Memory);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(Dma);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(DeviceSpecific);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(BusNumber);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(MemoryLarge);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(ConfigData);
+    _RESOURCE_DESCRIPTOR_TYPE_NAME(DevicePrivate);
     default:
         break;
     }
 
     return "UNKNOWN";
 
-#undef  _PARTIAL_RESOURCE_DESCRIPTOR_TYPE_NAME
+#undef  _RESOURCE_DESCRIPTOR_TYPE_NAME
+}
+
+static FORCEINLINE const CHAR *
+ResourceDescriptorShareDispositionName(
+    IN  UCHAR   Disposition
+    )
+{
+#define _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME(_Disposition)  \
+    case CmResourceShare ## _Disposition:                           \
+        return #_Disposition;
+
+    switch (Disposition) {
+    _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME(Undetermined);
+    _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME(DeviceExclusive);
+    _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME(DriverExclusive);
+    _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME(Shared);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef  _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME
+}
+
+static FORCEINLINE const CHAR *
+IrqDevicePolicyName(
+    IN  IRQ_DEVICE_POLICY   Policy
+    )
+{
+#define _IRQ_DEVICE_POLICY_NAME(_Policy)    \
+    case IrqPolicy ## _Policy:              \
+        return #_Policy;
+
+    switch (Policy) {
+    _IRQ_DEVICE_POLICY_NAME(MachineDefault);
+    _IRQ_DEVICE_POLICY_NAME(AllCloseProcessors);
+    _IRQ_DEVICE_POLICY_NAME(OneCloseProcessor);
+    _IRQ_DEVICE_POLICY_NAME(AllProcessorsInMachine);
+    _IRQ_DEVICE_POLICY_NAME(SpecifiedProcessors);
+    _IRQ_DEVICE_POLICY_NAME(SpreadMessagesAcrossAllProcessors);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef  _IRQ_DEVICE_POLICY_NAME
+}
+
+static FORCEINLINE const CHAR *
+IrqPriorityName(
+    IN  IRQ_PRIORITY    Priority
+    )
+{
+#define _IRQ_PRIORITY_NAME(_Priority)   \
+    case IrqPriority ## _Priority:      \
+        return #_Priority;
+
+    switch (Priority) {
+    _IRQ_PRIORITY_NAME(Undefined);
+    _IRQ_PRIORITY_NAME(Low);
+    _IRQ_PRIORITY_NAME(Normal);
+    _IRQ_PRIORITY_NAME(High);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef  _IRQ_PRIORITY_NAME
+}
+
+static FORCEINLINE const CHAR *
+InterruptModeName(
+    IN  KINTERRUPT_MODE Mode
+    )
+{
+#define _INTERRUPT_MODE_NAME(_Mode) \
+    case _Mode:                     \
+        return #_Mode;
+
+    switch (Mode) {
+    _INTERRUPT_MODE_NAME(LevelSensitive);
+    _INTERRUPT_MODE_NAME(Latched);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef  _INTERRUPT_MODE_NAME
 }
 
 static FORCEINLINE const CHAR *
@@ -357,5 +449,7 @@ BusQueryIdTypeName(
 
 #undef  _BUS_QUERY_ID_TYPE_NAME
 }
+
+
 
 #endif // _COMMON_NAMES_H_

@@ -682,7 +682,7 @@ PdoParseResources(
               __PdoGetName(Pdo),
               Index,
               TranslatedPartialDescriptor->Type,
-              PartialResourceDescriptorTypeName(TranslatedPartialDescriptor->Type));
+              ResourceDescriptorTypeName(TranslatedPartialDescriptor->Type));
 
         switch (TranslatedPartialDescriptor->Type) {
         case CmResourceTypeMemory:

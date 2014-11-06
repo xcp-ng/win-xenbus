@@ -88,7 +88,7 @@ struct _XENBUS_EVTCHN_CONTEXT {
     PXENBUS_FDO                     Fdo;
     KSPIN_LOCK                      Lock;
     LONG                            References;
-    ULONG                           Vector;
+    PXENBUS_INTERRUPT               Interrupt;
     BOOLEAN                         Enabled;
     XENBUS_SUSPEND_INTERFACE        SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackEarly;
@@ -127,11 +127,14 @@ EvtchnInterruptEnable(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
+    ULONG                       Line;
     NTSTATUS                    status;
 
     Trace("<===>\n");
 
-    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, Context->Vector);
+    Line = FdoGetInterruptLine(Context->Fdo, Context->Interrupt);
+
+    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, Line);
     ASSERT(NT_SUCCESS(status));
 }
 
@@ -159,7 +162,7 @@ __EvtchnAcquireInterruptLock(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    return FdoAcquireInterruptLock(Context->Fdo);
+    return FdoAcquireInterruptLock(Context->Fdo, Context->Interrupt);
 }
 
 static FORCEINLINE
@@ -170,7 +173,7 @@ __EvtchnReleaseInterruptLock(
     IN  __drv_restoresIRQL KIRQL    Irql
     )
 {
-    FdoReleaseInterruptLock(Context->Fdo, Irql);
+    FdoReleaseInterruptLock(Context->Fdo, Context->Interrupt, Irql);
 }
 
 static NTSTATUS
@@ -644,21 +647,32 @@ done:
     return DoneSomething;
 }
 
+static
+_Function_class_(KSERVICE_ROUTINE)
+__drv_requiresIRQL(HIGH_LEVEL)
 BOOLEAN
-EvtchnInterrupt(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+EvtchnInterruptCallback(
+    IN  PKINTERRUPT         InterruptObject,
+    IN  PVOID               Argument
     )
 {
-    BOOLEAN                     DoneSomething;
+    PXENBUS_EVTCHN_CONTEXT  Context = Argument;
+    ULONG                   Cpu;
+    BOOLEAN                 DoneSomething;
+
+    UNREFERENCED_PARAMETER(InterruptObject);
+
+    ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
+    Cpu = KeGetCurrentProcessorNumber();
 
     DoneSomething = FALSE;
 
     while (XENBUS_SHARED_INFO(UpcallPending,
                               &Context->SharedInfoInterface,
-                              0))
+                              Cpu))
         DoneSomething |= XENBUS_EVTCHN_ABI(Poll,
                                            &Context->EvtchnAbi,
-                                           0,
+                                           Cpu,
                                            EvtchnPollCallback,
                                            Context);
 
@@ -857,8 +871,6 @@ EvtchnAcquire(
 
     Trace("====>\n");
 
-    Context->Vector = FdoGetInterruptVector(Fdo);
-
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -902,12 +914,26 @@ EvtchnAcquire(
     if (!NT_SUCCESS(status))
         goto fail7;
 
+    status = FdoAllocateInterrupt(Fdo,
+                                  LevelSensitive,
+                                  0,
+                                  EvtchnInterruptCallback,
+                                  Context,
+                                  &Context->Interrupt);
+    if (!NT_SUCCESS(status))
+        goto fail8;
+
     Trace("<====\n");
 
 done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     return STATUS_SUCCESS;
+
+fail8:
+    Error("fail8\n");
+
+    EvtchnAbiRelease(Context);
 
 fail7:
     Error("fail7\n");
@@ -948,8 +974,6 @@ fail2:
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-    Context->Vector = 0;
-
 fail1:
     Error("fail1 (%08x)\n", status);
 
@@ -978,6 +1002,9 @@ EvtchnRelease(
     if (!IsListEmpty(&Context->List))
         BUG("OUTSTANDING EVENT CHANNELS");
 
+    FdoFreeInterrupt(Context->Fdo, Context->Interrupt);
+    Context->Interrupt = NULL;
+
     EvtchnAbiRelease(Context);
 
     XENBUS_SHARED_INFO(Release, &Context->SharedInfoInterface);
@@ -1000,8 +1027,6 @@ EvtchnRelease(
     Context->SuspendCallbackEarly = NULL;
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
-
-    Context->Vector = 0;
 
     Trace("<====\n");
 
