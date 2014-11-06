@@ -97,6 +97,14 @@ HvmPagetableDying(
     IN  PHYSICAL_ADDRESS    Address
     );
 
+__checkReturn
+XEN_API
+NTSTATUS
+HvmSetEvtchnUpcallVector(
+    IN  unsigned int    vcpu_id,
+    IN  UCHAR           Vector
+    );
+
 // MEMORY
 
 __checkReturn
@@ -194,6 +202,14 @@ XEN_API
 NTSTATUS
 EventChannelReset(
     VOID
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelBindVirtualCpu(
+    IN  ULONG               LocalPort,
+    IN  unsigned int        vcpu_id
     );
 
 // GRANT TABLE

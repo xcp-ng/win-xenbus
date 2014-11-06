@@ -166,3 +166,31 @@ HvmPagetableDying(
 fail1:
     return status;
 }
+
+__checkReturn
+XEN_API
+NTSTATUS
+HvmSetEvtchnUpcallVector(
+    IN  unsigned int                        vcpu_id,
+    IN  UCHAR                               Vector
+    )
+{
+    struct xen_hvm_set_evtchn_upcall_vector op;
+    LONG_PTR                                rc;
+    NTSTATUS                                status;
+
+    op.vcpu = vcpu_id;
+    op.vector = Vector;
+
+    rc = HvmOp(HVMOP_set_evtchn_upcall_vector, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    return status;
+}

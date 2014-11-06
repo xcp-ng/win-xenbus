@@ -327,3 +327,33 @@ fail1:
 
     return status;
 }
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelBindVirtualCpu(
+    IN  ULONG               LocalPort,
+    IN  unsigned int        vcpu_id
+    )
+{
+    struct evtchn_bind_vcpu op;
+    LONG_PTR                rc;
+    NTSTATUS                status;
+
+    op.port = LocalPort;
+    op.vcpu = vcpu_id;
+
+    rc = EventChannelOp(EVTCHNOP_bind_vcpu, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}

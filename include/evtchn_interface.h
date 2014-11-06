@@ -112,6 +112,20 @@ typedef PXENBUS_EVTCHN_CHANNEL
     ...
     );
 
+/*! \typedef XENBUS_EVTCHN_BIND
+    \brief Bind an event channel to a specific CPU
+
+    \param Interface The interface header
+    \param Channel The channel handle
+    \param Cpu The CPU that should handle events
+*/
+typedef NTSTATUS
+(*XENBUS_EVTCHN_BIND)(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Cpu
+    );
+
 /*! \typedef XENBUS_EVTCHN_UNMASK
     \brief Unmask an event channel
 
@@ -196,7 +210,24 @@ struct _XENBUS_EVTCHN_INTERFACE_V1 {
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
 
-typedef struct _XENBUS_EVTCHN_INTERFACE_V1 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
+/*! \struct _XENBUS_EVTCHN_INTERFACE_V2
+    \brief EVTCHN interface version 2
+    \ingroup interfaces
+*/
+struct _XENBUS_EVTCHN_INTERFACE_V2 {
+    INTERFACE               Interface;
+    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
+    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
+    XENBUS_EVTCHN_OPEN      EvtchnOpen;
+    XENBUS_EVTCHN_BIND      EvtchnBind;
+    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_SEND      EvtchnSend;
+    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
+    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
+    XENBUS_EVTCHN_CLOSE     EvtchnClose;
+};
+
+typedef struct _XENBUS_EVTCHN_INTERFACE_V2 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
 
 /*! \def XENBUS_EVTCHN
     \brief Macro at assist in method invocation
@@ -207,7 +238,7 @@ typedef struct _XENBUS_EVTCHN_INTERFACE_V1 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVT
 #endif  // _WINDLL
 
 #define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 1
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 1
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 2
 
 #endif  // _XENBUS_EVTCHN_INTERFACE_H
 
