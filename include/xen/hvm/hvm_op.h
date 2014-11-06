@@ -369,6 +369,26 @@ DEFINE_XEN_GUEST_HANDLE(xen_hvm_set_ioreq_server_state_t);
 
 #endif /* defined(__XEN__) || defined(__XEN_TOOLS__) */
 
+#if defined(__i386__) || defined(__x86_64__)
+
+/*
+ * HVMOP_set_evtchn_upcall_vector: Set a <vector> that should be used for event
+ *                                 channel upcalls on the specified <vcpu>. If set,
+ *                                 this vector will be used in preference to the
+ *                                 domain callback via (see HVM_PARAM_CALLBACK_IRQ)
+ *                                 and hence allows HVM guests to bind event
+ *                                 event channels to a vcpu other than 0.
+ */
+#define HVMOP_set_evtchn_upcall_vector 23
+struct xen_hvm_set_evtchn_upcall_vector {
+    uint32_t vcpu;
+    uint8_t vector;
+};
+typedef struct xen_hvm_set_evtchn_upcall_vector xen_hvm_set_evtchn_upcall_vector_t;
+DEFINE_XEN_GUEST_HANDLE(xen_hvm_set_evtchn_upcall_vector_t);
+
+#endif /* defined(__i386__) || defined(__x86_64__) */
+
 #endif /* __XEN_PUBLIC_HVM_HVM_OP_H__ */
 
 /*
