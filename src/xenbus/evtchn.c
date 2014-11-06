@@ -359,12 +359,12 @@ EvtchnOpen(
     Context->Channel[LocalPort] = Channel;
     Channel->Active = TRUE;
 
+    InsertTailList(&Context->List, &Channel->ListEntry);
+
     if (!IsListEmpty(&Context->List) && !Context->Enabled) {
         EvtchnInterruptEnable(Context);
         Context->Enabled = TRUE;
     }
-
-    InsertTailList(&Context->List, &Channel->ListEntry);
 
     __EvtchnReleaseInterruptLock(Context, DISPATCH_LEVEL);
 
