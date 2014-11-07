@@ -102,9 +102,7 @@ __EvtchnFifoTestFlag(
     IN  ULONG           Flag
     )
 {
-    KeMemoryBarrier();
-
-    return !!(*EventWord & (1 << Flag));
+    return (*EventWord & (1 << Flag)) ? TRUE : FALSE;
 }
 
 static FORCEINLINE BOOLEAN
@@ -113,9 +111,7 @@ __EvtchnFifoTestAndSetFlag(
     IN  ULONG           Flag
     )
 {
-    KeMemoryBarrier();
-
-    return !!InterlockedBitTestAndSet((LONG *)EventWord, Flag);
+    return (InterlockedBitTestAndSet((LONG *)EventWord, Flag) != 0) ? TRUE : FALSE;
 }
 
 static FORCEINLINE BOOLEAN
@@ -124,9 +120,7 @@ __EvtchnFifoTestAndClearFlag(
     IN  ULONG           Flag
     )
 {
-    KeMemoryBarrier();
-
-    return !!InterlockedBitTestAndReset((LONG *)EventWord, Flag);
+    return (InterlockedBitTestAndReset((LONG *)EventWord, Flag) != 0) ? TRUE : FALSE;
 }
 
 static FORCEINLINE VOID
@@ -135,8 +129,7 @@ __EvtchnFifoSetFlag(
     IN  ULONG           Flag
     )
 {
-    *EventWord |= (1 << Flag);
-    KeMemoryBarrier();
+    (VOID) InterlockedBitTestAndSet((LONG *)EventWord, Flag);
 }
 
 static FORCEINLINE VOID
@@ -145,8 +138,7 @@ __EvtchnFifoClearFlag(
     IN  ULONG           Flag
     )
 {
-    *EventWord &= ~(1 << Flag);
-    KeMemoryBarrier();
+    (VOID) InterlockedBitTestAndReset((LONG *)EventWord, Flag);
 }
 
 static FORCEINLINE ULONG
