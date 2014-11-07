@@ -971,15 +971,11 @@ FdoScan(
             StoreClasses = NULL;
         }
 
-        if (ParametersKey != NULL) {
-            status = RegistryQuerySzValue(ParametersKey,
-                                          "SyntheticClasses",
-                                          &SyntheticClasses);
-            if (!NT_SUCCESS(status))
-                SyntheticClasses = NULL;
-        } else {
+        status = RegistryQuerySzValue(ParametersKey,
+                                      "SyntheticClasses",
+                                      &SyntheticClasses);
+        if (!NT_SUCCESS(status))
             SyntheticClasses = NULL;
-        }
 
         Classes = FdoCombineAnsi(StoreClasses, SyntheticClasses);
 

@@ -190,6 +190,7 @@ BusInitialize(
 {
     PXENBUS_BUS_CONTEXT         Context;
     HANDLE                      ParametersKey;
+    ULONG                       InterceptDmaAdapter;
     NTSTATUS                    status;
 
     Trace("====>\n");
@@ -206,15 +207,11 @@ BusInitialize(
 
     Context->InterceptDmaAdapter = 0;
 
-    if (ParametersKey != NULL) {
-        ULONG   InterceptDmaAdapter;
-
-        status = RegistryQueryDwordValue(ParametersKey,
-                                         "InterceptDmaAdapter",
-                                         &InterceptDmaAdapter);
-        if (NT_SUCCESS(status))
-            Context->InterceptDmaAdapter = InterceptDmaAdapter;
-    }
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     "InterceptDmaAdapter",
+                                     &InterceptDmaAdapter);
+    if (NT_SUCCESS(status))
+        Context->InterceptDmaAdapter = InterceptDmaAdapter;
 
     Interface->Size = sizeof (BUS_INTERFACE_STANDARD);
     Interface->Version = 1;

@@ -486,8 +486,6 @@ DriverAddDevice(
     ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
 
     ParametersKey = __DriverGetParametersKey();
-    if (ParametersKey == NULL)
-        goto done;
 
     status = DriverQueryId(PhysicalDeviceObject, BusQueryDeviceID, &DeviceID);
     if (!NT_SUCCESS(status))
@@ -522,7 +520,6 @@ DriverAddDevice(
     ExFreePool(InstanceID);
     ExFreePool(DeviceID);
 
-done:
     return STATUS_SUCCESS;
 
 fail4:
