@@ -39,6 +39,7 @@
 #include "evtchn_fifo.h"
 #include "fdo.h"
 #include "hash_table.h"
+#include "registry.h"
 #include "dbg_print.h"
 #include "assert.h"
 
@@ -98,6 +99,7 @@ struct _XENBUS_EVTCHN_CONTEXT {
     PXENBUS_EVTCHN_ABI_CONTEXT      EvtchnTwoLevelContext;
     PXENBUS_EVTCHN_ABI_CONTEXT      EvtchnFifoContext;
     XENBUS_EVTCHN_ABI               EvtchnAbi;
+    BOOLEAN                         UseEvtchnFifoAbi;
     PXENBUS_HASH_TABLE              Table;
     LIST_ENTRY                      List;
 };
@@ -670,19 +672,27 @@ EvtchnAbiAcquire(
 {
     NTSTATUS                    status;
 
-    EvtchnFifoGetAbi(Context->EvtchnFifoContext,
-                     &Context->EvtchnAbi);
+    if (Context->UseEvtchnFifoAbi) {
+        EvtchnFifoGetAbi(Context->EvtchnFifoContext,
+                         &Context->EvtchnAbi);
 
-    status = XENBUS_EVTCHN_ABI(Acquire, &Context->EvtchnAbi);
-    if (NT_SUCCESS(status))
+        status = XENBUS_EVTCHN_ABI(Acquire, &Context->EvtchnAbi);
+        if (!NT_SUCCESS(status))
+            goto use_two_level;
+
+        Info("FIFO\n");
         goto done;
+    }
 
+use_two_level:
     EvtchnTwoLevelGetAbi(Context->EvtchnTwoLevelContext,
                          &Context->EvtchnAbi);
 
     status = XENBUS_EVTCHN_ABI(Acquire, &Context->EvtchnAbi);
     if (!NT_SUCCESS(status))
         goto fail1;
+
+    Info("TWO LEVEL\n");
 
 done:
     return STATUS_SUCCESS;
@@ -1017,6 +1027,8 @@ EvtchnInitialize(
     OUT PXENBUS_EVTCHN_CONTEXT  *Context
     )
 {
+    HANDLE                      ParametersKey;
+    ULONG                       UseEvtchnFifoAbi;
     NTSTATUS                    status;
 
     Trace("====>\n");
@@ -1039,6 +1051,16 @@ EvtchnInitialize(
     status = EvtchnFifoInitialize(Fdo, &(*Context)->EvtchnFifoContext);
     if (!NT_SUCCESS(status))
         goto fail4;
+
+    ParametersKey = DriverGetParametersKey();
+
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     "UseEvtchnFifoAbi",
+                                     &UseEvtchnFifoAbi);
+    if (!NT_SUCCESS(status))
+        UseEvtchnFifoAbi = 1;
+
+    (*Context)->UseEvtchnFifoAbi = (UseEvtchnFifoAbi != 0) ? TRUE : FALSE;
 
     status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
                                  XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
@@ -1152,6 +1174,8 @@ EvtchnTeardown(
 
     RtlZeroMemory(&Context->SuspendInterface,
                   sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    Context->UseEvtchnFifoAbi = FALSE;
 
     EvtchnFifoTeardown(Context->EvtchnFifoContext);
     Context->EvtchnFifoContext = NULL;
