@@ -437,10 +437,7 @@ EvtchnFifoPortUnmask(
         return FALSE;
 
     // If we cleared the mask then check whether something is pending
-    if (!__EvtchnFifoTestAndClearFlag(EventWord, EVTCHN_FIFO_PENDING))
-        return FALSE;
-
-    return TRUE;
+    return __EvtchnFifoTestFlag(EventWord, EVTCHN_FIFO_PENDING);
 }
 
 static VOID

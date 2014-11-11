@@ -212,6 +212,13 @@ EventChannelBindVirtualCpu(
     IN  unsigned int        vcpu_id
     );
 
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelUnmask(
+    IN  ULONG   LocalPort
+    );
+
 // GRANT TABLE
 
 __checkReturn

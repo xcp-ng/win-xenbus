@@ -624,60 +624,72 @@ static BOOLEAN
 EvtchnUnmask(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InCallback
+    IN  BOOLEAN                 InUpcall
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
     KIRQL                       Irql = PASSIVE_LEVEL;
-    BOOLEAN                     Pending = FALSE;
+    BOOLEAN                     Pending;
+    ULONG                       LocalPort;
     ULONG                       Cpu;
-    PXENBUS_INTERRUPT           Interrupt;
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    if (!InCallback)
+    if (!InUpcall)
         KeAcquireSpinLock(&Channel->Lock, &Irql);
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
+    Pending = FALSE;
+
     if (!Channel->Active)
         goto done;
 
+    LocalPort = Channel->LocalPort;
+
     Pending = XENBUS_EVTCHN_ABI(PortUnmask,
                                 &Context->EvtchnAbi,
-                                Channel->LocalPort);
+                                LocalPort);
 
     if (!Pending)
         goto done;
 
-    if (InCallback)
-        goto mask;
+    //
+    // If we are in context of the upcall then use a hypercall
+    // to schedule the pending event.
+    //
+    if (InUpcall) {
+        (VOID) EventChannelUnmask(LocalPort);
 
-    ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
+        Pending = FALSE;
+        goto done;
+    }
+
+    //
+    // If we are not unmasking on the same CPU to which the
+    // event channel is bound, then we need to use a hypercall
+    // to schedule the upcall on the correct CPU.
+    //
     Cpu = KeGetCurrentProcessorNumber();
 
-    Interrupt = Context->LatchedInterrupt[Cpu];
+    if (Channel->Cpu != Cpu) {
+        (VOID) EventChannelUnmask(LocalPort);
 
-    if (Channel->Interrupt == Interrupt)
-        goto mask;
+        Pending = FALSE;
+        goto done;
+    }
 
-    //
-    // We are not on the CPU to which the event is bound so
-    // we must trigger.
-    //
-    EvtchnTrigger(Interface, Channel);
-
-    Pending = FALSE;
-    goto done;
-
-mask:
     if (Channel->Mask)
         XENBUS_EVTCHN_ABI(PortMask,
                           &Context->EvtchnAbi,
-                          Channel->LocalPort);
+                          LocalPort);
+
+    XENBUS_EVTCHN_ABI(PortAck,
+                      &Context->EvtchnAbi,
+                      LocalPort);
 
 done:
-    if (!InCallback)
+    if (!InUpcall)
         KeReleaseSpinLock(&Channel->Lock, Irql);
 
     return Pending;

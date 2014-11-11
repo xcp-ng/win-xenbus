@@ -357,3 +357,31 @@ fail1:
 
     return status;
 }
+
+__checkReturn
+XEN_API
+NTSTATUS
+EventChannelUnmask(
+    IN  ULONG               LocalPort
+    )
+{
+    struct evtchn_unmask    op;
+    LONG_PTR                rc;
+    NTSTATUS                status;
+
+    op.port = LocalPort;
+
+    rc = EventChannelOp(EVTCHNOP_unmask, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}

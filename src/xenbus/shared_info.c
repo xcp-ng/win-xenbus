@@ -316,10 +316,7 @@ SharedInfoEvtchnUnmask(
     KeMemoryBarrier();
 
     // If we cleared the mask then check whether something was pending
-    if (!SharedInfoClearBit(&Shared->evtchn_pending[SelectorBit], PortBit))
-        return FALSE;
-
-    return TRUE;
+    return SharedInfoTestBit(&Shared->evtchn_pending[SelectorBit], PortBit);
 }
 
 static LARGE_INTEGER
