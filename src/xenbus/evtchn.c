@@ -772,6 +772,7 @@ EvtchnClose(
     Channel->Cpu = 0;
 
     Channel->LocalPort = 0;
+    Channel->Mask = FALSE;
     RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
 
     Channel->Argument = NULL;
