@@ -151,7 +151,7 @@ SyncWorker(
             break;
 
         if (SyncContext.DisableInterrupts[Cpu] == InterruptsDisabled) {
-            SchedYield();
+            _mm_pause();
             KeMemoryBarrier();
 
             continue;
@@ -171,7 +171,7 @@ SyncWorker(
             Attempts = 0;
             while (SyncContext.Sequence == Sequence &&
                    SyncContext.CompletionCount < CpuCount) {
-                SchedYield();
+                _mm_pause();
                 KeMemoryBarrier();
 
                 if (++Attempts > 1000) {
@@ -213,7 +213,7 @@ SyncWorker(
 
             while (SyncContext.Sequence == Sequence &&
                    SyncContext.CompletionCount < CpuCount) {
-                SchedYield();
+                _mm_pause();
                 KeMemoryBarrier();
             }
 
@@ -268,7 +268,7 @@ SyncCapture(
     InterlockedIncrement(&SyncContext.CompletionCount);
 
     while (SyncContext.CompletionCount < CpuCount) {
-        SchedYield();
+        _mm_pause();
         KeMemoryBarrier();
     }
 
@@ -305,7 +305,7 @@ again:
 
     Attempts = 0;
     while (SyncContext.CompletionCount < CpuCount) {
-        SchedYield();
+        _mm_pause();
         KeMemoryBarrier();
 
         if (++Attempts > 1000) {
@@ -366,7 +366,7 @@ SyncEnableInterrupts(
     InterlockedIncrement(&SyncContext.CompletionCount);
 
     while (SyncContext.CompletionCount < CpuCount) {
-        SchedYield();
+        _mm_pause();
         KeMemoryBarrier();
     }
 
@@ -400,7 +400,7 @@ SyncRelease(
     InterlockedIncrement(&SyncContext.CompletionCount);
 
     while (SyncContext.CompletionCount < CpuCount) {
-        SchedYield();
+        _mm_pause();
         KeMemoryBarrier();
     }
 
