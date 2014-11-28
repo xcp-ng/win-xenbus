@@ -465,32 +465,17 @@ BalloonReleasePfnArray(
 
     Index = 0;
     while (Index < Requested) {
-        ULONG       Next = Index;
-        LONGLONG    Start;
-        LONGLONG    End;
         NTSTATUS    status;
-
-        while (Next + 1 < Requested) {
-            ASSERT3U((ULONGLONG)Context->PfnArray[Next], <, (ULONGLONG)Context->PfnArray[Next + 1]);
-
-            if ((ULONGLONG)Context->PfnArray[Next + 1] != (ULONGLONG)Context->PfnArray[Next] + 1)
-                break;
-
-            Next++;
-        }
-
-        Start = (LONGLONG)Context->PfnArray[Index];
-        End = (LONGLONG)Context->PfnArray[Next];
 
         status = XENBUS_RANGE_SET(Put,
                                   &Context->RangeSetInterface,
                                   Context->RangeSet,
-                                  Start,
-                                  End + 1 - Start);
+                                  (LONGLONG)Context->PfnArray[Index],
+                                  1);
         if (!NT_SUCCESS(status))
             break;
 
-        Index = Next + 1;
+        Index++;
     }
     Requested = Index;
 
