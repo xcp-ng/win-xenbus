@@ -45,6 +45,7 @@
 #include "bus.h"
 #include "driver.h"
 #include "thread.h"
+#include "registry.h"
 #include "dbg_print.h"
 #include "assert.h"
 
@@ -63,6 +64,8 @@ struct _XENBUS_PDO {
     PXENBUS_FDO                 Fdo;
     BOOLEAN                     Missing;
     const CHAR                  *Reason;
+
+    BOOLEAN                     Removable;
 
     PULONG                      Revision;
     ULONG                       Count;
@@ -252,6 +255,45 @@ PdoGetName(
     )
 {
     return __PdoGetName(Pdo);
+}
+
+static FORCEINLINE VOID
+__PdoSetRemovable(
+    IN  PXENBUS_PDO     Pdo
+    )
+{
+    HANDLE              ParametersKey;
+    HANDLE              Key;
+    ULONG               Value;
+    NTSTATUS            status;
+
+    Value = 1;
+
+    ParametersKey = DriverGetParametersKey();
+
+    status = RegistryOpenSubKey(ParametersKey,
+                                __PdoGetName(Pdo),
+                                KEY_READ,
+                                &Key);
+    if (!NT_SUCCESS(status))
+        goto done;
+
+    (VOID) RegistryQueryDwordValue(Key,
+                                   "Removable",
+                                   &Value);
+
+    RegistryCloseKey(Key);
+
+done:
+    Pdo->Removable = (Value != 0) ? TRUE : FALSE;
+}
+
+static FORCEINLINE BOOLEAN
+__PdoIsRemovable(
+    IN  PXENBUS_PDO     Pdo
+    )
+{
+    return Pdo->Removable;
 }
 
 static NTSTATUS
@@ -1119,14 +1161,15 @@ PdoQueryCapabilities(
     Capabilities->DeviceD2 = 0;
     Capabilities->LockSupported = 0;
     Capabilities->EjectSupported = 0;
-    Capabilities->Removable = 1;
     Capabilities->DockDevice = 0;
     Capabilities->UniqueID = 1;
     Capabilities->SilentInstall = 1;
     Capabilities->RawDeviceOK = 0;
-    Capabilities->SurpriseRemovalOK = 1;
     Capabilities->HardwareDisabled = 0;
     Capabilities->NoDisplayInUI = 0;
+
+    Capabilities->Removable = __PdoIsRemovable(Pdo) ? 1 : 0;
+    Capabilities->SurpriseRemovalOK = Capabilities->Removable;
 
     Capabilities->Address = 0xffffffff;
     Capabilities->UINumber = 0xffffffff;
@@ -2092,6 +2135,7 @@ PdoCreate(
         goto fail4;
 
     __PdoSetName(Pdo, Name);
+    __PdoSetRemovable(Pdo);
 
     status = PdoSetRevisions(Pdo);
     if (!NT_SUCCESS(status))
@@ -2131,6 +2175,8 @@ fail6:
 
 fail5:
     Error("fail5\n");
+
+    Pdo->Removable = FALSE;
 
     ThreadAlert(Pdo->DevicePowerThread);
     ThreadJoin(Pdo->DevicePowerThread);
@@ -2195,6 +2241,8 @@ PdoDestroy(
     __PdoFree(Pdo->Revision);
     Pdo->Revision = NULL;
     Pdo->Count = 0;
+
+    Pdo->Removable = FALSE;
 
     ThreadAlert(Pdo->DevicePowerThread);
     ThreadJoin(Pdo->DevicePowerThread);
