@@ -414,7 +414,7 @@ done:
     KeLowerIrql(Irql);
 }
 
-static FORCEINLINE
+static FORCEINLINE VOID
 CacheFlushMagazines(
     IN  PXENBUS_CACHE   Cache
     )
