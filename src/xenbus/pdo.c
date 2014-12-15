@@ -316,7 +316,9 @@ PdoAddRevision(
         goto fail1;
 
     if (Pdo->Revision != NULL) {
-        RtlCopyMemory(Revision, Pdo->Revision, sizeof (ULONG) * Count);
+        RtlCopyMemory(Revision,
+                      Pdo->Revision,
+                      sizeof (ULONG) * Pdo->Count);
         __PdoFree(Pdo->Revision);
     }
 
