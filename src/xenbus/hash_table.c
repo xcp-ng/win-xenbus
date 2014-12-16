@@ -264,9 +264,10 @@ HashTableRemove(
 
 found:
     RemoveEntryList(ListEntry);
-    __HashTableFree(Node);
 
     HashTableBucketUnlock(Bucket, TRUE, Irql);
+
+    __HashTableFree(Node);
 
     return STATUS_SUCCESS;
 
