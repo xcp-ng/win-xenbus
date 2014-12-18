@@ -136,6 +136,7 @@
     <ClCompile Include="..\..\src\xen\bug_check.c" />
     <ClCompile Include="..\..\src\xen\module.c" />
     <ClCompile Include="..\..\src\xen\process.c" />
+    <ClCompile Include="..\..\src\xen\acpi.c" />
     <ClCompile Include="..\..\src\xen\system.c" />
   </ItemGroup>
   <ItemGroup>

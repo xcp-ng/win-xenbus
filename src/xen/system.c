@@ -40,22 +40,43 @@
 
 #include "registry.h"
 #include "system.h"
+#include "acpi.h"
 #include "dbg_print.h"
 #include "assert.h"
+
+#define XEN_SYSTEM_TAG  'TSYS'
 
 typedef struct _SYSTEM_CPU {
     ULONG   Index;
     CHAR    Manufacturer[13];
     UCHAR   ApicID;
+    UCHAR   ProcessorID;
 } SYSTEM_CPU, *PSYSTEM_CPU;
 
 typedef struct _SYSTEM_CONTEXT {
     LONG        References;
+    PACPI_MADT  Madt;
     SYSTEM_CPU  Cpu[MAXIMUM_PROCESSORS];
     PVOID       Handle;
 } SYSTEM_CONTEXT, *PSYSTEM_CONTEXT;
 
 static SYSTEM_CONTEXT   SystemContext;
+
+static FORCEINLINE PVOID
+__SystemAllocate(
+    IN  ULONG   Length
+    )
+{
+    return __AllocatePoolWithTag(NonPagedPool, Length, XEN_SYSTEM_TAG);
+}
+
+static FORCEINLINE VOID
+__SystemFree(
+    IN  PVOID   Buffer
+    )
+{
+    ExFreePoolWithTag(Buffer, XEN_SYSTEM_TAG);
+}
 
 static FORCEINLINE const CHAR *
 __PlatformIdName(
@@ -233,6 +254,77 @@ fail1:
     return status;
 }
 
+static NTSTATUS
+SystemGetAcpiInformation(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+    ULONG           Length;
+    NTSTATUS        status;
+
+    status = AcpiGetTable("APIC", NULL, &Length);
+    if (status != STATUS_BUFFER_OVERFLOW)
+        goto fail1;
+
+    Context->Madt = __SystemAllocate(Length);
+
+    status = STATUS_NO_MEMORY;
+    if (Context->Madt == NULL)
+        goto fail2;
+
+    status = AcpiGetTable("APIC", Context->Madt, &Length);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+#pragma warning(push)
+#pragma warning(disable:4715)
+
+static UCHAR
+SystemApicIDToProcessorID(
+    IN  UCHAR   ApicID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+    PACPI_MADT      Madt = Context->Madt;
+    ULONG           Offset;
+
+    Offset = sizeof (ACPI_MADT);
+    while (Offset < Madt->Header.Length) {
+        PACPI_MADT_HEADER       Header;
+        PACPI_MADT_LOCAL_APIC   Apic;
+
+        Header = (PACPI_MADT_HEADER)((PUCHAR)Madt + Offset);
+        Offset += Header->Length;
+
+        if (Header->Type != ACPI_MADT_TYPE_LOCAL_APIC)
+            continue;
+
+        Apic = CONTAINING_RECORD(Header, ACPI_MADT_LOCAL_APIC, Header);
+
+        if (Apic->ApicID == ApicID)
+            return Apic->ProcessorID;
+    }
+
+    BUG(__FUNCTION__);
+}
+
+#pragma warning(pop)
+
 KDEFERRED_ROUTINE   SystemCpuInformation;
 
 VOID
@@ -272,7 +364,11 @@ SystemCpuInformation(
 
     Cpu->ApicID = EBX >> 24;
 
-    Info("Local APIC ID: %02X\n", Cpu->ApicID);
+    Info("APIC ID: %02X\n", Cpu->ApicID);
+
+    Cpu->ProcessorID = SystemApicIDToProcessorID(Cpu->ApicID);
+
+    Info("PROCESSOR ID: %02X\n", Cpu->ProcessorID);
 
     Info("<==== (%u)\n", Cpu->Index);
 
@@ -476,6 +572,10 @@ SystemInitialize(
     if (!NT_SUCCESS(status))
         goto fail4;
 
+    status = SystemGetAcpiInformation();
+    if (!NT_SUCCESS(status))
+        goto fail5;
+
     SystemGetCpuInformation();
 
     status = SystemRegisterCallback(L"\\Callback\\PowerState",
@@ -483,9 +583,15 @@ SystemInitialize(
                                     NULL,
                                     &Context->Handle);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     return STATUS_SUCCESS;
+
+fail6:
+    Error("fail6\n");
+
+    __SystemFree(Context->Madt);
+    Context->Madt = NULL;
 
 fail5:
     Error("fail5\n");
@@ -502,6 +608,8 @@ fail2:
 fail1:
     Error("fail1 (%08x)\n", status);
 
+    (VOID) InterlockedDecrement(&Context->References);
+
     return status;
 }
 
@@ -516,7 +624,7 @@ SystemVirtualCpuIndex(
 
     ASSERT3U(Index, <, MAXIMUM_PROCESSORS);
 
-    return Cpu->ApicID / 2;
+    return Cpu->ProcessorID;
 }
 
 VOID
@@ -530,6 +638,9 @@ SystemTeardown(
     Context->Handle = NULL;
 
     RtlZeroMemory(Context->Cpu, sizeof (SYSTEM_CPU) * MAXIMUM_PROCESSORS);
+
+    __SystemFree(Context->Madt);
+    Context->Madt = NULL;
 
     (VOID) InterlockedDecrement(&Context->References);
 

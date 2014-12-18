@@ -39,6 +39,7 @@
 #include "module.h"
 #include "process.h"
 #include "system.h"
+#include "acpi.h"
 #include "bug_check.h"
 #include "dbg_print.h"
 #include "assert.h"
@@ -143,50 +144,59 @@ DllInitialize(
          MONTH,
          YEAR);
 
-    status = SystemInitialize();
+    status = AcpiInitialize();
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = HypercallInitialize();
+    status = SystemInitialize();
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    status = BugCheckInitialize();
+    status = HypercallInitialize();
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    status = ModuleInitialize();
+    status = BugCheckInitialize();
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    status = ProcessInitialize();
+    status = ModuleInitialize();
     if (!NT_SUCCESS(status))
         goto fail6;
+
+    status = ProcessInitialize();
+    if (!NT_SUCCESS(status))
+        goto fail7;
 
 done:
     Trace("<====\n");
 
     return STATUS_SUCCESS;
 
+fail7:
+    Error("fail7\n");
+
+    ModuleTeardown();
+
 fail6:
     Error("fail6\n");
 
-    ModuleTeardown();
+    BugCheckTeardown();
 
 fail5:
     Error("fail5\n");
 
-    BugCheckTeardown();
+    HypercallTeardown();
 
 fail4:
     Error("fail4\n");
 
-    HypercallTeardown();
+    SystemTeardown();
 
 fail3:
     Error("fail3\n");
 
-    SystemTeardown();
+    AcpiTeardown();
 
 fail2:
     Error("fail2\n");
