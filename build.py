@@ -331,6 +331,7 @@ if __name__ == '__main__':
     vs = getVsVersion()
 
     os.utime('include/version.hx', None)
+    os.utime('src/%s.inf' % driver, None)
     
     if 'COMPANY_NAME' not in os.environ.keys():
         os.environ['COMPANY_NAME'] = 'Xen Project'
