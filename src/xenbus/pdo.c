@@ -68,6 +68,7 @@ struct _XENBUS_PDO {
     BOOLEAN                     Removable;
 
     PULONG                      Revision;
+    PWCHAR                      *Description;
     ULONG                       Count;
 
     BUS_INTERFACE_STANDARD      BusInterface;
@@ -296,36 +297,125 @@ __PdoIsRemovable(
     return Pdo->Removable;
 }
 
+#define MAXTEXTLEN  1024
+
+static FORCEINLINE PXENBUS_FDO
+__PdoGetFdo(
+    IN  PXENBUS_PDO Pdo
+    )
+{
+    return Pdo->Fdo;
+}
+
+PXENBUS_FDO
+PdoGetFdo(
+    IN  PXENBUS_PDO Pdo
+    )
+{
+    return __PdoGetFdo(Pdo);
+}
+
 static NTSTATUS
 PdoAddRevision(
     IN  PXENBUS_PDO Pdo,
-    IN  ULONG       Number
+    IN  ULONG       Revision,
+    IN  ULONG       Suspend,
+    IN  ULONG       SharedInfo,
+    IN  ULONG       Evtchn,
+    IN  ULONG       Debug,
+    IN  ULONG       Store,
+    IN  ULONG       RangeSet,
+    IN  ULONG       Cache,
+    IN  ULONG       Gnttab,
+    IN  ULONG       Emulated,
+    IN  ULONG       Unplug
     )
 {
-    PULONG          Revision;
+    PVOID           Buffer;
     ULONG           Count;
     NTSTATUS        status;
 
-    Trace("%d\n", Number);
-
     Count = Pdo->Count + 1;
-    Revision = __PdoAllocate(sizeof (ULONG) * Count);
+
+    Buffer = __PdoAllocate(sizeof (ULONG) * Count);
 
     status = STATUS_NO_MEMORY;
-    if (Revision == NULL)
+    if (Buffer == NULL)
         goto fail1;
 
     if (Pdo->Revision != NULL) {
-        RtlCopyMemory(Revision,
+        RtlCopyMemory(Buffer,
                       Pdo->Revision,
                       sizeof (ULONG) * Pdo->Count);
         __PdoFree(Pdo->Revision);
     }
 
-    Revision[Pdo->Count++] = Number;
-    Pdo->Revision = Revision;
+    Pdo->Revision = Buffer;
+    Pdo->Revision[Pdo->Count] = Revision;
+
+    Buffer = __PdoAllocate(sizeof (PCHAR) * Count);
+
+    status = STATUS_NO_MEMORY;
+    if (Buffer == NULL)
+        goto fail2;
+
+    if (Pdo->Description != NULL) {
+        RtlCopyMemory(Buffer,
+                      Pdo->Description,
+                      sizeof (ULONG) * Pdo->Count);
+        __PdoFree(Pdo->Description);
+    }
+
+    Pdo->Description = Buffer;
+
+    Buffer = __PdoAllocate(MAXTEXTLEN * Count);
+
+    status = STATUS_NO_MEMORY;
+    if (Buffer == NULL)
+        goto fail3;
+
+    status = RtlStringCbPrintfW(Buffer,
+                                MAXTEXTLEN,
+                                L"%hs %hs: "
+                                L"SUSPEND v%u "
+                                L"SHARED_INFO v%u "
+                                L"EVTCHN v%u "
+                                L"DEBUG v%u "
+                                L"STORE v%u "
+                                L"RANGE_SET v%u "
+                                L"CACHE v%u "
+                                L"GNTTAB v%u "
+                                L"EMULATED v%u "
+                                L"UNPLUG v%u",
+                                FdoGetName(__PdoGetFdo(Pdo)),
+                                __PdoGetName(Pdo),
+                                Suspend,
+                                SharedInfo,
+                                Evtchn,
+                                Debug,
+                                Store,
+                                RangeSet,
+                                Cache,
+                                Gnttab,
+                                Emulated,
+                                Unplug);
+    ASSERT(NT_SUCCESS(status));
+
+    Pdo->Description[Pdo->Count] = Buffer;
+
+    Trace("%08x -> %ws\n",
+          Pdo->Revision[Pdo->Count],
+          Pdo->Description[Pdo->Count]);
+
+    Pdo->Count++;
 
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -391,7 +481,17 @@ PdoSetRevisions(
                                                 Gnttab >= XENBUS_GNTTAB_INTERFACE_VERSION_MIN &&
                                                 Emulated >= XENFILT_EMULATED_INTERFACE_VERSION_MIN &&
                                                 Unplug >= XENFILT_UNPLUG_INTERFACE_VERSION_MIN) {
-                                                status = PdoAddRevision(Pdo, Revision);
+                                                status = PdoAddRevision(Pdo, Revision,
+                                                                        Suspend,
+                                                                        SharedInfo,
+                                                                        Evtchn,
+                                                                        Debug,
+                                                                        Store,
+                                                                        RangeSet,
+                                                                        Cache,
+                                                                        Gnttab,
+                                                                        Emulated,
+                                                                        Unplug);
                                                 if (!NT_SUCCESS(status))
                                                     goto fail1;
                                             }   
@@ -411,6 +511,13 @@ PdoSetRevisions(
 
 fail1:
     Error("fail1 (%08x)\n", status);
+
+    if (Pdo->Description != NULL) {
+        while (--Revision > 0)
+            __PdoFree(Pdo->Description[Revision]);
+        __PdoFree(Pdo->Description);
+        Pdo->Description = NULL;
+    }
 
     if (Pdo->Revision != NULL) {
         __PdoFree(Pdo->Revision);
@@ -438,22 +545,6 @@ PdoGetDeviceObject(
     )
 {
     return __PdoGetDeviceObject(Pdo);
-}
-
-static FORCEINLINE PXENBUS_FDO
-__PdoGetFdo(
-    IN  PXENBUS_PDO Pdo
-    )
-{
-    return Pdo->Fdo;
-}
-
-PXENBUS_FDO
-PdoGetFdo(
-    IN  PXENBUS_PDO Pdo
-    )
-{
-    return __PdoGetFdo(Pdo);
 }
 
 static FORCEINLINE PCHAR
@@ -1284,8 +1375,6 @@ fail1:
     return status;
 }
 
-#define MAXTEXTLEN  128
-
 static NTSTATUS
 PdoQueryDeviceText(
     IN  PXENBUS_PDO     Pdo,
@@ -1326,11 +1415,12 @@ PdoQueryDeviceText(
 
     switch (StackLocation->Parameters.QueryDeviceText.DeviceTextType) {
     case DeviceTextDescription: {
+        ULONG   Index = Pdo->Count - 1;
+
         status = RtlStringCbPrintfW(Buffer,
                                     MAXTEXTLEN,
-                                    L"%hs %hs",
-                                    FdoGetName(__PdoGetFdo(Pdo)),
-                                    __PdoGetName(Pdo));
+                                    L"%s",
+                                    Pdo->Description[Index]);
         ASSERT(NT_SUCCESS(status));
 
         Buffer += wcslen(Buffer);
@@ -2171,6 +2261,11 @@ PdoCreate(
 fail6:
     Error("fail6\n");
 
+    for (Index = 0; Index < Pdo->Count; Index++)
+        __PdoFree(Pdo->Description[Index]);
+    __PdoFree(Pdo->Description);
+    Pdo->Description = NULL;
+
     __PdoFree(Pdo->Revision);
     Pdo->Revision = NULL;
     Pdo->Count = 0;
@@ -2219,6 +2314,7 @@ PdoDestroy(
     PXENBUS_DX      Dx = Pdo->Dx;
     PDEVICE_OBJECT  PhysicalDeviceObject = Dx->DeviceObject;
     PXENBUS_FDO     Fdo = __PdoGetFdo(Pdo);
+    ULONG           Index;
 
     ASSERT3U(__PdoGetDevicePnpState(Pdo), ==, Deleted);
 
@@ -2239,6 +2335,11 @@ PdoDestroy(
                   sizeof (XENBUS_SUSPEND_INTERFACE));
 
     BusTeardown(&Pdo->BusInterface);
+
+    for (Index = 0; Index < Pdo->Count; Index++)
+        __PdoFree(Pdo->Description[Index]);
+    __PdoFree(Pdo->Description);
+    Pdo->Description = NULL;
 
     __PdoFree(Pdo->Revision);
     Pdo->Revision = NULL;
