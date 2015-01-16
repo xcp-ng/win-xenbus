@@ -198,31 +198,6 @@ EvtchnInterruptDisable(
     Trace("<====\n");
 }
 
-static FORCEINLINE
-_IRQL_requires_max_(HIGH_LEVEL)
-_IRQL_saves_
-_IRQL_raises_(HIGH_LEVEL)
-KIRQL
-__EvtchnAcquireInterruptLock(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
-    )
-{
-    return FdoAcquireInterruptLock(Context->Fdo, Channel->Interrupt);
-}
-
-static FORCEINLINE
-__drv_requiresIRQL(HIGH_LEVEL)
-VOID
-__EvtchnReleaseInterruptLock(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  PXENBUS_EVTCHN_CHANNEL      Channel,
-    IN  __drv_restoresIRQL KIRQL    Irql
-    )
-{
-    FdoReleaseInterruptLock(Context->Fdo, Channel->Interrupt, Irql);
-}
-
 static NTSTATUS
 EvtchnOpenFixed(
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
@@ -596,12 +571,12 @@ EvtchnCallback(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument2);
 
-    Irql = __EvtchnAcquireInterruptLock(Context, Channel);
+    Irql = FdoAcquireInterruptLock(Context->Fdo, Channel->Interrupt);
 
 #pragma warning(suppress:6387)  // NULL argument
     (VOID) Channel->Callback(NULL, Channel->Argument);
 
-    __EvtchnReleaseInterruptLock(Context, Channel, Irql);
+    FdoReleaseInterruptLock(Context->Fdo, Channel->Interrupt, Irql);
 }
 
 static VOID
