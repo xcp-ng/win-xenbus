@@ -105,7 +105,7 @@ struct _XENBUS_EVTCHN_CONTEXT {
     BOOLEAN                         UseEvtchnFifoAbi;
     PXENBUS_HASH_TABLE              Table;
     LIST_ENTRY                      List;
-    KDPC                            Dpc;
+    KDPC                            Dpc[MAXIMUM_PROCESSORS];
 };
 
 #define XENBUS_EVTCHN_TAG  'CTVE'
@@ -471,14 +471,14 @@ EvtchnTrigger(
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
-    PKDPC                       Dpc = &Context->Dpc;
+    PKDPC                       Dpc;
     KIRQL                       Irql;
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
     KeAcquireSpinLock(&Channel->Lock, &Irql);
 
-    KeSetTargetProcessorDpc(Dpc, (CCHAR)Channel->Cpu);
+    Dpc = &Context->Dpc[Channel->Cpu];
     KeInsertQueueDpc(Dpc, Channel, NULL);
 
     KeReleaseSpinLock(&Channel->Lock, Irql);
@@ -1213,6 +1213,7 @@ EvtchnInitialize(
 {
     HANDLE                      ParametersKey;
     ULONG                       UseEvtchnFifoAbi;
+    ULONG                       Cpu;
     NTSTATUS                    status;
 
     Trace("====>\n");
@@ -1269,7 +1270,13 @@ EvtchnInitialize(
 
     InitializeListHead(&(*Context)->List);
     KeInitializeSpinLock(&(*Context)->Lock);
-    KeInitializeDpc(&(*Context)->Dpc, EvtchnCallback, Context);
+
+    for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS; Cpu++) {
+        PKDPC   Dpc = &(*Context)->Dpc[Cpu];
+
+        KeInitializeDpc(Dpc, EvtchnCallback, *Context);
+        KeSetTargetProcessorDpc(Dpc, (CCHAR)Cpu);
+    }
 
     (*Context)->Fdo = Fdo;
 
@@ -1380,9 +1387,12 @@ EvtchnTeardown(
 {
     Trace("====>\n");
 
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+    KeFlushQueuedDpcs();
+
     Context->Fdo = NULL;
 
-    RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
+    RtlZeroMemory(&Context->Dpc, sizeof (KDPC) * MAXIMUM_PROCESSORS);
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
 
