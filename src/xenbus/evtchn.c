@@ -484,7 +484,7 @@ EvtchnTrigger(
     KeReleaseSpinLock(&Channel->Lock, Irql);
 }
 
-static BOOLEAN
+static VOID
 EvtchnUnmask(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
@@ -515,6 +515,16 @@ EvtchnUnmask(
 done:
     if (!InUpcall)
         KeReleaseSpinLock(&Channel->Lock, Irql);
+}
+
+static BOOLEAN
+EvtchnUnmaskVersion1(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  BOOLEAN                 InUpcall
+    )
+{
+    EvtchnUnmask(Interface, Channel, InUpcall);
 
     return FALSE;
 }
@@ -1162,7 +1172,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V1 EvtchnInterfaceVersion1 = {
     EvtchnAcquire,
     EvtchnRelease,
     EvtchnOpen,
-    EvtchnUnmask,
+    EvtchnUnmaskVersion1,
     EvtchnSend,
     EvtchnTrigger,
     EvtchnGetPort,
@@ -1171,6 +1181,19 @@ static struct _XENBUS_EVTCHN_INTERFACE_V1 EvtchnInterfaceVersion1 = {
                      
 static struct _XENBUS_EVTCHN_INTERFACE_V2 EvtchnInterfaceVersion2 = {
     { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V2), 2, NULL, NULL, NULL },
+    EvtchnAcquire,
+    EvtchnRelease,
+    EvtchnOpen,
+    EvtchnBind,
+    EvtchnUnmaskVersion1,
+    EvtchnSend,
+    EvtchnTrigger,
+    EvtchnGetPort,
+    EvtchnClose
+};
+
+static struct _XENBUS_EVTCHN_INTERFACE_V3 EvtchnInterfaceVersion3 = {
+    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V3), 3, NULL, NULL, NULL },
     EvtchnAcquire,
     EvtchnRelease,
     EvtchnOpen,
@@ -1318,6 +1341,23 @@ EvtchnGetInterface(
             break;
 
         *EvtchnInterface = EvtchnInterfaceVersion2;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 3: {
+        struct _XENBUS_EVTCHN_INTERFACE_V3  *EvtchnInterface;
+
+        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V3 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V3))
+            break;
+
+        *EvtchnInterface = EvtchnInterfaceVersion3;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;

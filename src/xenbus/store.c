@@ -1827,7 +1827,6 @@ StoreEnable(
 {
     ULONGLONG                   Value;
     ULONG                       Port;
-    BOOLEAN                     Pending;
     NTSTATUS                    status;
 
     status = HvmGetParam(HVM_PARAM_STORE_EVTCHN, &Value);
@@ -1857,14 +1856,10 @@ StoreEnable(
                          Context->Channel,
                          KeNumberProcessors - 1);
 
-    Pending = XENBUS_EVTCHN(Unmask,
-                            &Context->EvtchnInterface,
-                            Context->Channel,
-                            FALSE);
-    if (Pending)
-        XENBUS_EVTCHN(Trigger,
-                      &Context->EvtchnInterface,
-                      Context->Channel);
+    XENBUS_EVTCHN(Unmask,
+                  &Context->EvtchnInterface,
+                  Context->Channel,
+                  FALSE);
 }
 
 static PHYSICAL_ADDRESS

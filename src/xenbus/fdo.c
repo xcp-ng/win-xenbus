@@ -2016,7 +2016,6 @@ __FdoD3ToD0(
     IN  PXENBUS_FDO Fdo
     )
 {
-    BOOLEAN         Pending;
     NTSTATUS        status;
 
     Trace("====>\n");
@@ -2034,14 +2033,10 @@ __FdoD3ToD0(
     if (Fdo->Channel == NULL)
         goto fail1;
 
-    Pending = XENBUS_EVTCHN(Unmask,
-                            &Fdo->EvtchnInterface,
-                            Fdo->Channel,
-                            FALSE);
-    if (Pending)
-        XENBUS_EVTCHN(Trigger,
-                      &Fdo->EvtchnInterface,
-                      Fdo->Channel);
+    XENBUS_EVTCHN(Unmask,
+                  &Fdo->EvtchnInterface,
+                  Fdo->Channel,
+                  FALSE);
 
     status = XENBUS_STORE(WatchAdd,
                           &Fdo->StoreInterface,

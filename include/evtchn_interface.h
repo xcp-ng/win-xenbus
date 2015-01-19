@@ -126,15 +126,21 @@ typedef NTSTATUS
     IN  ULONG                   Cpu
     );
 
+typedef BOOLEAN
+(*XENBUS_EVTCHN_UNMASK_V1)(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  BOOLEAN                 InCallback
+    );
+
 /*! \typedef XENBUS_EVTCHN_UNMASK
     \brief Unmask an event channel
 
     \param Interface The interface header
     \param Channel The channel handle
     \param InCallback Set to TRUE if this method is invoked in context of the channel callback
-    \return TRUE if there was an event pending at the point of unmask, FALSE otherwise
 */
-typedef BOOLEAN
+typedef VOID
 (*XENBUS_EVTCHN_UNMASK)(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
@@ -203,7 +209,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V1 {
     XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
     XENBUS_EVTCHN_RELEASE   EvtchnRelease;
     XENBUS_EVTCHN_OPEN      EvtchnOpen;
-    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_UNMASK_V1 EvtchnUnmaskVersion1;
     XENBUS_EVTCHN_SEND      EvtchnSend;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
     XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
@@ -220,6 +226,23 @@ struct _XENBUS_EVTCHN_INTERFACE_V2 {
     XENBUS_EVTCHN_RELEASE   EvtchnRelease;
     XENBUS_EVTCHN_OPEN      EvtchnOpen;
     XENBUS_EVTCHN_BIND      EvtchnBind;
+    XENBUS_EVTCHN_UNMASK_V1 EvtchnUnmaskVersion1;
+    XENBUS_EVTCHN_SEND      EvtchnSend;
+    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
+    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
+    XENBUS_EVTCHN_CLOSE     EvtchnClose;
+};
+
+/*! \struct _XENBUS_EVTCHN_INTERFACE_V3
+    \brief EVTCHN interface version 3
+    \ingroup interfaces
+*/
+struct _XENBUS_EVTCHN_INTERFACE_V3 {
+    INTERFACE               Interface;
+    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
+    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
+    XENBUS_EVTCHN_OPEN      EvtchnOpen;
+    XENBUS_EVTCHN_BIND      EvtchnBind;
     XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
     XENBUS_EVTCHN_SEND      EvtchnSend;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
@@ -227,7 +250,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V2 {
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
 
-typedef struct _XENBUS_EVTCHN_INTERFACE_V2 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
+typedef struct _XENBUS_EVTCHN_INTERFACE_V3 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
 
 /*! \def XENBUS_EVTCHN
     \brief Macro at assist in method invocation
@@ -238,7 +261,7 @@ typedef struct _XENBUS_EVTCHN_INTERFACE_V2 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVT
 #endif  // _WINDLL
 
 #define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 1
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 2
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 3
 
 #endif  // _XENBUS_EVTCHN_INTERFACE_H
 
