@@ -84,7 +84,6 @@ struct _XENBUS_EVTCHN_CHANNEL {
     BOOLEAN                     Mask;
     ULONG                       LocalPort;
     ULONG                       Cpu;
-    PXENBUS_INTERRUPT           Interrupt;
 };
 
 struct _XENBUS_EVTCHN_CONTEXT {
@@ -380,11 +379,6 @@ EvtchnOpen(
 
     LocalPort = Channel->LocalPort;
 
-    Channel->Cpu = 0;
-    Channel->Interrupt = (Context->Affinity != 0) ? // Latched available
-                         Context->LatchedInterrupt[0] :
-                         Context->LevelSensitiveInterrupt;
-
     status = XENBUS_EVTCHN_ABI(PortEnable,
                                &Context->EvtchnAbi,
                                LocalPort);
@@ -455,13 +449,6 @@ fail1:
     return NULL;
 }
 
-#define EVTCHN_SWAP_POINTER(_X, _Y)                             \
-        do {                                                    \
-            (_X) = (PVOID)((ULONG_PTR)(_X) ^ (ULONG_PTR)(_Y));  \
-            (_Y) = (PVOID)((ULONG_PTR)(_X) ^ (ULONG_PTR)(_Y));  \
-            (_X) = (PVOID)((ULONG_PTR)(_X) ^ (ULONG_PTR)(_Y));  \
-        } while (FALSE)
-
 static NTSTATUS
 EvtchnBind(
     IN  PINTERFACE              Interface,
@@ -470,7 +457,6 @@ EvtchnBind(
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
-    PXENBUS_INTERRUPT           Interrupt;
     ULONG                       LocalPort;
     unsigned int                vcpu_id;
     KIRQL                       Irql;
@@ -494,19 +480,6 @@ EvtchnBind(
     if (Channel->Cpu == Cpu)
         goto done;
 
-    Interrupt = Context->LatchedInterrupt[Cpu];
-
-    (VOID) KfRaiseIrql(HIGH_LEVEL);
-
-    // Make sure we always lock in a consistent order
-    if ((ULONG_PTR)Interrupt < (ULONG_PTR)Channel->Interrupt) {
-        (VOID) FdoAcquireInterruptLock(Context->Fdo, Interrupt);
-        (VOID) FdoAcquireInterruptLock(Context->Fdo, Channel->Interrupt);
-    } else {
-        (VOID) FdoAcquireInterruptLock(Context->Fdo, Channel->Interrupt);
-        (VOID) FdoAcquireInterruptLock(Context->Fdo, Interrupt);
-    }
-
     LocalPort = Channel->LocalPort;
     vcpu_id = SystemVirtualCpuIndex(Cpu);
 
@@ -514,14 +487,7 @@ EvtchnBind(
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    EVTCHN_SWAP_POINTER(Channel->Interrupt, Interrupt);
     Channel->Cpu = Cpu;
-
-    FdoReleaseInterruptLock(Context->Fdo, Channel->Interrupt, HIGH_LEVEL);
-    FdoReleaseInterruptLock(Context->Fdo, Interrupt, HIGH_LEVEL);
-
-#pragma prefast(suppress:28138) // Use constant rather than variable
-    KeLowerIrql(DISPATCH_LEVEL);
 
     Info("[%u]: CPU %u\n", LocalPort, Cpu);
 
@@ -532,12 +498,6 @@ done:
 
 fail3:
     Error("fail3\n");
-
-    FdoReleaseInterruptLock(Context->Fdo, Channel->Interrupt, HIGH_LEVEL);
-    FdoReleaseInterruptLock(Context->Fdo, Interrupt, HIGH_LEVEL);
-
-#pragma prefast(suppress:28138) // Use constant rather than variable
-    KeLowerIrql(DISPATCH_LEVEL);
 
     KeReleaseSpinLock(&Channel->Lock, Irql);
 
@@ -566,17 +526,22 @@ EvtchnCallback(
 {
     PXENBUS_EVTCHN_CONTEXT  Context = _Context;
     PXENBUS_EVTCHN_CHANNEL  Channel = Argument1;
+    PXENBUS_INTERRUPT       Interrupt;
     KIRQL                   Irql;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument2);
 
-    Irql = FdoAcquireInterruptLock(Context->Fdo, Channel->Interrupt);
+    Interrupt = (Context->Affinity != 0) ? // Latched available
+                Context->LatchedInterrupt[Channel->Cpu] :
+                Context->LevelSensitiveInterrupt;
+
+    Irql = FdoAcquireInterruptLock(Context->Fdo, Interrupt);
 
 #pragma warning(suppress:6387)  // NULL argument
     (VOID) Channel->Callback(NULL, Channel->Argument);
 
-    FdoReleaseInterruptLock(Context->Fdo, Channel->Interrupt, Irql);
+    FdoReleaseInterruptLock(Context->Fdo, Interrupt, Irql);
 }
 
 static VOID
@@ -747,7 +712,6 @@ EvtchnClose(
         ASSERT(NT_SUCCESS(status));
     }
 
-    Channel->Interrupt = NULL;
     Channel->Cpu = 0;
 
     Channel->LocalPort = 0;
@@ -807,17 +771,6 @@ EvtchnPollCallback(
                           LocalPort);
 
         goto done;
-    }
-
-    if (Context->Affinity != 0) {
-        ULONG   Cpu;
-
-        ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
-        Cpu = KeGetCurrentProcessorNumber();
-
-        // Only handle events on the correct CPU
-        if (Channel->Interrupt != Context->LatchedInterrupt[Cpu])
-            goto done;
     }
 
     if (Channel->Mask)
