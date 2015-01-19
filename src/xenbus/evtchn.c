@@ -93,7 +93,6 @@ struct _XENBUS_EVTCHN_CONTEXT {
     PXENBUS_INTERRUPT               LevelSensitiveInterrupt;
     PXENBUS_INTERRUPT               LatchedInterrupt[MAXIMUM_PROCESSORS];
     KAFFINITY                       Affinity;
-    BOOLEAN                         Enabled;
     XENBUS_SUSPEND_INTERFACE        SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackEarly;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
@@ -125,76 +124,6 @@ __EvtchnFree(
     )
 {
     ExFreePoolWithTag(Buffer, XENBUS_EVTCHN_TAG);
-}
-
-static VOID
-EvtchnInterruptEnable(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
-    )
-{
-    LONG                        Cpu;
-    ULONG                       Line;
-    NTSTATUS                    status;
-
-    Trace("====>\n");
-
-    ASSERT3U(Context->Affinity, ==, 0);
-
-    Cpu = 0;
-    while (Cpu < KeNumberProcessors) {
-        unsigned int    vcpu_id;
-        UCHAR           Vector;
-
-        vcpu_id = SystemVirtualCpuIndex(Cpu);
-        Vector = FdoGetInterruptVector(Context->Fdo,
-                                       Context->LatchedInterrupt[Cpu]);
-
-        status = HvmSetEvtchnUpcallVector(vcpu_id, Vector);
-        if (NT_SUCCESS(status)) {
-            Info("CPU %u\n", Cpu);
-            Context->Affinity |= (KAFFINITY)1 << Cpu;
-        }
-
-        Cpu++;
-    }
-
-    Line = FdoGetInterruptLine(Context->Fdo,
-                               Context->LevelSensitiveInterrupt);
-
-    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, Line);
-    ASSERT(NT_SUCCESS(status));
-
-    Trace("<====\n");
-}
-
-static VOID
-EvtchnInterruptDisable(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
-    )
-{
-    LONG                        Cpu;
-    NTSTATUS                    status;
-
-    UNREFERENCED_PARAMETER(Context);
-
-    Trace("====>\n");
-
-    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, 0);
-    ASSERT(NT_SUCCESS(status));
-
-    Cpu = KeNumberProcessors;
-    while (--Cpu >= 0) {
-        unsigned int    vcpu_id;
-
-        vcpu_id = SystemVirtualCpuIndex(Cpu);
-
-        (VOID) HvmSetEvtchnUpcallVector(vcpu_id, 0);
-        Context->Affinity &= ~((KAFFINITY)1 << Cpu);
-    }
-
-    ASSERT3U(Context->Affinity, ==, 0);
-
-    Trace("<====\n");
 }
 
 static NTSTATUS
@@ -394,14 +323,7 @@ EvtchnOpen(
     Channel->Active = TRUE;
 
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-
     InsertTailList(&Context->List, &Channel->ListEntry);
-
-    if (!IsListEmpty(&Context->List) && !Context->Enabled) {
-        EvtchnInterruptEnable(Context);
-        Context->Enabled = TRUE;
-    }
-
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 
     KeLowerIrql(Irql);
@@ -465,8 +387,6 @@ EvtchnBind(
     status = STATUS_INVALID_PARAMETER;
     if (Cpu >= (ULONG)KeNumberProcessors)
         goto fail1;
-
-    ASSERT(Context->Enabled);
 
     status = STATUS_NOT_SUPPORTED;
     if (~Context->Affinity & ((KAFFINITY)1 << Cpu))
@@ -683,14 +603,7 @@ EvtchnClose(
     KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Prevent suspend
 
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-
     RemoveEntryList(&Channel->ListEntry);
-
-    if (IsListEmpty(&Context->List) && Context->Enabled) {
-        EvtchnInterruptDisable(Context);
-        Context->Enabled = FALSE;
-    }
-
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 
     RtlZeroMemory(&Channel->ListEntry, sizeof (LIST_ENTRY));
@@ -870,6 +783,76 @@ EvtchnAbiRelease(
 }
 
 static VOID
+EvtchnInterruptEnable(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    )
+{
+    LONG                        Cpu;
+    ULONG                       Line;
+    NTSTATUS                    status;
+
+    Trace("====>\n");
+
+    ASSERT3U(Context->Affinity, ==, 0);
+
+    Cpu = 0;
+    while (Cpu < KeNumberProcessors) {
+        unsigned int    vcpu_id;
+        UCHAR           Vector;
+
+        vcpu_id = SystemVirtualCpuIndex(Cpu);
+        Vector = FdoGetInterruptVector(Context->Fdo,
+                                       Context->LatchedInterrupt[Cpu]);
+
+        status = HvmSetEvtchnUpcallVector(vcpu_id, Vector);
+        if (NT_SUCCESS(status)) {
+            Info("CPU %u\n", Cpu);
+            Context->Affinity |= (KAFFINITY)1 << Cpu;
+        }
+
+        Cpu++;
+    }
+
+    Line = FdoGetInterruptLine(Context->Fdo,
+                               Context->LevelSensitiveInterrupt);
+
+    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, Line);
+    ASSERT(NT_SUCCESS(status));
+
+    Trace("<====\n");
+}
+
+static VOID
+EvtchnInterruptDisable(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    )
+{
+    LONG                        Cpu;
+    NTSTATUS                    status;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    Trace("====>\n");
+
+    status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, 0);
+    ASSERT(NT_SUCCESS(status));
+
+    Cpu = KeNumberProcessors;
+    while (--Cpu >= 0) {
+        unsigned int    vcpu_id;
+
+        vcpu_id = SystemVirtualCpuIndex(Cpu);
+
+        (VOID) HvmSetEvtchnUpcallVector(vcpu_id, 0);
+        Context->Affinity &= ~((KAFFINITY)1 << Cpu);
+    }
+
+    ASSERT3U(Context->Affinity, ==, 0);
+
+    Trace("<====\n");
+}
+
+static VOID
 EvtchnSuspendCallbackEarly(
     IN  PVOID               Argument
     )
@@ -909,10 +892,8 @@ EvtchnSuspendCallbackLate(
     status = EvtchnAbiAcquire(Context);
     ASSERT(NT_SUCCESS(status));
 
-    if (Context->Enabled) {
-        EvtchnInterruptDisable(Context);
-        EvtchnInterruptEnable(Context);
-    }
+    EvtchnInterruptDisable(Context);
+    EvtchnInterruptEnable(Context);
 }
 
 static VOID
@@ -1082,6 +1063,8 @@ EvtchnAcquire(
         Cpu++;
     }
 
+    EvtchnInterruptEnable(Context);
+
     Trace("<====\n");
 
 done:
@@ -1173,6 +1156,8 @@ EvtchnRelease(
 
     if (!IsListEmpty(&Context->List))
         BUG("OUTSTANDING EVENT CHANNELS");
+
+    EvtchnInterruptDisable(Context);
 
     Cpu = KeNumberProcessors;
     while (--Cpu >= 0) {
