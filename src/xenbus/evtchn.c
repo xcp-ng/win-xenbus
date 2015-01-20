@@ -85,6 +85,7 @@ struct _XENBUS_EVTCHN_CHANNEL {
     BOOLEAN                     Mask;
     ULONG                       LocalPort;
     ULONG                       Cpu;
+    BOOLEAN                     Closed;
 };
 
 struct _XENBUS_EVTCHN_CONTEXT {
@@ -310,6 +311,8 @@ EvtchnOpen(
 
     LocalPort = Channel->LocalPort;
 
+    Trace("%u\n", LocalPort);
+
     InitializeListHead(&Channel->PendingListEntry);
 
     status = XENBUS_EVTCHN_ABI(PortEnable,
@@ -378,63 +381,49 @@ fail1:
     return NULL;
 }
 
-static NTSTATUS
-EvtchnBind(
-    IN  PINTERFACE              Interface,
+static VOID
+EvtchnReap(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Cpu
+    IN  BOOLEAN                 Close
     )
 {
-    PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
-    ULONG                       LocalPort;
-    unsigned int                vcpu_id;
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    ULONG                       LocalPort = Channel->LocalPort;
 
-    status = STATUS_INVALID_PARAMETER;
-    if (Cpu >= (ULONG)KeNumberProcessors)
-        goto fail1;
+    UNREFERENCED_PARAMETER(Context);
 
-    status = STATUS_NOT_SUPPORTED;
-    if (~Context->Affinity & ((KAFFINITY)1 << Cpu))
-        goto fail2;
+    Trace("%u\n", LocalPort);
 
-    KeAcquireSpinLock(&Channel->Lock, &Irql);
+    ASSERT(Channel->Closed);
+    Channel->Closed = FALSE;
 
-    if (!Channel->Active)
-        goto done;
+    RtlZeroMemory(&Channel->Lock, sizeof (KSPIN_LOCK));
 
-    if (Channel->Cpu == Cpu)
-        goto done;
+    RemoveEntryList(&Channel->ListEntry);
+    RtlZeroMemory(&Channel->ListEntry, sizeof (LIST_ENTRY));
 
-    LocalPort = Channel->LocalPort;
-    vcpu_id = SystemVirtualCpuIndex(Cpu);
+    Channel->Cpu = 0;
 
-    status = EventChannelBindVirtualCpu(LocalPort, vcpu_id);
-    if (!NT_SUCCESS(status))
-        goto fail3;
+    ASSERT(IsListEmpty(&Channel->PendingListEntry));
+    RtlZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY));
 
-    Channel->Cpu = Cpu;
+    Channel->LocalPort = 0;
+    Channel->Mask = FALSE;
+    RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
 
-    Info("[%u]: CPU %u\n", LocalPort, Cpu);
+    if (Close && Channel->Type != XENBUS_EVTCHN_TYPE_FIXED)
+        (VOID) EventChannelClose(LocalPort);
 
-done:
-    KeReleaseSpinLock(&Channel->Lock, Irql);
+    Channel->Argument = NULL;
+    Channel->Callback = NULL;
+    Channel->Type = 0;
 
-    return STATUS_SUCCESS;
+    Channel->Caller = NULL;
 
-fail3:
-    Error("fail3\n");
+    Channel->Magic = 0;
 
-    KeReleaseSpinLock(&Channel->Lock, Irql);
-
-fail2:
-    Error("fail2\n");
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
+    ASSERT(IsZeroMemory(Channel, sizeof (XENBUS_EVTCHN_CHANNEL)));
+    __EvtchnFree(Channel);
 }
 
 static BOOLEAN
@@ -473,10 +462,12 @@ done:
 static BOOLEAN
 EvtchnPoll(
     IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  ULONG                   Cpu
+    IN  ULONG                   Cpu,
+    IN  PLIST_ENTRY             List
     )
 {
     BOOLEAN                     DoneSomething;
+    PLIST_ENTRY                 ListEntry;
 
     (VOID) XENBUS_EVTCHN_ABI(Poll,
                              &Context->EvtchnAbi,
@@ -485,29 +476,40 @@ EvtchnPoll(
                              Context);
 
     DoneSomething = FALSE;
-    while (!IsListEmpty(&Context->PendingList[Cpu])) {
-        PLIST_ENTRY             ListEntry;
+
+    ListEntry = Context->PendingList[Cpu].Flink;
+    while (ListEntry != &Context->PendingList[Cpu]) {
+        PLIST_ENTRY             Next = ListEntry->Flink;
         PXENBUS_EVTCHN_CHANNEL  Channel;
-
-        ListEntry = RemoveHeadList(&Context->PendingList[Cpu]);
-        ASSERT(ListEntry != &Context->PendingList[Cpu]);
-
-        InitializeListHead(ListEntry);
 
         Channel = CONTAINING_RECORD(ListEntry,
                                     XENBUS_EVTCHN_CHANNEL,
                                     PendingListEntry);
-        if (Channel->Mask)
-            XENBUS_EVTCHN_ABI(PortMask,
+
+        ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
+
+        KeMemoryBarrier();
+        if (!Channel->Closed) {
+            RemoveEntryList(&Channel->PendingListEntry);
+            InitializeListHead(&Channel->PendingListEntry);
+
+            if (Channel->Mask)
+                XENBUS_EVTCHN_ABI(PortMask,
+                                  &Context->EvtchnAbi,
+                                  Channel->LocalPort);
+
+            XENBUS_EVTCHN_ABI(PortAck,
                               &Context->EvtchnAbi,
                               Channel->LocalPort);
 
-        XENBUS_EVTCHN_ABI(PortAck,
-                          &Context->EvtchnAbi,
-                          Channel->LocalPort);
-
 #pragma warning(suppress:6387)  // NULL argument
-        DoneSomething |= Channel->Callback(NULL, Channel->Argument);
+            DoneSomething |= Channel->Callback(NULL, Channel->Argument);
+        } else if (List != NULL) {
+            RemoveEntryList(&Channel->PendingListEntry);
+            InsertTailList(List, &Channel->PendingListEntry);
+        }
+
+        ListEntry = Next;
     }
 
     return DoneSomething;
@@ -519,6 +521,7 @@ EvtchnFlush(
     IN  ULONG                   Cpu
     )
 {
+    LIST_ENTRY                  List;
     PXENBUS_INTERRUPT           Interrupt;
     KIRQL                       Irql;
 
@@ -526,11 +529,31 @@ EvtchnFlush(
                 Context->LatchedInterrupt[Cpu] :
                 Context->LevelSensitiveInterrupt;
 
+    InitializeListHead(&List);
+
     Irql = FdoAcquireInterruptLock(Context->Fdo, Interrupt);
 
-    (VOID) EvtchnPoll(Context, Cpu);
+    (VOID) EvtchnPoll(Context, Cpu, &List);
 
     FdoReleaseInterruptLock(Context->Fdo, Interrupt, Irql);
+
+    while (!IsListEmpty(&List)) {
+        PLIST_ENTRY             ListEntry;
+        PXENBUS_EVTCHN_CHANNEL  Channel;
+
+        ListEntry = RemoveHeadList(&List);
+        ASSERT(ListEntry != &List);
+
+        Channel = CONTAINING_RECORD(ListEntry,
+                                    XENBUS_EVTCHN_CHANNEL,
+                                    PendingListEntry);
+
+        ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
+
+        InitializeListHead(&Channel->PendingListEntry);
+
+        EvtchnReap(Context, Channel, TRUE);
+    }
 }
 
 static
@@ -606,6 +629,65 @@ EvtchnTrigger(
 
     Dpc = &Context->Dpc[Cpu];
     KeInsertQueueDpc(Dpc, NULL, NULL);
+}
+
+static NTSTATUS
+EvtchnBind(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Cpu
+    )
+{
+    PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
+    ULONG                       LocalPort;
+    unsigned int                vcpu_id;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (Cpu >= (ULONG)KeNumberProcessors)
+        goto fail1;
+
+    status = STATUS_NOT_SUPPORTED;
+    if (~Context->Affinity & ((KAFFINITY)1 << Cpu))
+        goto fail2;
+
+    KeAcquireSpinLock(&Channel->Lock, &Irql);
+
+    if (!Channel->Active)
+        goto done;
+
+    if (Channel->Cpu == Cpu)
+        goto done;
+
+    LocalPort = Channel->LocalPort;
+    vcpu_id = SystemVirtualCpuIndex(Cpu);
+
+    status = EventChannelBindVirtualCpu(LocalPort, vcpu_id);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    Channel->Cpu = Cpu;
+
+    Info("[%u]: CPU %u\n", LocalPort, Cpu);
+
+done:
+    KeReleaseSpinLock(&Channel->Lock, Irql);
+
+    return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    KeReleaseSpinLock(&Channel->Lock, Irql);
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }
 
 static VOID
@@ -688,57 +770,48 @@ EvtchnClose(
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
+    ULONG                       LocalPort = Channel->LocalPort;
     KIRQL                       Irql;
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    RtlZeroMemory(&Channel->Lock, sizeof (KSPIN_LOCK));
-
     KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Prevent suspend
 
-    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-    RemoveEntryList(&Channel->ListEntry);
-    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
-
-    RtlZeroMemory(&Channel->ListEntry, sizeof (LIST_ENTRY));
+    Trace("%u\n", LocalPort);
 
     if (Channel->Active) {
-        ULONG       LocalPort = Channel->LocalPort;
         NTSTATUS    status;
 
         Channel->Active = FALSE;
 
-        XENBUS_EVTCHN_ABI(PortMask,
+        XENBUS_EVTCHN_ABI(PortDisable,
                           &Context->EvtchnAbi,
                           LocalPort);
 
-        if (Channel->Type != XENBUS_EVTCHN_TYPE_FIXED)
-            (VOID) EventChannelClose(LocalPort);
-
         status = HashTableRemove(Context->Table, LocalPort);
         ASSERT(NT_SUCCESS(status));
+
+        //
+        // The event may be pending on a CPU queue so we mark it as
+        // closed but defer the rest of the work to the correct
+        // DPC, which will make sure the queue is polled first.
+        //
+
+        Channel->Closed = TRUE;
+        KeMemoryBarrier();
+
+        EvtchnTrigger(Interface, Channel);
+        goto done;
     }
 
-    Channel->Cpu = 0;
+    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
 
-    ASSERT(IsListEmpty(&Channel->PendingListEntry));
-    RtlZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY));
+    Channel->Closed = TRUE;
+    EvtchnReap(Context, Channel, FALSE);
 
-    Channel->LocalPort = 0;
-    Channel->Mask = FALSE;
-    RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
+    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 
-    Channel->Argument = NULL;
-    Channel->Callback = NULL;
-    Channel->Type = 0;
-
-    Channel->Caller = NULL;
-
-    Channel->Magic = 0;
-
-    ASSERT(IsZeroMemory(Channel, sizeof (XENBUS_EVTCHN_CHANNEL)));
-    __EvtchnFree(Channel);
-
+done:
     KeLowerIrql(Irql);
 }
 
@@ -778,7 +851,7 @@ EvtchnInterruptCallback(
     while (XENBUS_SHARED_INFO(UpcallPending,
                               &Context->SharedInfoInterface,
                               Cpu))
-        DoneSomething |= EvtchnPoll(Context, Cpu);
+        DoneSomething |= EvtchnPoll(Context, Cpu, NULL);
 
     return DoneSomething;
 }
@@ -1203,9 +1276,6 @@ EvtchnRelease(
 
     Trace("====>\n");
 
-    if (!IsListEmpty(&Context->List))
-        BUG("OUTSTANDING EVENT CHANNELS");
-
     EvtchnInterruptDisable(Context);
 
     Cpu = KeNumberProcessors;
@@ -1218,6 +1288,9 @@ EvtchnRelease(
 
     FdoFreeInterrupt(Fdo, Context->LevelSensitiveInterrupt);
     Context->LevelSensitiveInterrupt = NULL;
+
+    if (!IsListEmpty(&Context->List))
+        BUG("OUTSTANDING EVENT CHANNELS");
 
     EvtchnAbiRelease(Context);
 
