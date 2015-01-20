@@ -452,7 +452,11 @@ fail3:
     Error("fail3\n");
 
     Channel->LocalPort = 0;
+    Channel->Mask = FALSE;
     RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
+
+    if (Channel->Type != XENBUS_EVTCHN_TYPE_FIXED)
+        (VOID) EventChannelClose(LocalPort);
 
 fail2:
     Error("fail2\n");
