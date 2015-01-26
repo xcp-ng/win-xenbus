@@ -433,10 +433,6 @@ EvtchnFifoPortUnmask(
         New = Old & ~(1 << EVTCHN_FIFO_MASKED);
     } while (InterlockedCompareExchange((LONG *)EventWord, New, Old) != Old);
 
-    // Check whether the port was masked
-    if (~Old & (1 << EVTCHN_FIFO_MASKED))
-        return FALSE;
-
     // If we cleared the mask then check whether something is pending
     return __EvtchnFifoTestFlag(EventWord, EVTCHN_FIFO_PENDING);
 }

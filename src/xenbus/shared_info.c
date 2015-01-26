@@ -309,9 +309,7 @@ SharedInfoEvtchnUnmask(
     SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
     PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
 
-    // Check whether the port is masked
-    if (!SharedInfoClearBit(&Shared->evtchn_mask[SelectorBit], PortBit))
-        return FALSE;
+    (VOID) SharedInfoClearBit(&Shared->evtchn_mask[SelectorBit], PortBit);
 
     KeMemoryBarrier();
 
