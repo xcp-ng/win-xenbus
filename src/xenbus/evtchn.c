@@ -493,9 +493,7 @@ EvtchnUnmask(
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
     KIRQL                       Irql = PASSIVE_LEVEL;
-    BOOLEAN                     Pending;
     ULONG                       LocalPort;
-    ULONG                       Cpu;
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
@@ -504,59 +502,21 @@ EvtchnUnmask(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    Pending = FALSE;
-
     if (!Channel->Active)
         goto done;
 
     LocalPort = Channel->LocalPort;
 
-    Pending = XENBUS_EVTCHN_ABI(PortUnmask,
-                                &Context->EvtchnAbi,
-                                LocalPort);
-
-    if (!Pending)
-        goto done;
-
-    //
-    // If we are in context of the upcall then use a hypercall
-    // to schedule the pending event.
-    //
-    if (InUpcall) {
-        (VOID) EventChannelUnmask(LocalPort);
-
-        Pending = FALSE;
-        goto done;
-    }
-
-    //
-    // If we are not unmasking on the same CPU to which the
-    // event channel is bound, then we need to use a hypercall
-    // to schedule the upcall on the correct CPU.
-    //
-    Cpu = KeGetCurrentProcessorNumber();
-
-    if (Channel->Cpu != Cpu) {
-        (VOID) EventChannelUnmask(LocalPort);
-
-        Pending = FALSE;
-        goto done;
-    }
-
-    if (Channel->Mask)
-        XENBUS_EVTCHN_ABI(PortMask,
+    if (XENBUS_EVTCHN_ABI(PortUnmask,
                           &Context->EvtchnAbi,
-                          LocalPort);
-
-    XENBUS_EVTCHN_ABI(PortAck,
-                      &Context->EvtchnAbi,
-                      LocalPort);
+                          LocalPort))
+        (VOID) EventChannelUnmask(LocalPort);
 
 done:
     if (!InUpcall)
         KeReleaseSpinLock(&Channel->Lock, Irql);
 
-    return Pending;
+    return FALSE;
 }
 
 static NTSTATUS
