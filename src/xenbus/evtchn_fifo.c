@@ -398,7 +398,7 @@ EvtchnFifoPortAck(
     event_word_t                    *EventWord;
 
     EventWord = EvtchnFifoEventWord(Context, Port);
-    __EvtchnFifoClearFlag(&EventWord[Port], EVTCHN_FIFO_PENDING);
+    __EvtchnFifoClearFlag(EventWord, EVTCHN_FIFO_PENDING);
 }
 
 static VOID
@@ -411,7 +411,7 @@ EvtchnFifoPortMask(
     event_word_t                    *EventWord;
 
     EventWord = EvtchnFifoEventWord(Context, Port);
-    __EvtchnFifoSetFlag(&EventWord[Port], EVTCHN_FIFO_MASKED);
+    __EvtchnFifoSetFlag(EventWord, EVTCHN_FIFO_MASKED);
 }
 
 static BOOLEAN
