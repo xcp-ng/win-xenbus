@@ -102,6 +102,7 @@ __EvtchnFifoTestFlag(
     IN  ULONG           Flag
     )
 {
+    KeMemoryBarrier();
     return (*EventWord & (1 << Flag)) ? TRUE : FALSE;
 }
 
