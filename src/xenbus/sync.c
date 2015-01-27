@@ -82,6 +82,7 @@
 typedef struct  _SYNC_CONTEXT {
     KDPC                Dpc[MAXIMUM_PROCESSORS];
     ULONG               Sequence;
+    LONG                CpuCount;
     LONG                CompletionCount;
     BOOLEAN             DisableInterrupts[MAXIMUM_PROCESSORS];
     BOOLEAN             Exit[MAXIMUM_PROCESSORS];
@@ -129,7 +130,6 @@ SyncWorker(
 {
     BOOLEAN     InterruptsDisabled;
     ULONG       Cpu;
-    LONG        CpuCount;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Context);
@@ -141,8 +141,6 @@ SyncWorker(
 
     Trace("====> (%u)\n", Cpu);
     InterlockedIncrement(&SyncContext.CompletionCount);
-
-    CpuCount = KeNumberProcessors;
 
     for (;;) {
         ULONG   Sequence;
@@ -170,7 +168,7 @@ SyncWorker(
 
             Attempts = 0;
             while (SyncContext.Sequence == Sequence &&
-                   SyncContext.CompletionCount < CpuCount) {
+                   SyncContext.CompletionCount < SyncContext.CpuCount) {
                 _mm_pause();
                 KeMemoryBarrier();
 
@@ -182,11 +180,11 @@ SyncWorker(
                         Old = SyncContext.CompletionCount;
                         New = Old - 1;
 
-                        if (Old == CpuCount)
+                        if (Old == SyncContext.CpuCount)
                             break;
                     } while (InterlockedCompareExchange(&SyncContext.CompletionCount, New, Old) != Old);
 
-                    if (Old < CpuCount) {
+                    if (Old < SyncContext.CpuCount) {
 #pragma prefast(suppress:28138) // Use constant rather than variable
                         KeLowerIrql(DISPATCH_LEVEL);
                         status = STATUS_UNSUCCESSFUL;
@@ -212,7 +210,7 @@ SyncWorker(
             InterlockedIncrement(&SyncContext.CompletionCount);
 
             while (SyncContext.Sequence == Sequence &&
-                   SyncContext.CompletionCount < CpuCount) {
+                   SyncContext.CompletionCount < SyncContext.CpuCount) {
                 _mm_pause();
                 KeMemoryBarrier();
             }
@@ -234,7 +232,6 @@ SyncCapture(
     )
 {
     ULONG       Cpu;
-    LONG        CpuCount;
     ULONG       Index;
 
     ASSERT3U(KeGetCurrentIrql(), ==, DISPATCH_LEVEL);
@@ -248,10 +245,9 @@ SyncCapture(
 
     SyncContext.Sequence++;
     SyncContext.CompletionCount = 0;
+    SyncContext.CpuCount = KeQueryActiveProcessorCount(NULL);
 
-    CpuCount = KeNumberProcessors;
-
-    for (Index = 0; Index < (ULONG)CpuCount; Index++) {
+    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++) {
         PKDPC   Dpc = &SyncContext.Dpc[Index];
 
         SyncContext.DisableInterrupts[Index] = FALSE;
@@ -267,7 +263,7 @@ SyncCapture(
 
     InterlockedIncrement(&SyncContext.CompletionCount);
 
-    while (SyncContext.CompletionCount < CpuCount) {
+    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
         _mm_pause();
         KeMemoryBarrier();
     }
@@ -282,7 +278,6 @@ SyncDisableInterrupts(
     VOID
     )
 {
-    LONG        CpuCount;
     ULONG       Index;
     ULONG       Attempts;
     NTSTATUS    status;
@@ -292,9 +287,7 @@ SyncDisableInterrupts(
     SyncContext.Sequence++;
     SyncContext.CompletionCount = 0;
 
-    CpuCount = KeNumberProcessors;
-
-    for (Index = 0; Index < (ULONG)CpuCount; Index++)
+    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++)
         SyncContext.DisableInterrupts[Index] = TRUE;
 
 again:
@@ -304,7 +297,7 @@ again:
     InterlockedIncrement(&SyncContext.CompletionCount);
 
     Attempts = 0;
-    while (SyncContext.CompletionCount < CpuCount) {
+    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
         _mm_pause();
         KeMemoryBarrier();
 
@@ -316,15 +309,15 @@ again:
                 Old = SyncContext.CompletionCount;
                 New = Old - 1;
 
-                if (Old == CpuCount)
+                if (Old == SyncContext.CpuCount)
                     break;
             } while (InterlockedCompareExchange(&SyncContext.CompletionCount, New, Old) != Old);
 
-            if (Old < CpuCount) {
+            if (Old < SyncContext.CpuCount) {
                 LogPrintf(LOG_LEVEL_WARNING,
                           "SYNC: %d < %d\n",
                           Old,
-                          CpuCount);
+                          SyncContext.CpuCount);
 
 #pragma prefast(suppress:28138) // Use constant rather than variable
                 KeLowerIrql(DISPATCH_LEVEL);
@@ -347,7 +340,6 @@ SyncEnableInterrupts(
     )
 {
     KIRQL   Irql;
-    LONG    CpuCount;
     ULONG   Index;
 
     _enable();
@@ -358,14 +350,12 @@ SyncEnableInterrupts(
     SyncContext.Sequence++;
     SyncContext.CompletionCount = 0;
 
-    CpuCount = KeNumberProcessors;
-
-    for (Index = 0; Index < (ULONG)CpuCount; Index++)
+    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++)
         SyncContext.DisableInterrupts[Index] = FALSE;
 
     InterlockedIncrement(&SyncContext.CompletionCount);
 
-    while (SyncContext.CompletionCount < CpuCount) {
+    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
         _mm_pause();
         KeMemoryBarrier();
     }
@@ -383,7 +373,6 @@ SyncRelease(
     VOID
     )
 {
-    LONG        CpuCount;
     ULONG       Cpu;
     ULONG       Index;
 
@@ -392,14 +381,12 @@ SyncRelease(
     SyncContext.Sequence++;
     SyncContext.CompletionCount = 0;
 
-    CpuCount = KeNumberProcessors;
-
-    for (Index = 0; Index < (ULONG)CpuCount; Index++)
+    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++)
         SyncContext.Exit[Index] = TRUE;
 
     InterlockedIncrement(&SyncContext.CompletionCount);
 
-    while (SyncContext.CompletionCount < CpuCount) {
+    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
         _mm_pause();
         KeMemoryBarrier();
     }
