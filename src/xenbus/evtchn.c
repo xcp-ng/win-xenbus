@@ -596,9 +596,6 @@ EvtchnCallback(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument2);
 
-    if (!Channel->Active)
-        return;
-
     Irql = __EvtchnAcquireInterruptLock(Context, Channel);
 
 #pragma warning(suppress:6387)  // NULL argument
