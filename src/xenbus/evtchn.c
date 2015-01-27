@@ -644,6 +644,8 @@ EvtchnBind(
     KIRQL                       Irql;
     NTSTATUS                    status;
 
+    ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
+
     status = STATUS_INVALID_PARAMETER;
     if (Cpu >= (ULONG)KeNumberProcessors)
         goto fail1;
@@ -989,6 +991,8 @@ EvtchnSuspendCallbackEarly(
 
         Channel = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_CHANNEL, ListEntry);
 
+        ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
+
         if (Channel->Active) {
             ULONG       LocalPort = Channel->LocalPort;
             NTSTATUS    status;
@@ -1043,6 +1047,8 @@ EvtchnDebugCallback(
             ULONG_PTR               Offset;
 
             Channel = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_CHANNEL, ListEntry);
+
+            ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
             ModuleLookup((ULONG_PTR)Channel->Caller, &Name, &Offset);
 
