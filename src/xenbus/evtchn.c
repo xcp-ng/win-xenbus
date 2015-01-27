@@ -513,6 +513,9 @@ EvtchnBind(
 
     KeAcquireSpinLock(&Channel->Lock, &Irql);
 
+    if (!Channel->Active)
+        goto done;
+
     if (Channel->Cpu == Cpu)
         goto done;
 
