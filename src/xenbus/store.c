@@ -1847,15 +1847,6 @@ StoreEnable(
                                      FALSE);
     ASSERT(Context->Channel != NULL);
 
-    // 
-    // Attempt to use some CPU other than 0 for events from
-    // xenstored.
-    //
-    (VOID) XENBUS_EVTCHN(Bind,
-                         &Context->EvtchnInterface,
-                         Context->Channel,
-                         KeNumberProcessors - 1);
-
     XENBUS_EVTCHN(Unmask,
                   &Context->EvtchnInterface,
                   Context->Channel,
