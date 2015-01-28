@@ -450,6 +450,26 @@ BusQueryIdTypeName(
 #undef  _BUS_QUERY_ID_TYPE_NAME
 }
 
+static FORCEINLINE const CHAR *
+ProcessorChangeName(
+    IN  KE_PROCESSOR_CHANGE_NOTIFY_STATE    Change
+    )
+{
+#define _PROCESSOR_CHANGE_NAME(_Change) \
+    case KeProcessor ## _Change:        \
+        return #_Change;
 
+    switch (Change) {
+    _PROCESSOR_CHANGE_NAME(AddStartNotify);
+    _PROCESSOR_CHANGE_NAME(AddCompleteNotify);
+    _PROCESSOR_CHANGE_NAME(AddFailureNotify);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef _PROCESSOR_CHANGE_NAME
+}
 
 #endif // _COMMON_NAMES_H_
