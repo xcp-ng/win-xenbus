@@ -165,14 +165,13 @@ FdoReleaseInterruptLock(
     IN  __drv_restoresIRQL KIRQL    Irql
     );
 
-extern NTSTATUS
+extern PXENBUS_INTERRUPT
 FdoAllocateInterrupt(
     IN  PXENBUS_FDO         Fdo,
     IN  KINTERRUPT_MODE     InterruptMode,
     IN  ULONG               Cpu,
     IN  KSERVICE_ROUTINE    Callback,
-    IN  PVOID               Argument OPTIONAL,
-    OUT PXENBUS_INTERRUPT   *Interrupt
+    IN  PVOID               Argument OPTIONAL
     );
 
 extern UCHAR

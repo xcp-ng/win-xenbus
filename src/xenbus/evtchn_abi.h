@@ -39,7 +39,8 @@ typedef PVOID *PXENBUS_EVTCHN_ABI_CONTEXT;
 
 typedef NTSTATUS
 (*XENBUS_EVTCHN_ABI_ACQUIRE)(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  Context
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT  Context,
+    OUT PKAFFINITY                  Affinity
     );
 
 typedef VOID

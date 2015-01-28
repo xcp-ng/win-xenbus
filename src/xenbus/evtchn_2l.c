@@ -148,7 +148,8 @@ EvtchnTwoLevelPortUnmask(
 
 static NTSTATUS
 EvtchnTwoLevelAcquire(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context,
+    OUT PKAFFINITY                      Affinity
     )
 {
     PXENBUS_EVTCHN_TWO_LEVEL_CONTEXT    Context = (PVOID)_Context;
@@ -165,6 +166,8 @@ EvtchnTwoLevelAcquire(
     status = XENBUS_SHARED_INFO(Acquire, &Context->SharedInfoInterface);
     if (!NT_SUCCESS(status))
         goto fail1;
+
+    *Affinity = (KAFFINITY)1;
 
     Trace("<====\n");
 

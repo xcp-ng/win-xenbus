@@ -1475,6 +1475,7 @@ FdoFilterResourceRequirements(
     IO_RESOURCE_DESCRIPTOR          Interrupt;
     PIO_RESOURCE_LIST               List;
     ULONG                           Index;
+    ULONG                           Count;
     NTSTATUS                        status;
 
     status = FdoForwardIrpSynchronously(Fdo, Irp);
@@ -1487,8 +1488,10 @@ FdoFilterResourceRequirements(
     Old = (PIO_RESOURCE_REQUIREMENTS_LIST)Irp->IoStatus.Information;
     ASSERT3U(Old->AlternativeLists, ==, 1);
 
+    Count = KeQueryActiveProcessorCount(NULL);
+
     Size = Old->ListSize +
-        (sizeof (IO_RESOURCE_DESCRIPTOR) * KeNumberProcessors);
+        (sizeof (IO_RESOURCE_DESCRIPTOR) * Count);
 
     New = __AllocatePoolWithTag(PagedPool, Size, 'SUB');
 
@@ -1525,7 +1528,7 @@ FdoFilterResourceRequirements(
     Interrupt.u.Interrupt.AffinityPolicy = IrqPolicySpecifiedProcessors;
     Interrupt.u.Interrupt.PriorityPolicy = IrqPriorityUndefined;
 
-    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++) {
+    for (Index = 0; Index < Count; Index++) {
         Interrupt.u.Interrupt.TargetedProcessors = (KAFFINITY)1 << Index;
         List->Descriptors[List->Count++] = Interrupt;
     }
@@ -1879,48 +1882,42 @@ fail1:
     return status;
 }
 
-NTSTATUS
+PXENBUS_INTERRUPT
 FdoAllocateInterrupt(
     IN  PXENBUS_FDO         Fdo,
     IN  KINTERRUPT_MODE     InterruptMode,
     IN  ULONG               Cpu,
     IN  KSERVICE_ROUTINE    Callback,
-    IN  PVOID               Argument OPTIONAL,
-    OUT PXENBUS_INTERRUPT   *Interrupt
+    IN  PVOID               Argument OPTIONAL
     )
 {
     PLIST_ENTRY             ListEntry;
+    PXENBUS_INTERRUPT       Interrupt;
     KIRQL                   Irql;
-    NTSTATUS                status;
 
     for (ListEntry = Fdo->List.Flink;
          ListEntry != &Fdo->List;
          ListEntry = ListEntry->Flink) {
-        *Interrupt = CONTAINING_RECORD(ListEntry, XENBUS_INTERRUPT, ListEntry);
+        Interrupt = CONTAINING_RECORD(ListEntry, XENBUS_INTERRUPT, ListEntry);
 
-        if ((*Interrupt)->Callback == NULL &&
-            (*Interrupt)->InterruptMode == InterruptMode &&
-            (*Interrupt)->Cpu == Cpu)
+        if (Interrupt->Callback == NULL &&
+            Interrupt->InterruptMode == InterruptMode &&
+            Interrupt->Cpu == Cpu)
             goto found;
     }
 
-    *Interrupt = NULL;
-
-    status = STATUS_OBJECT_NAME_NOT_FOUND;
     goto fail1;
 
 found:
-    Irql = FdoAcquireInterruptLock(Fdo, *Interrupt);
-    (*Interrupt)->Callback = Callback;
-    (*Interrupt)->Argument = Argument;
-    FdoReleaseInterruptLock(Fdo, *Interrupt, Irql);
+    Irql = FdoAcquireInterruptLock(Fdo, Interrupt);
+    Interrupt->Callback = Callback;
+    Interrupt->Argument = Argument;
+    FdoReleaseInterruptLock(Fdo, Interrupt, Irql);
 
-    return STATUS_SUCCESS;
+    return Interrupt;
 
 fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
+    return NULL;
 }
 
 UCHAR

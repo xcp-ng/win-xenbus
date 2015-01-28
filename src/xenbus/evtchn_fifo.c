@@ -494,7 +494,8 @@ EvtchnFifoReset(
 
 static NTSTATUS
 EvtchnFifoAcquire(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
+    OUT PKAFFINITY                  Affinity
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -510,8 +511,10 @@ EvtchnFifoAcquire(
 
     Trace("====>\n");
 
+    *Affinity = 0;
     Cpu = 0;
-    while (Cpu < KeNumberProcessors) {
+
+    while (Cpu < (LONG)KeQueryActiveProcessorCount(NULL)) {
         unsigned int        vcpu_id;
         PFN_NUMBER          Pfn;
         PHYSICAL_ADDRESS    Address;
@@ -538,6 +541,8 @@ EvtchnFifoAcquire(
                   Address.LowPart);
 
         Context->ControlBlockMdl[vcpu_id] = Mdl;
+
+        *Affinity |= (KAFFINITY)1 << Cpu;
         Cpu++;
     }
 
@@ -581,7 +586,7 @@ EvtchnFifoRelease(
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
     KIRQL                           Irql;
-    LONG                            Cpu;
+    int                             vcpu_id;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -594,14 +599,14 @@ EvtchnFifoRelease(
 
     EvtchnFifoContract(Context);
 
-    Cpu = KeNumberProcessors;
-    while (--Cpu >= 0) {
-        unsigned int    vcpu_id;
+    vcpu_id = MAX_HVM_VCPUS;
+    while (--vcpu_id >= 0) {
         PMDL            Mdl;
 
-        vcpu_id = SystemVirtualCpuIndex(Cpu);
-
         Mdl = Context->ControlBlockMdl[vcpu_id];
+        if (Mdl == NULL)
+            continue;
+
         Context->ControlBlockMdl[vcpu_id] = NULL;
 
         __FreePage(Mdl);

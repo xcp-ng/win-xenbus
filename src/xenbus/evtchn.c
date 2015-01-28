@@ -646,13 +646,9 @@ EvtchnBind(
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    status = STATUS_INVALID_PARAMETER;
-    if (Cpu >= (ULONG)KeNumberProcessors)
-        goto fail1;
-
     status = STATUS_NOT_SUPPORTED;
     if (~Context->Affinity & ((KAFFINITY)1 << Cpu))
-        goto fail2;
+        goto fail1;
 
     KeAcquireSpinLock(&Channel->Lock, &Irql);
 
@@ -667,7 +663,7 @@ EvtchnBind(
 
     status = EventChannelBindVirtualCpu(LocalPort, vcpu_id);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail2;
 
     Channel->Cpu = Cpu;
 
@@ -678,13 +674,10 @@ done:
 
     return STATUS_SUCCESS;
 
-fail3:
-    Error("fail3\n");
-
-    KeReleaseSpinLock(&Channel->Lock, Irql);
-
 fail2:
     Error("fail2\n");
+
+    KeReleaseSpinLock(&Channel->Lock, Irql);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -860,7 +853,8 @@ EvtchnInterruptCallback(
 
 static NTSTATUS
 EvtchnAbiAcquire(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    IN  PXENBUS_EVTCHN_CONTEXT  Context,
+    OUT PKAFFINITY              Affinity
     )
 {
     NTSTATUS                    status;
@@ -869,7 +863,9 @@ EvtchnAbiAcquire(
         EvtchnFifoGetAbi(Context->EvtchnFifoContext,
                          &Context->EvtchnAbi);
 
-        status = XENBUS_EVTCHN_ABI(Acquire, &Context->EvtchnAbi);
+        status = XENBUS_EVTCHN_ABI(Acquire,
+                                   &Context->EvtchnAbi,
+                                   Affinity);
         if (!NT_SUCCESS(status))
             goto use_two_level;
 
@@ -881,7 +877,9 @@ use_two_level:
     EvtchnTwoLevelGetAbi(Context->EvtchnTwoLevelContext,
                          &Context->EvtchnAbi);
 
-    status = XENBUS_EVTCHN_ABI(Acquire, &Context->EvtchnAbi);
+    status = XENBUS_EVTCHN_ABI(Acquire,
+                               &Context->EvtchnAbi,
+                               Affinity);
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -917,12 +915,12 @@ EvtchnInterruptEnable(
 
     Trace("====>\n");
 
-    ASSERT3U(Context->Affinity, ==, 0);
-
-    Cpu = 0;
-    while (Cpu < KeNumberProcessors) {
+    for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS; Cpu++) {
         unsigned int    vcpu_id;
         UCHAR           Vector;
+
+        if (Context->LatchedInterrupt[Cpu] == NULL)
+            continue;
 
         vcpu_id = SystemVirtualCpuIndex(Cpu);
         Vector = FdoGetInterruptVector(Context->Fdo,
@@ -933,8 +931,6 @@ EvtchnInterruptEnable(
             Info("CPU %u\n", Cpu);
             Context->Affinity |= (KAFFINITY)1 << Cpu;
         }
-
-        Cpu++;
     }
 
     Line = FdoGetInterruptLine(Context->Fdo,
@@ -951,7 +947,7 @@ EvtchnInterruptDisable(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    LONG                        Cpu;
+    ULONG                       Cpu;
     NTSTATUS                    status;
 
     UNREFERENCED_PARAMETER(Context);
@@ -961,9 +957,11 @@ EvtchnInterruptDisable(
     status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, 0);
     ASSERT(NT_SUCCESS(status));
 
-    Cpu = KeNumberProcessors;
-    while (--Cpu >= 0) {
+    for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS; Cpu++) {
         unsigned int    vcpu_id;
+
+        if (~Context->Affinity & (KAFFINITY)1 << Cpu)
+            continue;
 
         vcpu_id = SystemVirtualCpuIndex(Cpu);
 
@@ -1011,12 +1009,16 @@ EvtchnSuspendCallbackLate(
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Argument;
+    KAFFINITY               Affinity;
     NTSTATUS                status;
 
     EvtchnAbiRelease(Context);
 
-    status = EvtchnAbiAcquire(Context);
+    status = EvtchnAbiAcquire(Context, &Affinity);
     ASSERT(NT_SUCCESS(status));
+
+    // Affinity must be a superset of Context->Affinity
+    ASSERT3U(Affinity & Context->Affinity, ==, Context->Affinity);
 
     EvtchnInterruptDisable(Context);
     EvtchnInterruptEnable(Context);
@@ -1115,7 +1117,8 @@ EvtchnAcquire(
     PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
     PXENBUS_FDO             Fdo = Context->Fdo;
     KIRQL                   Irql;
-    LONG                    Cpu;
+    ULONG                   Cpu;
+    KAFFINITY               Affinity;
     NTSTATUS                status;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
@@ -1164,31 +1167,29 @@ EvtchnAcquire(
     if (!NT_SUCCESS(status))
         goto fail6;
 
-    status = EvtchnAbiAcquire(Context);
+    status = EvtchnAbiAcquire(Context, &Affinity);
     if (!NT_SUCCESS(status))
         goto fail7;
 
-    status = FdoAllocateInterrupt(Fdo,
-                                  LevelSensitive,
-                                  0,
-                                  EvtchnInterruptCallback,
-                                  Context,
-                                  &Context->LevelSensitiveInterrupt);
-    if (!NT_SUCCESS(status))
+    Context->LevelSensitiveInterrupt = FdoAllocateInterrupt(Fdo,
+                                                            LevelSensitive,
+                                                            0,
+                                                            EvtchnInterruptCallback,
+                                                            Context);
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Context->LevelSensitiveInterrupt == NULL)
         goto fail8;
 
-    Cpu = 0;
-    while (Cpu < KeNumberProcessors) {
-        status = FdoAllocateInterrupt(Fdo,
-                                      Latched,
-                                      Cpu,
-                                      EvtchnInterruptCallback,
-                                      Context,
-                                      &Context->LatchedInterrupt[Cpu]);
-        if (!NT_SUCCESS(status))
-            goto fail9;
+    for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS; Cpu++) {
+        if (~Affinity & (KAFFINITY)1 << Cpu)
+            continue;
 
-        Cpu++;
+        Context->LatchedInterrupt[Cpu] = FdoAllocateInterrupt(Fdo,
+                                                              Latched,
+                                                              Cpu,
+                                                              EvtchnInterruptCallback,
+                                                              Context);
     }
 
     EvtchnInterruptEnable(Context);
@@ -1199,17 +1200,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     return STATUS_SUCCESS;
-
-fail9:
-    Error("fail9\n");
-
-    while (--Cpu >= 0) {
-        FdoFreeInterrupt(Fdo, Context->LatchedInterrupt[Cpu]);
-        Context->LatchedInterrupt[Cpu] = NULL;
-    }
-
-    FdoFreeInterrupt(Fdo, Context->LevelSensitiveInterrupt);
-    Context->LevelSensitiveInterrupt = NULL;
 
 fail8:
     Error("fail8\n");
@@ -1273,7 +1263,7 @@ EvtchnRelease(
     PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
     PXENBUS_FDO             Fdo = Context->Fdo;
     KIRQL                   Irql;
-    LONG                    Cpu;
+    ULONG                   Cpu;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -1284,8 +1274,10 @@ EvtchnRelease(
 
     EvtchnInterruptDisable(Context);
 
-    Cpu = KeNumberProcessors;
-    while (--Cpu >= 0) {
+    for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS; Cpu++) {
+        if (Context->LatchedInterrupt[Cpu] == NULL)
+            continue;
+
         EvtchnFlush(Context, Cpu);
 
         FdoFreeInterrupt(Fdo, Context->LatchedInterrupt[Cpu]);
