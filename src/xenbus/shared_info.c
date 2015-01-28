@@ -457,14 +457,14 @@ SharedInfoDebugCallback(
 
     if (!Crashing) {
         shared_info_t   *Shared;
-        LONG            Cpu;
+        ULONG           Cpu;
         ULONG           Selector;
 
         Shared = Context->Shared;
 
         KeMemoryBarrier();
 
-        for (Cpu = 0; Cpu < KeNumberProcessors; Cpu++) {
+        for (Cpu = 0; Cpu < KeQueryActiveProcessorCount(NULL); Cpu++) {
             int vcpu_id = SystemVirtualCpuIndex(Cpu);
 
             XENBUS_DEBUG(Printf,
