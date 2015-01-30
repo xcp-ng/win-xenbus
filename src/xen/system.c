@@ -728,20 +728,8 @@ SystemVirtualCpuIndex(
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
     PSYSTEM_CPU         Cpu = Context->Cpu[Index];
-    LARGE_INTEGER       Timeout;
-    NTSTATUS            status;
 
-    ASSERT3U(Index, <, MAXIMUM_PROCESSORS);
-
-    Timeout.QuadPart = 0;
-
-    // Make sure the SystemCpuInformation() has run
-    status = KeWaitForSingleObject(&Cpu->Event,
-                                   Executive,
-                                   KernelMode,
-                                   FALSE,
-                                   &Timeout);
-    ASSERT(NT_SUCCESS(status) && status != STATUS_TIMEOUT);
+    ASSERT(Cpu != NULL);
 
     return Cpu->ProcessorID;
 }
