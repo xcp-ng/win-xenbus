@@ -49,7 +49,7 @@ typedef struct _XENBUS_EVTCHN_FIFO_CONTEXT {
     PMDL                            ControlBlockMdl[MAX_HVM_VCPUS];
     PMDL                            *EventPageMdl;
     ULONG                           EventPageCount;
-    ULONG                           Head[EVTCHN_FIFO_MAX_QUEUES];
+    ULONG                           Head[MAX_HVM_VCPUS][EVTCHN_FIFO_MAX_QUEUES];
 } XENBUS_EVTCHN_FIFO_CONTEXT, *PXENBUS_EVTCHN_FIFO_CONTEXT;
 
 #define EVENT_WORDS_PER_PAGE    (PAGE_SIZE / sizeof (event_word_t))
@@ -282,7 +282,7 @@ EvtchnFifoContract(
 static BOOLEAN
 EvtchnFifoPollPriority(
     IN  PXENBUS_EVTCHN_FIFO_CONTEXT Context,
-    IN  evtchn_fifo_control_block_t *ControlBlock,
+    IN  unsigned int                vcpu_id,
     IN  ULONG                       Priority,
     IN  PULONG                      Ready,
     IN  XENBUS_EVTCHN_ABI_EVENT     Event,
@@ -294,9 +294,17 @@ EvtchnFifoPollPriority(
     event_word_t                    *EventWord;
     BOOLEAN                         DoneSomething;
 
-    Head = Context->Head[Priority];
+    Head = Context->Head[vcpu_id][Priority];
 
     if (Head == 0) {
+        PMDL                        Mdl;
+        evtchn_fifo_control_block_t *ControlBlock;
+
+        Mdl = Context->ControlBlockMdl[vcpu_id];
+
+        ControlBlock = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+        ASSERT(ControlBlock != NULL);
+
         KeMemoryBarrier();
         Head = ControlBlock->head[Priority];
     }
@@ -315,7 +323,7 @@ EvtchnFifoPollPriority(
         __EvtchnFifoTestFlag(EventWord, EVTCHN_FIFO_PENDING))
         DoneSomething = Event(Argument, Port);
 
-    Context->Head[Priority] = Head;
+    Context->Head[vcpu_id][Priority] = Head;
 
     return DoneSomething;
 }
@@ -346,7 +354,7 @@ EvtchnFifoPoll(
 
     while (_BitScanReverse(&Priority, Ready)) {
         DoneSomething |= EvtchnFifoPollPriority(Context,
-                                                ControlBlock,
+                                                vcpu_id,
                                                 Priority,
                                                 &Ready,
                                                 Event,
