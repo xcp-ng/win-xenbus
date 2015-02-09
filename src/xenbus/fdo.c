@@ -741,8 +741,6 @@ FdoEnumerate(
         PANSI_STRING Class = &Classes[Index];
 
         if (Class->Length != 0) {
-            NTSTATUS    status;
-
             status = PdoCreate(Fdo, Class);
             if (NT_SUCCESS(status))
                 NeedInvalidate = TRUE;
