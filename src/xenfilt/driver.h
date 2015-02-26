@@ -47,13 +47,39 @@ DriverGetUnplugKey(
     VOID
     );
 
-extern const CHAR *
+extern PCHAR
 DriverGetActiveDeviceID(
     VOID
     );
 
-extern const CHAR *
+extern PCHAR
 DriverGetActiveInstanceID(
+    VOID
+    );
+
+extern VOID
+DriverAcquireMutex(
+    VOID
+     );
+
+extern VOID
+DriverReleaseMutex(
+    VOID
+     );
+
+typedef enum _XENFILT_FILTER_STATE {
+    XENFILT_FILTER_ENABLED = 0,
+    XENFILT_FILTER_PENDING,
+    XENFILT_FILTER_DISABLED
+} XENFILT_FILTER_STATE, *PXENFILT_FILTER_STATE;
+
+VOID
+DriverSetFilterState(
+    VOID
+    );
+
+XENFILT_FILTER_STATE
+DriverGetFilterState(
     VOID
     );
 

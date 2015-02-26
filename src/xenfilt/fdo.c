@@ -68,6 +68,8 @@ struct _XENFILT_FDO {
     LIST_ENTRY                      List;
     ULONG                           References;
 
+    BOOLEAN                         Enumerated;
+
     XENFILT_EMULATED_OBJECT_TYPE    Type;
 };
 
@@ -338,8 +340,29 @@ FdoReleaseMutex(
 {
     __FdoReleaseMutex(Fdo);
 
-    if (Fdo->References == 0)
+    if (Fdo->References == 0) {
+        DriverAcquireMutex();
         FdoDestroy(Fdo);
+        DriverReleaseMutex();
+    }
+}
+
+static FORCEINLINE VOID
+__FdoSetEnumerated(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    Fdo->Enumerated = TRUE;
+
+    DriverSetFilterState();
+}
+
+BOOLEAN
+FdoHasEnumerated(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    return Fdo->Enumerated;
 }
 
 __drv_functionClass(IO_COMPLETION_ROUTINE)
@@ -553,6 +576,8 @@ FdoEnumerate(
     }
     
     __FdoReleaseMutex(Fdo);
+
+    __FdoSetEnumerated(Fdo);
 
     __FdoFree(PhysicalDeviceObject);
     return;
@@ -1033,8 +1058,11 @@ FdoRemoveDevice(
     --Fdo->References;
     __FdoReleaseMutex(Fdo);
 
-    if (Fdo->References == 0)
+    if (Fdo->References == 0) {
+        DriverAcquireMutex();
         FdoDestroy(Fdo);
+        DriverReleaseMutex();
+    }
 
     return status;
 
@@ -1075,6 +1103,7 @@ FdoQueryDeviceRelations(
     ULONG                   Size;
     PDEVICE_RELATIONS       Relations;
     PLIST_ENTRY             ListEntry;
+    XENFILT_FILTER_STATE    State;
     ULONG                   Count;
     NTSTATUS                status;
 
@@ -1120,11 +1149,15 @@ FdoQueryDeviceRelations(
 
     __FdoAcquireMutex(Fdo);
 
+    State = DriverGetFilterState();
     Count = 0;
-    for (ListEntry = Fdo->List.Flink;
-         ListEntry != &Fdo->List;
-         ListEntry = ListEntry->Flink)
-        Count++;
+
+    if (State == XENFILT_FILTER_DISABLED) {
+        for (ListEntry = Fdo->List.Flink;
+             ListEntry != &Fdo->List;
+             ListEntry = ListEntry->Flink)
+            Count++;
+    }
 
     Size = FIELD_OFFSET(DEVICE_RELATIONS, Objects) +
            (sizeof (DEVICE_OBJECT) * __min(Count, 1));
@@ -1135,26 +1168,34 @@ FdoQueryDeviceRelations(
     if (Relations == NULL)
         goto fail3;
 
-    for (ListEntry = Fdo->List.Flink;
-         ListEntry != &Fdo->List;
-         ListEntry = ListEntry->Flink) {
-        PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
-        PXENFILT_PDO    Pdo = Dx->Pdo;
+    if (State == XENFILT_FILTER_DISABLED) {
+        for (ListEntry = Fdo->List.Flink;
+             ListEntry != &Fdo->List;
+             ListEntry = ListEntry->Flink) {
+            PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
+            PXENFILT_PDO    Pdo = Dx->Pdo;
 
-        ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
+            ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
-        if (PdoGetDevicePnpState(Pdo) == Present)
-            PdoSetDevicePnpState(Pdo, Enumerated);
+            if (PdoGetDevicePnpState(Pdo) == Present)
+                PdoSetDevicePnpState(Pdo, Enumerated);
 
-        ObReferenceObject(PdoGetPhysicalDeviceObject(Pdo));
-        Relations->Objects[Relations->Count++] = PdoGetPhysicalDeviceObject(Pdo);
+            ObReferenceObject(PdoGetPhysicalDeviceObject(Pdo));
+            Relations->Objects[Relations->Count++] = PdoGetPhysicalDeviceObject(Pdo);
+        }
+
+        ASSERT3U(Relations->Count, <=, Count);
+
+        Trace("%s: %d PDO(s)\n",
+              __FdoGetName(Fdo),
+              Relations->Count);
+    } else {
+        Trace("%s: FILTERED\n",
+              __FdoGetName(Fdo));
+
+        IoInvalidateDeviceRelations(__FdoGetPhysicalDeviceObject(Fdo),
+                                    BusRelations);
     }
-
-    ASSERT3U(Relations->Count, <=, Count);
-
-    Trace("%s: %d PDO(s)\n", 
-          __FdoGetName(Fdo),
-          Relations->Count);
 
     __FdoReleaseMutex(Fdo);
 
@@ -2067,6 +2108,8 @@ FdoCreate(
     FilterDeviceObject->Flags |= LowerDeviceObject->Flags;
     FilterDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
+    DriverAddFunctionDeviceObject(Fdo);
+
     return STATUS_SUCCESS;
 
 fail5:
@@ -2115,6 +2158,10 @@ FdoDestroy(
     ASSERT(IsListEmpty(&Fdo->List));
     ASSERT3U(Fdo->References, ==, 0);
     ASSERT3U(__FdoGetDevicePnpState(Fdo), ==, Deleted);
+
+    DriverRemoveFunctionDeviceObject(Fdo);
+
+    Fdo->Enumerated = FALSE;
 
     Dx->Fdo = NULL;
 

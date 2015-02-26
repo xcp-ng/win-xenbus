@@ -66,7 +66,8 @@ typedef VOID
 
     \param Interface The interface header
     \param DeviceID The DeviceID of the device
-    \param InstanceID The (un-prefixed) InstanceID of the device
+    \param InstanceID The (un-prefixed) InstanceID of the device or
+           NULL to match any device instance
     \return TRUE if the specified device is present in the system or
     FALSE if it is not
 */  
@@ -74,7 +75,7 @@ typedef BOOLEAN
 (*XENFILT_EMULATED_IS_DEVICE_PRESENT)(
     IN  PVOID   Context,
     IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID
+    IN  PCHAR   InstanceID OPTIONAL
     );
 
 /*! \typedef XENFILT_EMULATED_IS_DISK_PRESENT

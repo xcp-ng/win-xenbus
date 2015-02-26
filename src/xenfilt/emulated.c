@@ -264,14 +264,16 @@ static BOOLEAN
 EmulatedIsDevicePresent(
     IN  PINTERFACE              Interface,
     IN  PCHAR                   DeviceID,
-    IN  PCHAR                   InstanceID
+    IN  PCHAR                   InstanceID OPTIONAL
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
     KIRQL                       Irql;
     PLIST_ENTRY                 ListEntry;
 
-    Trace("====> (%s %s)\n", DeviceID, InstanceID);
+    Trace("====> (%s %s)\n",
+          DeviceID,
+          (InstanceID != NULL) ? InstanceID : "ANY");
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -285,7 +287,8 @@ EmulatedIsDevicePresent(
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_DEVICE &&
             _stricmp(DeviceID, EmulatedObject->Data.Device.DeviceID) == 0 &&
-            _stricmp(InstanceID, EmulatedObject->Data.Device.InstanceID) == 0) {
+            (InstanceID == NULL ||
+             _stricmp(InstanceID, EmulatedObject->Data.Device.InstanceID) == 0)) {
             Trace("FOUND\n");
             break;
         }
