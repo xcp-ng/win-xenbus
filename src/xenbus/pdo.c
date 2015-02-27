@@ -66,6 +66,7 @@ struct _XENBUS_PDO {
     const CHAR                  *Reason;
 
     BOOLEAN                     Removable;
+    BOOLEAN                     Ejectable;
 
     PULONG                      Revision;
     PWCHAR                      *Description;
@@ -280,7 +281,7 @@ __PdoSetRemovable(
         goto done;
 
     (VOID) RegistryQueryDwordValue(Key,
-                                   "Removable",
+                                   "AllowPdoRemove",
                                    &Value);
 
     RegistryCloseKey(Key);
@@ -295,6 +296,45 @@ __PdoIsRemovable(
     )
 {
     return Pdo->Removable;
+}
+
+static FORCEINLINE VOID
+__PdoSetEjectable(
+    IN  PXENBUS_PDO     Pdo
+    )
+{
+    HANDLE              ParametersKey;
+    HANDLE              Key;
+    ULONG               Value;
+    NTSTATUS            status;
+
+    Value = 1;
+
+    ParametersKey = DriverGetParametersKey();
+
+    status = RegistryOpenSubKey(ParametersKey,
+                                __PdoGetName(Pdo),
+                                KEY_READ,
+                                &Key);
+    if (!NT_SUCCESS(status))
+        goto done;
+
+    (VOID) RegistryQueryDwordValue(Key,
+                                   "AllowPdoEject",
+                                   &Value);
+
+    RegistryCloseKey(Key);
+
+done:
+    Pdo->Ejectable = (Value != 0) ? TRUE : FALSE;
+}
+
+static FORCEINLINE BOOLEAN
+__PdoIsEjectable(
+    IN  PXENBUS_PDO     Pdo
+    )
+{
+    return Pdo->Ejectable;
 }
 
 #define MAXTEXTLEN  1024
@@ -1253,7 +1293,6 @@ PdoQueryCapabilities(
     Capabilities->DeviceD1 = 0;
     Capabilities->DeviceD2 = 0;
     Capabilities->LockSupported = 0;
-    Capabilities->EjectSupported = 0;
     Capabilities->DockDevice = 0;
     Capabilities->UniqueID = 1;
     Capabilities->SilentInstall = 1;
@@ -1263,6 +1302,7 @@ PdoQueryCapabilities(
 
     Capabilities->Removable = __PdoIsRemovable(Pdo) ? 1 : 0;
     Capabilities->SurpriseRemovalOK = Capabilities->Removable;
+    Capabilities->EjectSupported = __PdoIsEjectable(Pdo) ? 1 : 0;
 
     Capabilities->Address = 0xffffffff;
     Capabilities->UINumber = 0xffffffff;
@@ -2228,6 +2268,7 @@ PdoCreate(
 
     __PdoSetName(Pdo, Name);
     __PdoSetRemovable(Pdo);
+    __PdoSetEjectable(Pdo);
 
     status = PdoSetRevisions(Pdo);
     if (!NT_SUCCESS(status))
@@ -2345,6 +2386,7 @@ PdoDestroy(
     Pdo->Revision = NULL;
     Pdo->Count = 0;
 
+    Pdo->Ejectable = FALSE;
     Pdo->Removable = FALSE;
 
     ThreadAlert(Pdo->DevicePowerThread);
