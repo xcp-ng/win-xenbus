@@ -82,7 +82,7 @@ struct _XENBUS_FDO {
     PDEVICE_OBJECT                  LowerDeviceObject;
     PDEVICE_OBJECT                  PhysicalDeviceObject;
     DEVICE_CAPABILITIES             LowerDeviceCapabilities;
-    BUS_INTERFACE_STANDARD          LowerBusInterface;
+    PBUS_INTERFACE_STANDARD         LowerBusInterface;
     ULONG                           Usage[DeviceUsageTypeDumpFile + 1];
     BOOLEAN                         NotDisableable;
 
@@ -259,6 +259,108 @@ FdoGetPhysicalDeviceObject(
     return __FdoGetPhysicalDeviceObject(Fdo);
 }
 
+static NTSTATUS
+FdoAcquireLowerBusInterface(
+    IN  PXENBUS_FDO         Fdo
+    )
+{
+    PBUS_INTERFACE_STANDARD BusInterface;
+    KEVENT                  Event;
+    IO_STATUS_BLOCK         StatusBlock;
+    PIRP                    Irp;
+    PIO_STACK_LOCATION      StackLocation;
+    NTSTATUS                status;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    BusInterface = __FdoAllocate(sizeof (BUS_INTERFACE_STANDARD));
+
+    status = STATUS_NO_MEMORY;
+    if (BusInterface == NULL)
+        goto fail1;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    RtlZeroMemory(&StatusBlock, sizeof(IO_STATUS_BLOCK));
+
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP,
+                                       Fdo->LowerDeviceObject,
+                                       NULL,
+                                       0,
+                                       NULL,
+                                       &Event,
+                                       &StatusBlock);
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Irp == NULL)
+        goto fail2;
+
+    StackLocation = IoGetNextIrpStackLocation(Irp);
+    StackLocation->MinorFunction = IRP_MN_QUERY_INTERFACE;
+
+    StackLocation->Parameters.QueryInterface.InterfaceType = &GUID_BUS_INTERFACE_STANDARD;
+    StackLocation->Parameters.QueryInterface.Size = sizeof (BUS_INTERFACE_STANDARD);
+    StackLocation->Parameters.QueryInterface.Version = 1;
+    StackLocation->Parameters.QueryInterface.Interface = (PINTERFACE)BusInterface;
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+
+    status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    if (status == STATUS_PENDING) {
+        (VOID) KeWaitForSingleObject(&Event,
+                                     Executive,
+                                     KernelMode,
+                                     FALSE,
+                                     NULL);
+        status = StatusBlock.Status;
+    }
+
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (BusInterface->Version != 1)
+        goto fail4;
+
+    Fdo->LowerBusInterface = BusInterface;
+
+    return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
+
+    __FdoFree(BusInterface);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+FdoReleaseLowerBusInterface(
+    IN  PXENBUS_FDO         Fdo
+    )
+{
+    PBUS_INTERFACE_STANDARD BusInterface;
+
+    BusInterface = Fdo->LowerBusInterface;
+
+    if (BusInterface == NULL)
+        return;
+
+    Fdo->LowerBusInterface = NULL;
+
+    BusInterface->InterfaceDereference(BusInterface->Context);
+
+    __FdoFree(BusInterface);
+}
+
 PDMA_ADAPTER
 FdoGetDmaAdapter(
     IN  PXENBUS_FDO         Fdo,
@@ -266,13 +368,14 @@ FdoGetDmaAdapter(
     OUT PULONG              NumberOfMapRegisters
     )
 {
-    PBUS_INTERFACE_STANDARD LowerBusInterface;
+    PBUS_INTERFACE_STANDARD BusInterface;
 
-    LowerBusInterface = &Fdo->LowerBusInterface;
+    BusInterface = Fdo->LowerBusInterface;
+    ASSERT(BusInterface != NULL);
 
-    return LowerBusInterface->GetDmaAdapter(LowerBusInterface->Context,
-                                            DeviceDescriptor,
-                                            NumberOfMapRegisters);
+    return BusInterface->GetDmaAdapter(BusInterface->Context,
+                                       DeviceDescriptor,
+                                       NumberOfMapRegisters);
 }
 
 BOOLEAN
@@ -284,55 +387,58 @@ FdoTranslateBusAddress(
     OUT     PPHYSICAL_ADDRESS   TranslatedAddress
     )
 {
-    PBUS_INTERFACE_STANDARD LowerBusInterface;
+    PBUS_INTERFACE_STANDARD     BusInterface;
 
-    LowerBusInterface = &Fdo->LowerBusInterface;
+    BusInterface = Fdo->LowerBusInterface;
+    ASSERT(BusInterface != NULL);
 
-    return LowerBusInterface->TranslateBusAddress(LowerBusInterface->Context,
-                                                  BusAddress,
-                                                  Length,
-                                                  AddressSpace,
-                                                  TranslatedAddress);
+    return BusInterface->TranslateBusAddress(BusInterface->Context,
+                                             BusAddress,
+                                             Length,
+                                             AddressSpace,
+                                             TranslatedAddress);
 }
 
 ULONG
 FdoSetBusData(
-    IN  PXENBUS_FDO     Fdo,
-    IN  ULONG           DataType,
-    IN  PVOID           Buffer,
-    IN  ULONG           Offset,
-    IN  ULONG           Length
+    IN  PXENBUS_FDO         Fdo,
+    IN  ULONG               DataType,
+    IN  PVOID               Buffer,
+    IN  ULONG               Offset,
+    IN  ULONG               Length
     )
 {
-    PBUS_INTERFACE_STANDARD LowerBusInterface;
+    PBUS_INTERFACE_STANDARD BusInterface;
 
-    LowerBusInterface = &Fdo->LowerBusInterface;
+    BusInterface = Fdo->LowerBusInterface;
+    ASSERT(BusInterface != NULL);
 
-    return LowerBusInterface->SetBusData(LowerBusInterface->Context,
-                                         DataType,
-                                         Buffer,
-                                         Offset,
-                                         Length);
+    return BusInterface->SetBusData(BusInterface->Context,
+                                    DataType,
+                                    Buffer,
+                                    Offset,
+                                    Length);
 }
 
 ULONG
 FdoGetBusData(
-    IN  PXENBUS_FDO     Fdo,
-    IN  ULONG           DataType,
-    IN  PVOID           Buffer,
-    IN  ULONG           Offset,
-    IN  ULONG           Length
+    IN  PXENBUS_FDO         Fdo,
+    IN  ULONG               DataType,
+    IN  PVOID               Buffer,
+    IN  ULONG               Offset,
+    IN  ULONG               Length
     )
 {
-    PBUS_INTERFACE_STANDARD LowerBusInterface;
+    PBUS_INTERFACE_STANDARD BusInterface;
 
-    LowerBusInterface = &Fdo->LowerBusInterface;
+    BusInterface = Fdo->LowerBusInterface;
+    ASSERT(BusInterface != NULL);
 
-    return LowerBusInterface->GetBusData(LowerBusInterface->Context,
-                                         DataType,
-                                         Buffer,
-                                         Offset,
-                                         Length);
+    return BusInterface->GetBusData(BusInterface->Context,
+                                    DataType,
+                                    Buffer,
+                                    Offset,
+                                    Length);
 }
 
 static FORCEINLINE VOID
@@ -3134,6 +3240,9 @@ not_active:
 done:
     __FdoSetDevicePnpState(Fdo, Deleted);
 
+    // We must release our reference before the PDO is destroyed
+    FdoReleaseLowerBusInterface(Fdo);
+
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
     IoSkipCurrentIrpStackLocation(Irp);
@@ -4250,88 +4359,6 @@ FdoDispatch(
 }
 
 static NTSTATUS
-FdoAcquireLowerBusInterface(
-    IN  PXENBUS_FDO     Fdo
-    )
-{
-    KEVENT              Event;
-    IO_STATUS_BLOCK     StatusBlock;
-    PIRP                Irp;
-    PIO_STACK_LOCATION  StackLocation;
-    NTSTATUS            status;
-
-    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
-
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    RtlZeroMemory(&StatusBlock, sizeof(IO_STATUS_BLOCK));
-
-    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP,
-                                       Fdo->LowerDeviceObject,
-                                       NULL,
-                                       0,
-                                       NULL,
-                                       &Event,
-                                       &StatusBlock);
-
-    status = STATUS_UNSUCCESSFUL;
-    if (Irp == NULL)
-        goto fail1;
-
-    StackLocation = IoGetNextIrpStackLocation(Irp);
-    StackLocation->MinorFunction = IRP_MN_QUERY_INTERFACE;
-
-    StackLocation->Parameters.QueryInterface.InterfaceType = &GUID_BUS_INTERFACE_STANDARD;
-    StackLocation->Parameters.QueryInterface.Size = sizeof (BUS_INTERFACE_STANDARD);
-    StackLocation->Parameters.QueryInterface.Version = 1;
-    StackLocation->Parameters.QueryInterface.Interface = (PINTERFACE)&Fdo->LowerBusInterface;
-    
-    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-
-    status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
-    if (status == STATUS_PENDING) {
-        (VOID) KeWaitForSingleObject(&Event,
-                                     Executive,
-                                     KernelMode,
-                                     FALSE,
-                                     NULL);
-        status = StatusBlock.Status;
-    }
-
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = STATUS_INVALID_PARAMETER;
-    if (Fdo->LowerBusInterface.Version != 1)
-        goto fail3;
-
-    return STATUS_SUCCESS;
-
-fail3:
-    Error("fail3\n");
-
-fail2:
-    Error("fail2\n");
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
-}
-
-static VOID
-FdoReleaseLowerBusInterface(
-    IN  PXENBUS_FDO         Fdo
-    )
-{
-    PBUS_INTERFACE_STANDARD BusInterface;
-
-    BusInterface = &Fdo->LowerBusInterface;
-    BusInterface->InterfaceDereference(BusInterface->Context);
-
-    RtlZeroMemory(BusInterface, sizeof (BUS_INTERFACE_STANDARD));
-}
-
-static NTSTATUS
 FdoQueryInterface(
     IN  PXENBUS_FDO     Fdo,
     IN  const GUID      *Guid,
@@ -4465,7 +4492,6 @@ FdoCreate(
     PDEVICE_OBJECT              FunctionDeviceObject;
     PXENBUS_DX                  Dx;
     PXENBUS_FDO                 Fdo;
-    PBUS_INTERFACE_STANDARD     BusInterface;
     USHORT                      DeviceID;
     NTSTATUS                    status;
 
@@ -4512,14 +4538,11 @@ FdoCreate(
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    BusInterface = &Fdo->LowerBusInterface;
-
-    status = STATUS_UNSUCCESSFUL;
-    if (BusInterface->GetBusData(BusInterface->Context,
-                                 PCI_WHICHSPACE_CONFIG,
-                                 &DeviceID,
-                                 FIELD_OFFSET(PCI_COMMON_HEADER, DeviceID),
-                                 FIELD_SIZE(PCI_COMMON_HEADER, DeviceID)) == 0)
+    if (FdoGetBusData(Fdo,
+                      PCI_WHICHSPACE_CONFIG,
+                      &DeviceID,
+                      FIELD_OFFSET(PCI_COMMON_HEADER, DeviceID),
+                      FIELD_SIZE(PCI_COMMON_HEADER, DeviceID)) == 0)
         goto fail6;
 
     __FdoSetVendorName(Fdo, DeviceID);
