@@ -710,8 +710,16 @@ EvtchnUnmask(
 
     if (XENBUS_EVTCHN_ABI(PortUnmask,
                           &Context->EvtchnAbi,
-                          LocalPort))
+                          LocalPort)) {
+        //
+        // The event was pending so we must re-mask and use
+        // a hypercall to do the unmask and raise the event
+        //
+        XENBUS_EVTCHN_ABI(PortMask,
+                          &Context->EvtchnAbi,
+                          LocalPort);
         (VOID) EventChannelUnmask(LocalPort);
+    }
 
 done:
     if (!InUpcall)
