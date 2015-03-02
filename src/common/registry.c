@@ -168,16 +168,16 @@ RegistryOpenHardwareKey(
         goto fail1;
 
     Length = 0;
-    (VOID) ZwQueryKey(SubKey,
-                      KeyNameInformation,
-                      NULL,
-                      0,
-                      &Length);
-
-    status = STATUS_INVALID_PARAMETER;
-    if (Length == 0)
+    status = ZwQueryKey(SubKey,
+                        KeyNameInformation,
+                        NULL,
+                        0,
+                        &Length);
+    if (status != STATUS_BUFFER_OVERFLOW &&
+        status != STATUS_BUFFER_TOO_SMALL)
         goto fail2;
-    
+
+#pragma prefast(suppress:6102)
     Info = __RegistryAllocate(Length + sizeof (WCHAR));
 
     status = STATUS_NO_MEMORY;
@@ -362,9 +362,11 @@ RegistryEnumerateSubKeys(
                         NULL,
                         0,
                         &Size);
-    if (status != STATUS_BUFFER_TOO_SMALL)
+    if (status != STATUS_BUFFER_OVERFLOW &&
+        status != STATUS_BUFFER_TOO_SMALL)
         goto fail1;
 
+#pragma prefast(suppress:6102)
     Full = __RegistryAllocate(Size);
 
     status = STATUS_NO_MEMORY;
@@ -463,9 +465,11 @@ RegistryEnumerateValues(
                         NULL,
                         0,
                         &Size);
-    if (status != STATUS_BUFFER_TOO_SMALL)
+    if (status != STATUS_BUFFER_OVERFLOW &&
+        status != STATUS_BUFFER_TOO_SMALL)
         goto fail1;
 
+#pragma prefast(suppress:6102)
     Full = __RegistryAllocate(Size);
 
     status = STATUS_NO_MEMORY;
@@ -596,9 +600,11 @@ RegistryQueryDwordValue(
                              NULL,
                              0,
                              &Size);
-    if (status != STATUS_BUFFER_TOO_SMALL)
+    if (status != STATUS_BUFFER_OVERFLOW &&
+        status != STATUS_BUFFER_TOO_SMALL)
         goto fail2;
 
+#pragma prefast(suppress:6102)
     Partial = __RegistryAllocate(Size);
 
     status = STATUS_NO_MEMORY;
@@ -821,9 +827,11 @@ RegistryQuerySzValue(
                              NULL,
                              0,
                              &Size);
-    if (status != STATUS_BUFFER_TOO_SMALL)
+    if (status != STATUS_BUFFER_OVERFLOW &&
+        status != STATUS_BUFFER_TOO_SMALL)
         goto fail2;
 
+#pragma prefast(suppress:6102)
     Value = __RegistryAllocate(Size);
 
     status = STATUS_NO_MEMORY;
@@ -892,10 +900,12 @@ RegistryQueryKeyName(
                         NULL,
                         0,
                         &Size);
-    if (status != STATUS_BUFFER_TOO_SMALL)
+    if (status != STATUS_BUFFER_OVERFLOW &&
+        status != STATUS_BUFFER_TOO_SMALL)
         goto fail1;
 
     // Name information is not intrinsically NULL terminated
+#pragma prefast(suppress:6102)
     Value = __RegistryAllocate(Size + sizeof (WCHAR));
 
     status = STATUS_NO_MEMORY;
