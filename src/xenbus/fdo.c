@@ -1822,6 +1822,7 @@ FdoConnectInterrupt(
     )
 {
     IO_CONNECT_INTERRUPT_PARAMETERS     Connect;
+    BOOLEAN                             Found;
     ULONG                               Cpu;
     NTSTATUS                            status;
 
@@ -1869,12 +1870,13 @@ FdoConnectInterrupt(
     (*Interrupt)->Vector = (UCHAR)Connect.FullySpecified.Vector;
 
 #if defined(__i386__)
-    (VOID)_BitScanReverse(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
+    Found = _BitScanReverse(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
 #elif defined(__x86_64__)
-    (VOID)_BitScanReverse64(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
+    Found = _BitScanReverse64(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
 #else
 #error 'Unrecognised architecture'
 #endif
+    ASSERT(Found);
 
     (*Interrupt)->Cpu = Cpu;
 

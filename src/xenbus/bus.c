@@ -122,8 +122,10 @@ BusGetDmaAdapter(
 
     if (Context->InterceptDmaAdapter != 0) {
         RTL_OSVERSIONINFOEXW    VersionInformation;
+        NTSTATUS                status;
 
-        RtlGetVersion((PRTL_OSVERSIONINFOW)&VersionInformation);
+        status = RtlGetVersion((PRTL_OSVERSIONINFOW)&VersionInformation);
+        ASSERT(NT_SUCCESS(status));
 
         if (VersionInformation.dwMajorVersion == 6 &&
             VersionInformation.dwMinorVersion == 0) {
