@@ -706,7 +706,8 @@ FdoAddPhysicalDeviceObject(
     ASSERT3U(Fdo->References, !=, 0);
     Fdo->References++;
 
-    PdoResume(Pdo);
+    if (__FdoGetDevicePowerState(Fdo) == PowerDeviceD0)
+        PdoResume(Pdo);
 }
 
 VOID
@@ -722,7 +723,8 @@ FdoRemovePhysicalDeviceObject(
     Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
     ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
-    PdoSuspend(Pdo);
+    if (__FdoGetDevicePowerState(Fdo) == PowerDeviceD0)
+        PdoSuspend(Pdo);
 
     RemoveEntryList(&Dx->ListEntry);
     ASSERT3U(Fdo->References, !=, 0);

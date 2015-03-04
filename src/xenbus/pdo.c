@@ -2206,6 +2206,8 @@ PdoResume(
     )
 {
     UNREFERENCED_PARAMETER(Pdo);
+
+    Trace("<===>\n");
 }
 
 VOID
@@ -2214,6 +2216,8 @@ PdoSuspend(
     )
 {
     UNREFERENCED_PARAMETER(Pdo);
+
+    Trace("<===>\n");
 }
 
 NTSTATUS
