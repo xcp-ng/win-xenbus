@@ -48,11 +48,10 @@
 #define XEN_SYSTEM_TAG  'TSYS'
 
 typedef struct _SYSTEM_CPU {
+    ULONG   Index;
     CHAR    Manufacturer[13];
     UCHAR   ApicID;
     UCHAR   ProcessorID;
-    KDPC    Dpc;
-    KEVENT  Event;
 } SYSTEM_CPU, *PSYSTEM_CPU;
 
 typedef struct _SYSTEM_CONTEXT {
@@ -343,13 +342,14 @@ SystemCpuInformation(
     )
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
+    PKEVENT         Event = _Context;
     ULONG           Index;
     PSYSTEM_CPU     Cpu;
     ULONG           EBX;
     ULONG           ECX;
     ULONG           EDX;
 
-    UNREFERENCED_PARAMETER(_Context);
+    UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
@@ -357,7 +357,7 @@ SystemCpuInformation(
     Cpu = Context->Cpu[Index];
 
     ASSERT(Cpu != NULL);
-    ASSERT3P(Dpc, ==, &Cpu->Dpc);
+    ASSERT3U(Cpu->Index, ==, Index);
 
     Info("====> (%u)\n", Index);
 
@@ -376,7 +376,7 @@ SystemCpuInformation(
     Info("APIC ID: %02X\n", Cpu->ApicID);
     Info("PROCESSOR ID: %02X\n", Cpu->ProcessorID);
 
-    KeSetEvent(&Cpu->Event, IO_NO_INCREMENT, FALSE);
+    KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
 
     Info("<==== (%u)\n", Index);
 }
@@ -409,24 +409,28 @@ SystemProcessorChangeCallback(
             break;
         }
 
+        Cpu->Index = Index;
         ASSERT3P(Context->Cpu[Index], ==, NULL);
         Context->Cpu[Index] = Cpu;
         break;
     }
     case KeProcessorAddCompleteNotify: {
         PSYSTEM_CPU Cpu = Context->Cpu[Index];
-        PKDPC       Dpc = &Cpu->Dpc;
-        PKEVENT     Event = &Cpu->Event;
+        KEVENT      Event;
+        KDPC        Dpc;
 
-        KeInitializeDpc(Dpc, SystemCpuInformation, (PVOID)(ULONG_PTR)Index);
-        KeSetImportanceDpc(Dpc, HighImportance);
-        KeSetTargetProcessorDpc(Dpc, (CCHAR)Index);
+        ASSERT(Cpu != NULL);
+        ASSERT3U(Cpu->Index, ==, Index);
 
-        KeInitializeEvent(Event, NotificationEvent, FALSE);
+        KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
-        KeInsertQueueDpc(Dpc, NULL, NULL);
+        KeInitializeDpc(&Dpc, SystemCpuInformation, &Event);
+        KeSetImportanceDpc(&Dpc, HighImportance);
+        KeSetTargetProcessorDpc(&Dpc, (CCHAR)Index);
 
-        (VOID) KeWaitForSingleObject(Event,
+        KeInsertQueueDpc(&Dpc, NULL, NULL);
+
+        (VOID) KeWaitForSingleObject(&Event,
                                      Executive,
                                      KernelMode,
                                      FALSE,
@@ -437,6 +441,7 @@ SystemProcessorChangeCallback(
         PSYSTEM_CPU Cpu = Context->Cpu[Index];
 
         ASSERT(Cpu != NULL);
+        ASSERT3U(Cpu->Index, ==, Index);
 
         Context->Cpu[Index] = NULL;
         __SystemFree(Cpu);
