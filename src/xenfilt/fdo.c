@@ -1457,10 +1457,6 @@ FdoSetSystemPowerUp(
           SystemPowerStateName(__FdoGetSystemPowerState(Fdo)),
           SystemPowerStateName(SystemState));
 
-    if (SystemState < PowerSystemHibernate &&
-        __FdoGetSystemPowerState(Fdo) >= PowerSystemHibernate)
-        __DbgPrintEnable();
-
     __FdoSetSystemPowerState(Fdo, SystemState);
 
 done:
