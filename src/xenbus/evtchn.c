@@ -995,6 +995,8 @@ EvtchnSuspendCallbackEarly(
          ListEntry = ListEntry->Flink) {
         PXENBUS_EVTCHN_CHANNEL  Channel;
 
+        ASSERT(ListEntry->Flink != NULL);
+
         Channel = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_CHANNEL, ListEntry);
 
         ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
