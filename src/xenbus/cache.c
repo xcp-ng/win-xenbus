@@ -92,7 +92,6 @@ struct _XENBUS_CACHE_CONTEXT {
     PXENBUS_DEBUG_CALLBACK  DebugCallback;
     XENBUS_STORE_INTERFACE  StoreInterface;
     PXENBUS_THREAD          MonitorThread;
-    KEVENT                  MonitorEvent;
     LIST_ENTRY              List;
 };
 
@@ -787,8 +786,6 @@ CacheMonitor(
 
 loop:
         KeReleaseSpinLock(&Context->Lock, Irql);
-
-        KeSetEvent(&Context->MonitorEvent, IO_NO_INCREMENT, FALSE);
     }
 
     Trace("====>\n");
@@ -921,8 +918,6 @@ CacheInitialize(
     InitializeListHead(&(*Context)->List);
     KeInitializeSpinLock(&(*Context)->Lock);
 
-    KeInitializeEvent(&(*Context)->MonitorEvent, NotificationEvent, FALSE);
-
     status = ThreadCreate(CacheMonitor, *Context, &(*Context)->MonitorThread);
     if (!NT_SUCCESS(status))
         goto fail2;
@@ -935,8 +930,6 @@ CacheInitialize(
 
 fail2:
     Error("fail2\n");
-
-    RtlZeroMemory(&(*Context)->MonitorEvent, sizeof (KEVENT));
 
     RtlZeroMemory(&(*Context)->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&(*Context)->List, sizeof (LIST_ENTRY));
@@ -1003,8 +996,6 @@ CacheTeardown(
     ThreadAlert(Context->MonitorThread);
     ThreadJoin(Context->MonitorThread);
     Context->MonitorThread = NULL;
-
-    RtlZeroMemory(&Context->MonitorEvent, sizeof (KEVENT));
 
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
