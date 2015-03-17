@@ -171,13 +171,13 @@ __checkReturn
 XEN_API
 NTSTATUS
 HvmSetEvtchnUpcallVector(
-    IN  unsigned int                        vcpu_id,
-    IN  UCHAR                               Vector
+    IN  unsigned int                    vcpu_id,
+    IN  UCHAR                           Vector
     )
 {
-    struct xen_hvm_set_evtchn_upcall_vector op;
-    LONG_PTR                                rc;
-    NTSTATUS                                status;
+    struct xen_hvm_evtchn_upcall_vector op;
+    LONG_PTR                            rc;
+    NTSTATUS                            status;
 
     op.vcpu = vcpu_id;
     op.vector = Vector;

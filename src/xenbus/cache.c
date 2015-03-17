@@ -32,12 +32,12 @@
 #include <ntddk.h>
 #include <ntstrsafe.h>
 #include <stdlib.h>
-#include <util.h>
 
 #include "thread.h"
 #include "cache.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 extern ULONG
 NTAPI

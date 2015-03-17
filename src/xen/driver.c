@@ -76,10 +76,11 @@ XenTouch(
     ASSERT(NT_SUCCESS(status));
 
     LogPrintf(LOG_LEVEL_INFO,
-              "XEN: %u.%u%s\n",
+              "XEN: %u.%u%s (__XEN_INTERFACE_VERSION__ = %08x)\n",
               Major,
               Minor,
-              Extra);
+              Extra,
+              __XEN_INTERFACE_VERSION__);
 }
 
 static VOID

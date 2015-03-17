@@ -81,6 +81,7 @@ typedef enum {
     HVMMEM_ram_rw,             /* Normal read/write guest RAM */
     HVMMEM_ram_ro,             /* Read-only; writes are discarded */
     HVMMEM_mmio_dm,            /* Reads and write go to the device model */
+    HVMMEM_mmio_write_dm       /* Read-only; writes go to the device model */
 } hvmmem_type_t;
 
 /* Following tools-only interfaces may change in future. */
@@ -246,7 +247,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_hvm_inject_msi_t);
  * ioreq ring), or...
  * HVM_PARAM_BUFIOREQ_EVTCHN is read (to get the event channel that Xen uses
  * to request buffered I/O emulation).
- * 
+ *
  * The following hypercalls facilitate the creation of IOREQ Servers for
  * 'secondary' emulators which are invoked to implement port I/O, memory, or
  * PCI config space ranges which they explicitly register.
@@ -273,7 +274,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_hvm_create_ioreq_server_t);
 
 /*
  * HVMOP_get_ioreq_server_info: Get all the information necessary to access
- *                              IOREQ Server <id>. 
+ *                              IOREQ Server <id>.
  *
  * The emulator needs to map the synchronous ioreq structures and buffered
  * ioreq ring (if it exists) that Xen uses to request emulation. These are
@@ -362,7 +363,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_hvm_destroy_ioreq_server_t);
 struct xen_hvm_set_ioreq_server_state {
     domid_t domid;   /* IN - domain to be serviced */
     ioservid_t id;   /* IN - server id */
-    uint8_t enabled; /* IN - enabled? */    
+    uint8_t enabled; /* IN - enabled? */
 };
 typedef struct xen_hvm_set_ioreq_server_state xen_hvm_set_ioreq_server_state_t;
 DEFINE_XEN_GUEST_HANDLE(xen_hvm_set_ioreq_server_state_t);
@@ -375,17 +376,16 @@ DEFINE_XEN_GUEST_HANDLE(xen_hvm_set_ioreq_server_state_t);
  * HVMOP_set_evtchn_upcall_vector: Set a <vector> that should be used for event
  *                                 channel upcalls on the specified <vcpu>. If set,
  *                                 this vector will be used in preference to the
- *                                 domain callback via (see HVM_PARAM_CALLBACK_IRQ)
- *                                 and hence allows HVM guests to bind event
- *                                 event channels to a vcpu other than 0.
+ *                                 domain global callback via (see
+ *                                 HVM_PARAM_CALLBACK_IRQ).
  */
 #define HVMOP_set_evtchn_upcall_vector 23
-struct xen_hvm_set_evtchn_upcall_vector {
+struct xen_hvm_evtchn_upcall_vector {
     uint32_t vcpu;
     uint8_t vector;
 };
-typedef struct xen_hvm_set_evtchn_upcall_vector xen_hvm_set_evtchn_upcall_vector_t;
-DEFINE_XEN_GUEST_HANDLE(xen_hvm_set_evtchn_upcall_vector_t);
+typedef struct xen_hvm_evtchn_upcall_vector xen_hvm_evtchn_upcall_vector_t;
+DEFINE_XEN_GUEST_HANDLE(xen_hvm_evtchn_upcall_vector_t);
 
 #endif /* defined(__i386__) || defined(__x86_64__) */
 

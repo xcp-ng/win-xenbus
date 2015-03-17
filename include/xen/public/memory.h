@@ -1,8 +1,8 @@
 /******************************************************************************
  * memory.h
- * 
+ *
  * Memory reservation and information.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
  * deal in the Software without restriction, including without limitation the
@@ -40,9 +40,9 @@
 
 #if __XEN_INTERFACE_VERSION__ >= 0x00030209
 /*
- * Maximum # bits addressable by the user of the allocated region (e.g., I/O 
- * devices often have a 32-bit limitation even in 64-bit systems). If zero 
- * then the user has no addressing restriction. This field is not used by 
+ * Maximum # bits addressable by the user of the allocated region (e.g., I/O
+ * devices often have a 32-bit limitation even in 64-bit systems). If zero
+ * then the user has no addressing restriction. This field is not used by
  * XENMEM_decrease_reservation.
  */
 #define XENMEMF_address_bits(x)     (x)
@@ -112,7 +112,7 @@ struct xen_memory_exchange {
      * [IN/OUT] Details of new memory extents.
      * We require that:
      *  1. @in.domid == @out.domid
-     *  2. @in.nr_extents  << @in.extent_order == 
+     *  2. @in.nr_extents  << @in.extent_order ==
      *     @out.nr_extents << @out.extent_order
      *  3. @in.extent_start and @out.extent_start lists must not overlap
      *  4. @out.extent_start lists GPFN bases to be populated
@@ -362,7 +362,7 @@ typedef struct xen_pod_target xen_pod_target_t;
 
 /*
  * Get the number of MFNs saved through memory sharing.
- * The call never fails. 
+ * The call never fails.
  */
 #define XENMEM_get_sharing_freed_pages    18
 #define XENMEM_get_sharing_shared_pages   19
@@ -375,7 +375,7 @@ typedef struct xen_pod_target xen_pod_target_t;
 struct xen_mem_event_op {
     uint8_t     op;         /* XENMEM_*_op_* */
     domid_t     domain;
-    
+
 
     /* PAGING_PREP IN: buffer to immediately fill page in */
     uint64_aligned_t    buffer;
@@ -451,7 +451,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_mem_access_op_t);
 
 /* The following allows sharing of grant refs. This is useful
  * for sharing utilities sitting as "filters" in IO backends
- * (e.g. memshr + blktap(2)). The IO backend is only exposed 
+ * (e.g. memshr + blktap(2)). The IO backend is only exposed
  * to grant references, and this allows sharing of the grefs */
 #define XENMEM_SHARING_OP_FIELD_IS_GREF_FLAG   (1ULL << 62)
 
@@ -480,7 +480,7 @@ struct xen_mem_sharing_op {
             uint64_aligned_t client_gfn;    /* IN: the client gfn */
             uint64_aligned_t client_handle; /* IN: handle to the client page */
             domid_t  client_domain; /* IN: the client domain id */
-        } share; 
+        } share;
         struct mem_sharing_op_debug {     /* OP_DEBUG_xxx */
             union {
                 uint64_aligned_t gfn;      /* IN: gfn to debug          */
@@ -530,14 +530,13 @@ DEFINE_XEN_GUEST_HANDLE(xen_mem_sharing_op_t);
 #define XENMEM_get_vnumainfo                26
 
 /* vNUMA node memory ranges */
-struct vmemrange {
+struct xen_vmemrange {
     uint64_t start, end;
     unsigned int flags;
     unsigned int nid;
 };
-
-typedef struct vmemrange vmemrange_t;
-DEFINE_XEN_GUEST_HANDLE(vmemrange_t);
+typedef struct xen_vmemrange xen_vmemrange_t;
+DEFINE_XEN_GUEST_HANDLE(xen_vmemrange_t);
 
 /*
  * vNUMA topology specifies vNUMA node number, distance table,
@@ -548,7 +547,7 @@ DEFINE_XEN_GUEST_HANDLE(vmemrange_t);
  * copied back to guest. Domain returns expected values of nr_vnodes,
  * nr_vmemranges and nr_vcpus to guest if the values where incorrect.
  */
-struct vnuma_topology_info {
+struct xen_vnuma_topology_info {
     /* IN */
     domid_t domid;
     uint16_t pad;
@@ -566,12 +565,12 @@ struct vnuma_topology_info {
         uint64_t pad;
     } vcpu_to_vnode;
     union {
-        XEN_GUEST_HANDLE(vmemrange_t) h;
+        XEN_GUEST_HANDLE(xen_vmemrange_t) h;
         uint64_t pad;
     } vmemrange;
 };
-typedef struct vnuma_topology_info vnuma_topology_info_t;
-DEFINE_XEN_GUEST_HANDLE(vnuma_topology_info_t);
+typedef struct xen_vnuma_topology_info xen_vnuma_topology_info_t;
+DEFINE_XEN_GUEST_HANDLE(xen_vnuma_topology_info_t);
 
 /* Next available subop number is 27 */
 

@@ -38,13 +38,23 @@
 #include <xen-types.h>
 #include <xen-warnings.h>
 #include <xen-errno.h>
-#include <xen/memory.h>
-#include <xen/event_channel.h>
-#include <xen/grant_table.h>
-#include <xen/sched.h>
-#include <xen/hvm/params.h>
-#include <xen/io/xs_wire.h>
-#include <xen/version.h>
+
+#include <public/xen.h>
+#include <public/memory.h>
+#include <public/event_channel.h>
+#include <public/grant_table.h>
+#include <public/sched.h>
+#include <public/hvm/params.h>
+
+// xs_wire.h gates the definition of the xsd_errors enumeration
+// on whether EINVAL is defined. Unfortunately EINVAL is actually
+// part of an enumeration and the #ifdef test thus fails.
+// Override the enumeration value here with a #define.
+
+#define EINVAL  XEN_EINVAL
+
+#include <public/io/xs_wire.h>
+#include <public/version.h>
 
 #ifndef XEN_API
 #define XEN_API __declspec(dllimport)

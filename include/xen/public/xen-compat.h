@@ -1,8 +1,8 @@
 /******************************************************************************
  * xen-compat.h
- * 
+ *
  * Guest OS interface to Xen.  Compatibility layer.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
  * deal in the Software without restriction, including without limitation the
@@ -27,7 +27,7 @@
 #ifndef __XEN_PUBLIC_XEN_COMPAT_H__
 #define __XEN_PUBLIC_XEN_COMPAT_H__
 
-#define __XEN_LATEST_INTERFACE_VERSION__ 0x00040400
+#define __XEN_LATEST_INTERFACE_VERSION__ 0x00040600
 
 #if defined(__XEN__) || defined(__XEN_TOOLS__)
 /* Xen is built with matching headers and implements the latest interface. */

@@ -24,7 +24,7 @@
 	<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" /> 
 
 	<PropertyGroup>
-		<IncludePath>..\..\include;..\..\src\common;$(IncludePath)</IncludePath>
+		<IncludePath>..\..\include;..\..\include\xen;..\..\src\common;$(IncludePath)</IncludePath>
 		<RunCodeAnalysis>true</RunCodeAnalysis>
 		<EnableInf2cat>false</EnableInf2cat>
 		<IntDir>..\$(ProjectName)\$(ConfigurationName)\$(Platform)\</IntDir>

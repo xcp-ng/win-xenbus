@@ -5,34 +5,39 @@ import shutil
 import subprocess
 import re
 
-def shell(command):
-    print(command)
+def shell(command, dir = '.'):
+    print("in '%s' execute '%s'" % (dir, ' '.join(command)))
     sys.stdout.flush()
 
-    pipe = os.popen(' '.join(command), 'r', 1)
+    sub = subprocess.Popen(' '.join(command), cwd=dir,
+                           stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT)
 
-    for line in pipe:
-        print(line.rstrip())
+    for line in sub.stdout:
+        print(line.decode(sys.getdefaultencoding()).rstrip())
 
-    return pipe.close()
+    sub.wait()
+
+    return sub.returncode
 
 def get_repo(url, working):
     shell(['git', 'clone', '--no-checkout', url, working])
 
 def get_branch(tag, working):
-    cwd = os.getcwd()
-    os.chdir(working)
-    shell(['git', 'checkout', '-b', tag])
-    os.chdir(cwd)
+    shell(['git', 'checkout', '-b', 'tmp', tag], working)
 
-def copy_file(working, src_dir, dst_dir, name):
+def put_branch(working):
+    shell(['git', 'checkout', 'master'], working)
+    shell(['git', 'branch', '-d', 'tmp'], working)
+
+def copy_file(working, dir, name):
     try:
-        os.makedirs('include\\xen\\%s' % dst_dir)
+        os.makedirs('include\\xen\\%s' % dir)
     except OSError:
         None
 
-    src = open('%s\\xen\\include\\%s\\%s' % (working, src_dir, name), 'r')
-    dst = open('include\\xen\\%s\\%s' % (dst_dir, name), 'w', newline='\n')
+    src = open('%s\\xen\\include\\%s\\%s' % (working, dir, name), 'r')
+    dst = open('include\\xen\\%s\\%s' % (dir, name), 'w', newline='\n')
 
     print(name)
 
@@ -53,24 +58,31 @@ if __name__ == '__main__':
     get_repo('git://xenbits.xen.org/xen.git', working)
     get_branch(tag, working)
 
-    copy_file(working, 'public', '.', 'xen.h')
+    shell(['git', 'rm', '-r', '-f', 'xen'], 'include')
 
-    copy_file(working, 'public', '.', 'xen-compat.h')
-    copy_file(working, 'public', '.', 'trace.h')
-    copy_file(working, 'public', '.', 'memory.h')
-    copy_file(working, 'public', '.', 'sched.h')
-    copy_file(working, 'public', '.', 'event_channel.h')
-    copy_file(working, 'public', '.', 'grant_table.h')
-    copy_file(working, 'public', '.', 'version.h')
-    copy_file(working, 'public', '.', 'features.h')
+    copy_file(working, 'public', 'xen.h')
+    copy_file(working, 'public', 'xen-compat.h')
+    copy_file(working, 'public', 'trace.h')
+    copy_file(working, 'public', 'memory.h')
+    copy_file(working, 'public', 'sched.h')
+    copy_file(working, 'public', 'event_channel.h')
+    copy_file(working, 'public', 'grant_table.h')
+    copy_file(working, 'public', 'version.h')
+    copy_file(working, 'public', 'features.h')
+    copy_file(working, 'public', 'errno.h')
 
-    copy_file(working, 'xen', '.', 'errno.h')
+    copy_file(working, 'xen', 'errno.h')
 
-    copy_file(working, 'public\\arch-x86', 'arch-x86', 'xen.h')
-    copy_file(working, 'public\\arch-x86', 'arch-x86', 'xen-x86_32.h')
-    copy_file(working, 'public\\arch-x86', 'arch-x86', 'xen-x86_64.h')
+    copy_file(working, 'public\\arch-x86', 'xen.h')
+    copy_file(working, 'public\\arch-x86', 'xen-x86_32.h')
+    copy_file(working, 'public\\arch-x86', 'xen-x86_64.h')
 
-    copy_file(working, 'public\\hvm', 'hvm', 'hvm_op.h')
-    copy_file(working, 'public\\hvm', 'hvm', 'params.h')
+    copy_file(working, 'public\\hvm', 'hvm_op.h')
+    copy_file(working, 'public\\hvm', 'params.h')
+    copy_file(working, 'public\\hvm', 'hvm_info_table.h')
 
-    copy_file(working, 'public\\io', 'io', 'xs_wire.h')
+    copy_file(working, 'public\\io', 'xs_wire.h')
+
+    put_branch(working)
+
+    shell(['git', 'add', 'xen'], 'include')

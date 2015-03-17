@@ -33,9 +33,11 @@
 #define  _XEN_HYPERCALL_H
 
 #include <ntddk.h>
+
 #include <xen-types.h>
 #include <xen-warnings.h>
-#include <xen/xen.h>
+
+#include <public/xen.h>
 
 extern NTSTATUS
 HypercallInitialize(

@@ -92,10 +92,15 @@
 #define _HVMPV_time_ref_count 2
 #define HVMPV_time_ref_count  (1 << _HVMPV_time_ref_count)
 
+/* Enable Reference TSC Page (HV_X64_MSR_REFERENCE_TSC) */
+#define _HVMPV_reference_tsc 3
+#define HVMPV_reference_tsc  (1 << _HVMPV_reference_tsc)
+
 #define HVMPV_feature_mask \
 	(HVMPV_base_freq | \
 	 HVMPV_no_freq | \
-	 HVMPV_time_ref_count)
+	 HVMPV_time_ref_count | \
+	 HVMPV_reference_tsc)
 
 #endif
 
@@ -157,7 +162,7 @@
  */
 #define HVM_PARAM_ACPI_IOPORTS_LOCATION 19
 
-/* Enable blocking memory events, async or sync (pause vcpu until response) 
+/* Enable blocking memory events, async or sync (pause vcpu until response)
  * onchangeonly indicates messages only on a change of value */
 #define HVM_PARAM_MEMORY_EVENT_CR0          20
 #define HVM_PARAM_MEMORY_EVENT_CR3          21

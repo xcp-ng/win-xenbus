@@ -36,6 +36,10 @@
 
 #include <xen/errno.h>
 
+#define EISDIR      21
+#define EROFS       30
+#define ENOTEMPTY   39
+
 #pragma warning(disable:4127)   // conditional expression is constant
 
 #define ERRNO_TO_STATUS(_errno, _status)                    \
