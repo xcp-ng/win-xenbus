@@ -32,11 +32,11 @@
 #include <ntddk.h>
 #include <ntstrsafe.h>
 #include <xen.h>
-#include <util.h>
 
 #include "range_set.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define RANGE_SET_TAG   'GNAR'
 

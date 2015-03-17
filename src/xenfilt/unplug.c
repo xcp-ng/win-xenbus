@@ -34,7 +34,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 #include <version.h>
 
 #include "driver.h"
@@ -43,6 +42,7 @@
 #include "unplug.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 struct _XENFILT_UNPLUG_CONTEXT {
     KSPIN_LOCK  Lock;

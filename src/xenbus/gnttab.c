@@ -33,13 +33,13 @@
 #include <ntstrsafe.h>
 #include <stdlib.h>
 #include <xen.h>
-#include <util.h>
 
 #include "gnttab.h"
 #include "fdo.h"
 #include "range_set.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT  32
 #define XENBUS_GNTTAB_ENTRY_PER_FRAME      (PAGE_SIZE / sizeof (grant_entry_v1_t))

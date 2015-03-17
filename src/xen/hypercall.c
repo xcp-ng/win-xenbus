@@ -34,11 +34,11 @@
 
 #include <ntddk.h>
 #include <xen.h>
-#include <util.h>
 
 #include "hypercall.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define MAXIMUM_HYPERCALL_PAGE_COUNT 2
 

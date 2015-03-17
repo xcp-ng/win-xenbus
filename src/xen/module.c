@@ -34,12 +34,12 @@
 #include <ntddk.h>
 #include <ntstrsafe.h>
 #include <aux_klib.h>
-#include <util.h>
 
 #include "high.h"
 #include "module.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define MODULE_TAG   'UDOM'
 

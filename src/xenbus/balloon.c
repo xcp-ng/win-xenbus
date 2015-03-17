@@ -32,13 +32,13 @@
 #include <ntddk.h>
 #include <stdlib.h>
 #include <xen.h>
-#include <util.h>
 
 #include "mutex.h"
 #include "balloon.h"
 #include "range_set.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define MDL_SIZE_MAX        ((1 << (RTL_FIELD_SIZE(MDL, Size) * 8)) - 1)
 #define MAX_PAGES_PER_MDL   ((MDL_SIZE_MAX - sizeof(MDL)) / sizeof(PFN_NUMBER))

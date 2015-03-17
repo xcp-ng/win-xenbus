@@ -32,7 +32,6 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "evtchn.h"
 #include "evtchn_2l.h"
@@ -42,6 +41,7 @@
 #include "registry.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 typedef struct _XENBUS_EVTCHN_UNBOUND_PARAMETERS {
     USHORT  RemoteDomain;

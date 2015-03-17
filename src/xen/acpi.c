@@ -32,11 +32,11 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "acpi.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define XENBUS_ACPI_TAG 'IPCA'
 

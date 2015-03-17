@@ -31,17 +31,17 @@
 
 #include <ntddk.h>
 #include <xen.h>
-#include <util.h>
 
+#include "registry.h"
 #include "fdo.h"
 #include "pdo.h"
 #include "driver.h"
 #include "emulated.h"
 #include "unplug.h"
-#include "registry.h"
 #include "mutex.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 #include "version.h"
 
 extern PULONG       InitSafeBootMode;

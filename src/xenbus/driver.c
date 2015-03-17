@@ -31,7 +31,6 @@
 
 #include <ntddk.h>
 #include <ntstrsafe.h>
-#include <util.h>
 
 #include "registry.h"
 #include "fdo.h"
@@ -40,6 +39,7 @@
 #include "names.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 #include "version.h"
 
 extern PULONG       InitSafeBootMode;

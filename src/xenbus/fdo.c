@@ -35,7 +35,6 @@
 #include <wdmguid.h>
 #include <ntstrsafe.h>
 #include <stdlib.h>
-#include <util.h>
 #include <xen.h>
 
 #include <unplug_interface.h>
@@ -60,6 +59,7 @@
 #include "range_set.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define XENBUS_FDO_TAG 'ODF'
 

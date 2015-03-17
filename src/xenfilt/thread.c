@@ -30,11 +30,11 @@
  */
 
 #include <ntddk.h>
-#include <util.h>
 
 #include "thread.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define THREAD_TAG 'ERHT'
 

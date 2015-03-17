@@ -32,13 +32,13 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "evtchn_fifo.h"
 #include "shared_info.h"
 #include "fdo.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define MAX_HVM_VCPUS   128
 

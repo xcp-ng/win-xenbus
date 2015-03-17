@@ -36,7 +36,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "registry.h"
 #include "system.h"
@@ -44,6 +43,7 @@
 #include "names.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define XEN_SYSTEM_TAG  'TSYS'
 

@@ -30,10 +30,10 @@
  */
 
 #include <ntddk.h>
-#include <util.h>
 
 #include "registry.h"
 #include "assert.h"
+#include "util.h"
 
 #define REGISTRY_TAG 'GERX'
 

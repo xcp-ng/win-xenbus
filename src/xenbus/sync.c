@@ -32,11 +32,11 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "sync.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 // Routines to capture all CPUs in a spinning state with interrupts
 // disabled (so that we remain in a known code context) and optionally

@@ -34,13 +34,13 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <xen.h>
-#include <util.h>
 
 #include "high.h"
 #include "debug.h"
 #include "fdo.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define MAXIMUM_PREFIX_LENGTH   32
 

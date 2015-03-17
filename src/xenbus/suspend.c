@@ -32,7 +32,6 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include <unplug_interface.h>
 
@@ -42,6 +41,7 @@
 #include "sync.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 struct _XENBUS_SUSPEND_CALLBACK {
     LIST_ENTRY  ListEntry;

@@ -34,12 +34,12 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "registry.h"
 #include "emulated.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define MAXNAMELEN  128
 

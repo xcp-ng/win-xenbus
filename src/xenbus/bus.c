@@ -32,7 +32,6 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "bus.h"
 #include "dma.h"
@@ -42,6 +41,7 @@
 #include "sync.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 typedef struct _XENBUS_BUS_CONTEXT {
     LONG                    References;

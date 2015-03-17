@@ -34,7 +34,6 @@
 #include <ntddk.h>
 #include <wdmguid.h>
 #include <ntstrsafe.h>
-#include <util.h>
 
 #include <emulated_interface.h>
 #include <unplug_interface.h>
@@ -48,6 +47,7 @@
 #include "registry.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define PDO_TAG 'ODP'
 

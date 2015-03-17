@@ -35,7 +35,6 @@
 #include <wdmguid.h>
 #include <ntstrsafe.h>
 #include <stdlib.h>
-#include <util.h>
 
 #include "emulated.h"
 #include "names.h"
@@ -45,6 +44,7 @@
 #include "driver.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define PDO_TAG 'ODP'
 

@@ -35,7 +35,6 @@
 #include <wdmguid.h>
 #include <ntstrsafe.h>
 #include <stdlib.h>
-#include <util.h>
 #include <xen.h>
 
 #include "emulated.h"
@@ -48,6 +47,7 @@
 #include "mutex.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define FDO_TAG 'ODF'
 

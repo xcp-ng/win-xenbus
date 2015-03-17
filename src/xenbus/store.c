@@ -34,13 +34,13 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <xen.h>
-#include <util.h>
 
 #include "store.h"
 #include "evtchn.h"
 #include "fdo.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 extern ULONG
 NTAPI

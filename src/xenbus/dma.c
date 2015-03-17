@@ -32,7 +32,6 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "names.h"
 #include "dma.h"
@@ -40,6 +39,7 @@
 #include "pdo.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #pragma warning(push)
 #pragma warning(disable:4201) // nameless struct/union

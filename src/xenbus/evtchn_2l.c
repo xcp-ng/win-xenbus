@@ -32,13 +32,13 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "evtchn_2l.h"
 #include "shared_info.h"
 #include "fdo.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 typedef struct _XENBUS_EVTCHN_TWO_LEVEL_CONTEXT {
     PXENBUS_FDO                     Fdo;

@@ -32,11 +32,11 @@
 #include <ntddk.h>
 #include <stdarg.h>
 #include <xen.h>
-#include <util.h>
 
 #include "hash_table.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 typedef struct _XENBUS_HASH_TABLE_NODE {
     LIST_ENTRY  ListEntry;

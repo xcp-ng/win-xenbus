@@ -31,12 +31,12 @@
 
 #include <ntddk.h>
 #include <xen.h>
-#include <util.h>
 
 #include "shared_info.h"
 #include "fdo.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #define XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR     (sizeof (ULONG_PTR) * 8)
 #define XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT   (RTL_FIELD_SIZE(shared_info_t, evtchn_pending) / sizeof (ULONG_PTR))
