@@ -3,8 +3,8 @@
   <Import Project="..\configs.props" />
   <PropertyGroup Label="PropertySheets">
     <DriverType>WDM</DriverType>
+    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <DriverType>WDM</DriverType>
   </PropertyGroup>
   <PropertyGroup Label="Globals">
     <Configuration>Windows Vista Debug</Configuration>
@@ -12,42 +12,6 @@
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Release|x64'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Release|Win32'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows Vista Debug|x64'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows Vista Debug|Win32'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows Vista Release|x64'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows Vista Release|Win32'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 7 Release|x64'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 7 Release|Win32'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 7 Debug|Win32'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 7 Debug|x64'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Debug|x64'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Debug|Win32'">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-  </PropertyGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{4BF41378-C01B-4002-8581-563C5F703362}</ProjectGuid>
   </PropertyGroup>
