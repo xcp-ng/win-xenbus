@@ -66,9 +66,20 @@ __EvtchnTwoLevelFree(
 }
 
 static BOOLEAN
+EvtchnTwoLevelIsProcessorEnabled(
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context,
+    IN  ULONG                           Index
+    )
+{
+    UNREFERENCED_PARAMETER(_Context);
+
+    return (SystemVirtualCpuIndex(Index) == 0) ? TRUE : FALSE;
+}
+
+static BOOLEAN
 EvtchnTwoLevelPoll(
     IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context,
-    IN  ULONG                           Cpu,
+    IN  ULONG                           Index,
     IN  XENBUS_EVTCHN_ABI_EVENT         Event,
     IN  PVOID                           Argument
     )
@@ -77,7 +88,7 @@ EvtchnTwoLevelPoll(
 
     return XENBUS_SHARED_INFO(EvtchnPoll,
                               &Context->SharedInfoInterface,
-                              Cpu,
+                              Index,
                               Event,
                               Argument);
 }
@@ -148,8 +159,7 @@ EvtchnTwoLevelPortUnmask(
 
 static NTSTATUS
 EvtchnTwoLevelAcquire(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context,
-    OUT PKAFFINITY                      Affinity
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context
     )
 {
     PXENBUS_EVTCHN_TWO_LEVEL_CONTEXT    Context = (PVOID)_Context;
@@ -166,8 +176,6 @@ EvtchnTwoLevelAcquire(
     status = XENBUS_SHARED_INFO(Acquire, &Context->SharedInfoInterface);
     if (!NT_SUCCESS(status))
         goto fail1;
-
-    *Affinity = (KAFFINITY)1;
 
     Trace("<====\n");
 
@@ -215,6 +223,7 @@ static XENBUS_EVTCHN_ABI EvtchnAbiTwoLevel = {
     NULL,
     EvtchnTwoLevelAcquire,
     EvtchnTwoLevelRelease,
+    EvtchnTwoLevelIsProcessorEnabled,
     EvtchnTwoLevelPoll,
     EvtchnTwoLevelPortEnable,
     EvtchnTwoLevelPortDisable,

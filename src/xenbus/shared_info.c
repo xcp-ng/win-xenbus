@@ -30,6 +30,7 @@
  */
 
 #include <ntddk.h>
+#include <procgrp.h>
 #include <xen.h>
 
 #include "shared_info.h"
@@ -155,12 +156,12 @@ SharedInfoEvtchnMaskAll(
 static BOOLEAN
 SharedInfoUpcallPending(
     IN  PINTERFACE              Interface,
-    IN  ULONG                   Cpu
+    IN  ULONG                   Index
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
     shared_info_t               *Shared = Context->Shared;
-    int                         vcpu_id = SystemVirtualCpuIndex(Cpu);
+    int                         vcpu_id = SystemVirtualCpuIndex(Index);
     UCHAR                       Pending;
 
     KeMemoryBarrier();
@@ -173,14 +174,14 @@ SharedInfoUpcallPending(
 static BOOLEAN
 SharedInfoEvtchnPoll(
     IN  PINTERFACE                  Interface,
-    IN  ULONG                       Cpu,
+    IN  ULONG                       Index,
     IN  XENBUS_SHARED_INFO_EVENT    Event,
     IN  PVOID                       Argument OPTIONAL
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
     shared_info_t                   *Shared = Context->Shared;
-    int                             vcpu_id = SystemVirtualCpuIndex(Cpu);
+    int                             vcpu_id = SystemVirtualCpuIndex(Index);
     ULONG                           Port;
     ULONG_PTR                       SelectorMask;
     BOOLEAN                         DoneSomething;
@@ -457,28 +458,36 @@ SharedInfoDebugCallback(
 
     if (!Crashing) {
         shared_info_t   *Shared;
-        ULONG           Cpu;
+        ULONG           Index;
         ULONG           Selector;
 
         Shared = Context->Shared;
 
         KeMemoryBarrier();
 
-        for (Cpu = 0; Cpu < KeQueryActiveProcessorCount(NULL); Cpu++) {
-            int vcpu_id = SystemVirtualCpuIndex(Cpu);
+        for (Index = 0;
+             Index < KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+             Index++) {
+            PROCESSOR_NUMBER    ProcNumber;
+            int                 vcpu_id;
+
+            (VOID) KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+            vcpu_id = SystemVirtualCpuIndex(Index);
 
             XENBUS_DEBUG(Printf,
                          &Context->DebugInterface,
-                         "CPU %u: PENDING: %s\n",
-                         Cpu,
+                         "CPU %u:%u: PENDING: %s\n",
+                         ProcNumber.Group,
+                         ProcNumber.Number,
                          Shared->vcpu_info[vcpu_id].evtchn_upcall_pending ?
                          "TRUE" :
                          "FALSE");
 
             XENBUS_DEBUG(Printf,
                          &Context->DebugInterface,
-                         "CPU %u: SELECTOR MASK: %p\n",
-                         Cpu,
+                         "CPU %u:u: SELECTOR MASK: %p\n",
+                         ProcNumber.Group,
+                         ProcNumber.Number,
                          (PVOID)Shared->vcpu_info[vcpu_id].evtchn_pending_sel);
         }
 

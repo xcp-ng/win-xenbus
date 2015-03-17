@@ -30,6 +30,7 @@
  */
 
 #include <ntddk.h>
+#include <procgrp.h>
 #include <stdarg.h>
 #include <xen.h>
 
@@ -40,16 +41,14 @@
 #include "assert.h"
 #include "util.h"
 
-#define MAX_HVM_VCPUS   128
-
 typedef struct _XENBUS_EVTCHN_FIFO_CONTEXT {
     PXENBUS_FDO                     Fdo;
     KSPIN_LOCK                      Lock;
     LONG                            References;
-    PMDL                            ControlBlockMdl[MAX_HVM_VCPUS];
+    PMDL                            ControlBlockMdl[HVM_MAX_VCPUS];
     PMDL                            *EventPageMdl;
     ULONG                           EventPageCount;
-    ULONG                           Head[MAX_HVM_VCPUS][EVTCHN_FIFO_MAX_QUEUES];
+    ULONG                           Head[HVM_MAX_VCPUS][EVTCHN_FIFO_MAX_QUEUES];
 } XENBUS_EVTCHN_FIFO_CONTEXT, *PXENBUS_EVTCHN_FIFO_CONTEXT;
 
 #define EVENT_WORDS_PER_PAGE    (PAGE_SIZE / sizeof (event_word_t))
@@ -280,6 +279,18 @@ EvtchnFifoContract(
 }
 
 static BOOLEAN
+EvtchnFifoIsProcessorEnabled(
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
+    IN  ULONG                       Index
+    )
+{
+    PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
+    unsigned int                    vcpu_id = SystemVirtualCpuIndex(Index);
+
+    return (Context->ControlBlockMdl[vcpu_id] != NULL) ? TRUE : FALSE;
+}
+
+static BOOLEAN
 EvtchnFifoPollPriority(
     IN  PXENBUS_EVTCHN_FIFO_CONTEXT Context,
     IN  unsigned int                vcpu_id,
@@ -331,13 +342,13 @@ EvtchnFifoPollPriority(
 static BOOLEAN
 EvtchnFifoPoll(
     IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Cpu,
+    IN  ULONG                       Index,
     IN  XENBUS_EVTCHN_ABI_EVENT     Event,
     IN  PVOID                       Argument
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
-    unsigned int                    vcpu_id = SystemVirtualCpuIndex(Cpu);
+    unsigned int                    vcpu_id = SystemVirtualCpuIndex(Index);
     PMDL                            Mdl;
     evtchn_fifo_control_block_t     *ControlBlock;
     ULONG                           Ready;
@@ -346,11 +357,14 @@ EvtchnFifoPoll(
 
     Mdl = Context->ControlBlockMdl[vcpu_id];
 
+    DoneSomething = FALSE;
+    if (Mdl == NULL)
+        goto done;
+
     ControlBlock = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
     ASSERT(ControlBlock != NULL);
 
     Ready = InterlockedExchange((LONG *)&ControlBlock->ready, 0);
-    DoneSomething = FALSE;
 
     while (_BitScanReverse(&Priority, Ready)) {
         DoneSomething |= EvtchnFifoPollPriority(Context,
@@ -362,6 +376,7 @@ EvtchnFifoPoll(
         Ready |= InterlockedExchange((LONG *)&ControlBlock->ready, 0);
     }
 
+done:
     return DoneSomething;
 }
 
@@ -502,13 +517,12 @@ EvtchnFifoReset(
 
 static NTSTATUS
 EvtchnFifoAcquire(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    OUT PKAFFINITY                  Affinity
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
     KIRQL                           Irql;
-    LONG                            Cpu;
+    LONG                            Index;
     PMDL                            Mdl;
     NTSTATUS                        status;
 
@@ -519,10 +533,8 @@ EvtchnFifoAcquire(
 
     Trace("====>\n");
 
-    *Affinity = 0;
-    Cpu = 0;
-
-    while (Cpu < (LONG)KeQueryActiveProcessorCount(NULL)) {
+    Index = 0;
+    while (Index < (LONG)KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS)) {
         unsigned int        vcpu_id;
         PFN_NUMBER          Pfn;
         PHYSICAL_ADDRESS    Address;
@@ -533,7 +545,7 @@ EvtchnFifoAcquire(
         if (Mdl == NULL)
             goto fail1;
 
-        vcpu_id = SystemVirtualCpuIndex(Cpu);
+        vcpu_id = SystemVirtualCpuIndex(Index);
         Pfn = MmGetMdlPfnArray(Mdl)[0];
 
         status = EventChannelInitControl(Pfn, vcpu_id);
@@ -550,8 +562,7 @@ EvtchnFifoAcquire(
 
         Context->ControlBlockMdl[vcpu_id] = Mdl;
 
-        *Affinity |= (KAFFINITY)1 << Cpu;
-        Cpu++;
+        Index++;
     }
 
     Trace("<====\n");
@@ -569,10 +580,10 @@ fail1:
 
     (VOID) EventChannelReset();
 
-    while (--Cpu >= 0) {
+    while (--Index >= 0) {
         unsigned int    vcpu_id;
 
-        vcpu_id = SystemVirtualCpuIndex(Cpu);
+        vcpu_id = SystemVirtualCpuIndex(Index);
 
         Mdl = Context->ControlBlockMdl[vcpu_id];
         Context->ControlBlockMdl[vcpu_id] = NULL;
@@ -607,7 +618,7 @@ EvtchnFifoRelease(
 
     EvtchnFifoContract(Context);
 
-    vcpu_id = MAX_HVM_VCPUS;
+    vcpu_id = HVM_MAX_VCPUS;
     while (--vcpu_id >= 0) {
         PMDL            Mdl;
 
@@ -630,6 +641,7 @@ static XENBUS_EVTCHN_ABI EvtchnAbiFifo = {
     NULL,
     EvtchnFifoAcquire,
     EvtchnFifoRelease,
+    EvtchnFifoIsProcessorEnabled,
     EvtchnFifoPoll,
     EvtchnFifoPortEnable,
     EvtchnFifoPortDisable,

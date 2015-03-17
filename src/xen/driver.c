@@ -32,6 +32,7 @@
 #define XEN_API __declspec(dllexport)
 
 #include <ntddk.h>
+#include <procgrp.h>
 #include <xen.h>
 
 #include "hypercall.h"
@@ -126,6 +127,7 @@ DllInitialize(
     UNREFERENCED_PARAMETER(RegistryPath);
 
     ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
+    WdmlibProcgrpInitialize();
 
     __DbgPrintEnable();
 

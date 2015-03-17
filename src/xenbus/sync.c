@@ -30,6 +30,7 @@
  */
 
 #include <ntddk.h>
+#include <procgrp.h>
 #include <stdarg.h>
 #include <xen.h>
 
@@ -39,80 +40,83 @@
 #include "util.h"
 
 // Routines to capture all CPUs in a spinning state with interrupts
-// disabled (so that we remain in a known code context) and optionally
-// execute a function on each CPU.
+// disabled (so that we remain in a known code context).
 // These routines are used for suspend/resume and live snapshot.
 
 // The general sequence of steps is follows:
 //
-// - SyncCaptureAndCall() is called on an arbitrary CPU
+// - SyncCapture() is called on an arbitrary CPU. It must be called at
+//   DISPATCH_LEVEL so it cannot be pre-empted and moved to another CPU.
+//   It schedules a DPC on each of the other CPUs and spins until all
+//   CPUs are executing the DPC, which will in-turn spin awaiting
+//   further instruction.
 //
-// - It raises to DISPATCH_LEVEL to avoid pre-emption and schedules
-//   a DPC on each of the other CPUs.
+// - SyncDisableInterrputs() instructs the DPC routines to all raise
+//   to HIGH_LEVEL and disable interrupts for its CPU. It then raises
+//   to HIGH_LEVEL itself, spins waiting for confirmation from each
+//   DPC that it has disabled interrupts and then disables interrupts
+//   itself.
 //
-// - It, and the DPC routines, all raise to HIGH_LEVEL, clear a
-//   a bit corresponding to their CPU in a 'captured' mask, and then
-//   spin waiting for the mask to become zero (i.e. all CPUs captured).
+//   NOTE: There is a back-off in trying to disable interrupts. It is
+//         possible that CPU A is waiting for an IPI to CPU B to
+//         complete, but CPU B is spinning with interrupts disabled.
+//         Thus the DPC on CPU A will never make it to HIGH_LEVEL and
+//         hence never get to disable interrupts. Thus if, while
+//         spinning with interrupts disabled, one DPC notices that
+//         another DPC has not made it, it briefly enables interrupts
+//         and drops back down to DISPATCH_LEVEL before trying again.
+//         This should allow any pending IPI to complete.
 //
-//   NOTE: There is a back-off in this spin. It is possible that CPU A
-//         is waiting for an IPI to CPU B to complete, but CPU B is
-//         spinning at HIGH_LEVEL. Thus CPU A will never make it to
-//         HIGH_LEVEL. Thus if, while spinning at HIGH_LEVEL, we notice
-//         that another CPU has not made it, we set our bit in the
-//         'captured' mask again and briefly drop down to DISPATCH_LEVEL
-//         before trying again. This should allow any pending IPI to
-//         complete.
+// - SyncEnableInterrupts() instructs the DPC routines to all enable
+//   interrupts and drop back to DISPATCH_LEVEL before enabling
+//   interrupts and dropping back to DISPATCH_LEVEL itself.
 //
-// - Once all CPUs are captured, each disables interrupts, executes an
-//   optional function. All the DPC routined clear a bit corresponding
-//   to their CPU in a 'completed' mask and then spin waiting for the
-//   mask to become zero. The requesting CPU also executes the optional
-//   function bit it then waits for the mask to only contain the bit
-//   corresponding to its CPU and then returns from
-//   SyncCaptureAndCall() at HIGH_LEVEL.
-//
-// - A subsequent call to SyncRelease() will clear the last
-//   remaining bit (clearly it is necessarily executed on the same CPU
-//   as SyncCaptureAndCall()) and thus allow all the DPC
-//   routines to lower back to DISPATCH_LEVEL and complete.
-//
-// - SyncRelease() also lowers back to DISPATCH_LEVEL and then
-//   back to the IRQL is was originally entered at.
+// - SyncRelease() instructs the DPC routines to exit, thus allowing
+//   the scheduler to run on the other CPUs again. It spins until all
+//   DPCs have completed and then returns.
+
+#pragma data_seg("sync")
+__declspec(allocate("sync"))
+static UCHAR        __Section[PAGE_SIZE];
+
+typedef struct  _SYNC_PROCESSOR {
+    KDPC                Dpc;
+    BOOLEAN             DisableInterrupts;
+    BOOLEAN             Exit;
+} SYNC_PROCESSOR, *PSYNC_PROCESSOR;
 
 typedef struct  _SYNC_CONTEXT {
-    KDPC                Dpc[MAXIMUM_PROCESSORS];
     ULONG               Sequence;
-    LONG                CpuCount;
+    LONG                ProcessorCount;
     LONG                CompletionCount;
-    BOOLEAN             DisableInterrupts[MAXIMUM_PROCESSORS];
-    BOOLEAN             Exit[MAXIMUM_PROCESSORS];
+    SYNC_PROCESSOR      Processor[1];
 } SYNC_CONTEXT, *PSYNC_CONTEXT;
 
-static LONG SyncOwner = MAXIMUM_PROCESSORS;
+static PSYNC_CONTEXT    SyncContext = (PVOID)__Section;
+static LONG             SyncOwner = -1;
 
 static FORCEINLINE VOID
 __SyncAcquire(
-    IN  LONG    Cpu
+    IN  LONG    Index
     )
 {
     LONG        Old;
 
-    Old = InterlockedExchange(&SyncOwner, Cpu);
-    ASSERT3U(Old, ==, MAXIMUM_PROCESSORS);
+    Old = InterlockedExchange(&SyncOwner, Index);
+    ASSERT3U(Old, ==, -1);
 }
 
 static FORCEINLINE VOID
 __SyncRelease(
-    IN  LONG    Cpu
+    IN  LONG    Index
     )
 {
     LONG        Old;
 
-    Old = InterlockedExchange(&SyncOwner, MAXIMUM_PROCESSORS);
-    ASSERT3U(Old, ==, Cpu);
+    Old = InterlockedExchange(&SyncOwner, -1);
+    ASSERT3U(Old, ==, Index);
 }
 
-static SYNC_CONTEXT  SyncContext;
 
 KDEFERRED_ROUTINE   SyncWorker;
 
@@ -122,53 +126,57 @@ KDEFERRED_ROUTINE   SyncWorker;
 VOID
 #pragma prefast(suppress:28166) // Function does not restore IRQL
 SyncWorker(
-    IN  PKDPC   Dpc,
-    IN  PVOID   Context,
-    IN  PVOID   Argument1,
-    IN  PVOID   Argument2
+    IN  PKDPC           Dpc,
+    IN  PVOID           _Context,
+    IN  PVOID           Argument1,
+    IN  PVOID           Argument2
     )
 {
-    BOOLEAN     InterruptsDisabled;
-    ULONG       Cpu;
+    PSYNC_CONTEXT       Context = SyncContext;
+    BOOLEAN             InterruptsDisabled;
+    ULONG               Index;
+    PSYNC_PROCESSOR     Processor;
+    PROCESSOR_NUMBER    ProcNumber;
 
     UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(_Context);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
     InterruptsDisabled = FALSE;
-    Cpu = KeGetCurrentProcessorNumber();
+    Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
+    Processor = &Context->Processor[Index];
 
-    Trace("====> (%u)\n", Cpu);
-    InterlockedIncrement(&SyncContext.CompletionCount);
+    Trace("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
+    InterlockedIncrement(&Context->CompletionCount);
 
     for (;;) {
         ULONG   Sequence;
 
-        if (SyncContext.Exit[Cpu])
+        if (Processor->Exit)
             break;
 
-        if (SyncContext.DisableInterrupts[Cpu] == InterruptsDisabled) {
+        if (Processor->DisableInterrupts == InterruptsDisabled) {
             _mm_pause();
             KeMemoryBarrier();
 
             continue;
         }
 
-        Sequence = SyncContext.Sequence;
+        Sequence = Context->Sequence;
 
-        if (SyncContext.DisableInterrupts[Cpu]) {
+        if (Processor->DisableInterrupts) {
             ULONG       Attempts;
             NTSTATUS    status;
 
             (VOID) KfRaiseIrql(HIGH_LEVEL);
             status = STATUS_SUCCESS;
 
-            InterlockedIncrement(&SyncContext.CompletionCount);
+            InterlockedIncrement(&Context->CompletionCount);
 
             Attempts = 0;
-            while (SyncContext.Sequence == Sequence &&
-                   SyncContext.CompletionCount < SyncContext.CpuCount) {
+            while (Context->Sequence == Sequence &&
+                   Context->CompletionCount < Context->ProcessorCount) {
                 _mm_pause();
                 KeMemoryBarrier();
 
@@ -177,14 +185,14 @@ SyncWorker(
                     LONG    New;
 
                     do {
-                        Old = SyncContext.CompletionCount;
+                        Old = Context->CompletionCount;
                         New = Old - 1;
 
-                        if (Old == SyncContext.CpuCount)
+                        if (Old == Context->ProcessorCount)
                             break;
-                    } while (InterlockedCompareExchange(&SyncContext.CompletionCount, New, Old) != Old);
+                    } while (InterlockedCompareExchange(&Context->CompletionCount, New, Old) != Old);
 
-                    if (Old < SyncContext.CpuCount) {
+                    if (Old < Context->ProcessorCount) {
 #pragma prefast(suppress:28138) // Use constant rather than variable
                         KeLowerIrql(DISPATCH_LEVEL);
                         status = STATUS_UNSUCCESSFUL;
@@ -207,10 +215,10 @@ SyncWorker(
 #pragma prefast(suppress:28138) // Use constant rather than variable
             KeLowerIrql(DISPATCH_LEVEL);
 
-            InterlockedIncrement(&SyncContext.CompletionCount);
+            InterlockedIncrement(&Context->CompletionCount);
 
-            while (SyncContext.Sequence == Sequence &&
-                   SyncContext.CompletionCount < SyncContext.CpuCount) {
+            while (Context->Sequence == Sequence &&
+                   Context->CompletionCount < Context->ProcessorCount) {
                 _mm_pause();
                 KeMemoryBarrier();
             }
@@ -218,8 +226,8 @@ SyncWorker(
         }
     }
 
-    Trace("<==== (%u)\n", Cpu);
-    InterlockedIncrement(&SyncContext.CompletionCount);
+    Trace("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
+    InterlockedIncrement(&Context->CompletionCount);
 
     ASSERT(!InterruptsDisabled);
 }
@@ -231,44 +239,55 @@ SyncCapture(
     VOID
     )
 {
-    ULONG       Cpu;
-    ULONG       Index;
+    PSYNC_CONTEXT       Context = SyncContext;
+    LONG                Index;
+    PROCESSOR_NUMBER    ProcNumber;
+    USHORT              Group;
+    UCHAR               Number;
 
     ASSERT3U(KeGetCurrentIrql(), ==, DISPATCH_LEVEL);
 
-    Cpu = KeGetCurrentProcessorNumber();
-    __SyncAcquire(Cpu);
+    Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
+    __SyncAcquire(Index);
 
-    Trace("====> (%u)\n", Cpu);
+    Group = ProcNumber.Group;
+    Number = ProcNumber.Number;
 
-    ASSERT(IsZeroMemory(&SyncContext, sizeof (SYNC_CONTEXT)));
+    Trace("====> (%u:%u)\n", Group, Number);
 
-    SyncContext.Sequence++;
-    SyncContext.CompletionCount = 0;
-    SyncContext.CpuCount = KeQueryActiveProcessorCount(NULL);
+    ASSERT(IsZeroMemory(Context, sizeof (SYNC_CONTEXT)));
 
-    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++) {
-        PKDPC   Dpc = &SyncContext.Dpc[Index];
+    Context->Sequence++;
+    Context->CompletionCount = 0;
 
-        SyncContext.DisableInterrupts[Index] = FALSE;
-        SyncContext.Exit[Index] = FALSE;
+    Context->ProcessorCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
-        if (Index == Cpu)
+    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
+        NTSTATUS        status;
+
+        ASSERT3U((ULONG_PTR)(Processor + 1), <, (ULONG_PTR)__Section + PAGE_SIZE);
+
+        status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+        ASSERT(NT_SUCCESS(status));
+
+        if (ProcNumber.Group == Group &&
+            ProcNumber.Number == Number)
             continue;
 
-        KeInitializeDpc(Dpc, SyncWorker, NULL);
-        KeSetTargetProcessorDpc(Dpc, (CCHAR)Index);
-        KeInsertQueueDpc(Dpc, NULL, NULL);
+        KeInitializeDpc(&Processor->Dpc, SyncWorker, NULL);
+        KeSetTargetProcessorDpcEx(&Processor->Dpc, &ProcNumber);
+        KeInsertQueueDpc(&Processor->Dpc, NULL, NULL);
     }
 
-    InterlockedIncrement(&SyncContext.CompletionCount);
+    InterlockedIncrement(&Context->CompletionCount);
 
-    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
+    while (Context->CompletionCount < Context->ProcessorCount) {
         _mm_pause();
         KeMemoryBarrier();
     }
 
-    Trace("<==== (%u)\n", Cpu);
+    Trace("<==== (%u:%u)\n", Group, Number);
 }
 
 __drv_requiresIRQL(DISPATCH_LEVEL)
@@ -278,26 +297,32 @@ SyncDisableInterrupts(
     VOID
     )
 {
-    ULONG       Index;
-    ULONG       Attempts;
-    NTSTATUS    status;
+    PSYNC_CONTEXT   Context = SyncContext;
+    LONG            Index;
+    ULONG           Attempts;
+    NTSTATUS        status;
 
     Trace("====>\n");
 
-    SyncContext.Sequence++;
-    SyncContext.CompletionCount = 0;
+    Context->Sequence++;
+    Context->CompletionCount = 0;
 
-    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++)
-        SyncContext.DisableInterrupts[Index] = TRUE;
+    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
+
+        Processor->DisableInterrupts = TRUE;
+    }
+
+    KeMemoryBarrier();
 
 again:
     (VOID) KfRaiseIrql(HIGH_LEVEL);
     status = STATUS_SUCCESS;
 
-    InterlockedIncrement(&SyncContext.CompletionCount);
+    InterlockedIncrement(&Context->CompletionCount);
 
     Attempts = 0;
-    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
+    while (Context->CompletionCount < Context->ProcessorCount) {
         _mm_pause();
         KeMemoryBarrier();
 
@@ -306,18 +331,18 @@ again:
             LONG    New;
 
             do {
-                Old = SyncContext.CompletionCount;
+                Old = Context->CompletionCount;
                 New = Old - 1;
 
-                if (Old == SyncContext.CpuCount)
+                if (Old == Context->ProcessorCount)
                     break;
-            } while (InterlockedCompareExchange(&SyncContext.CompletionCount, New, Old) != Old);
+            } while (InterlockedCompareExchange(&Context->CompletionCount, New, Old) != Old);
 
-            if (Old < SyncContext.CpuCount) {
+            if (Old < Context->ProcessorCount) {
                 LogPrintf(LOG_LEVEL_WARNING,
                           "SYNC: %d < %d\n",
                           Old,
-                          SyncContext.CpuCount);
+                          Context->ProcessorCount);
 
 #pragma prefast(suppress:28138) // Use constant rather than variable
                 KeLowerIrql(DISPATCH_LEVEL);
@@ -339,23 +364,29 @@ VOID
 SyncEnableInterrupts(
     )
 {
-    KIRQL   Irql;
-    ULONG   Index;
+    PSYNC_CONTEXT   Context = SyncContext;
+    KIRQL           Irql;
+    LONG            Index;
 
     _enable();
 
     Irql = KeGetCurrentIrql();
     ASSERT3U(Irql, ==, HIGH_LEVEL);
 
-    SyncContext.Sequence++;
-    SyncContext.CompletionCount = 0;
+    Context->Sequence++;
+    Context->CompletionCount = 0;
 
-    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++)
-        SyncContext.DisableInterrupts[Index] = FALSE;
+    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
 
-    InterlockedIncrement(&SyncContext.CompletionCount);
+        Processor->DisableInterrupts = FALSE;
+    }
 
-    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
+    KeMemoryBarrier();
+
+    InterlockedIncrement(&Context->CompletionCount);
+
+    while (Context->CompletionCount < Context->ProcessorCount) {
         _mm_pause();
         KeMemoryBarrier();
     }
@@ -373,28 +404,33 @@ SyncRelease(
     VOID
     )
 {
-    ULONG       Cpu;
-    ULONG       Index;
+    PSYNC_CONTEXT   Context = SyncContext;
+    LONG            Index;
 
     Trace("====>\n");
 
-    SyncContext.Sequence++;
-    SyncContext.CompletionCount = 0;
+    Context->Sequence++;
+    Context->CompletionCount = 0;
 
-    for (Index = 0; Index < (ULONG)SyncContext.CpuCount; Index++)
-        SyncContext.Exit[Index] = TRUE;
+    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
 
-    InterlockedIncrement(&SyncContext.CompletionCount);
+        Processor->Exit = TRUE;
+    }
 
-    while (SyncContext.CompletionCount < SyncContext.CpuCount) {
+    KeMemoryBarrier();
+
+    InterlockedIncrement(&Context->CompletionCount);
+
+    while (Context->CompletionCount < Context->ProcessorCount) {
         _mm_pause();
         KeMemoryBarrier();
     }
 
-    RtlZeroMemory(&SyncContext, sizeof (SYNC_CONTEXT));
+    RtlZeroMemory(Context, sizeof (SYNC_CONTEXT));
 
-    Cpu = KeGetCurrentProcessorNumber();
-    __SyncRelease(Cpu);
+    Index = KeGetCurrentProcessorNumberEx(NULL);
+    __SyncRelease(Index);
 
     Trace("<====\n");
 }

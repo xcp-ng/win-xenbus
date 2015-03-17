@@ -169,7 +169,8 @@ extern PXENBUS_INTERRUPT
 FdoAllocateInterrupt(
     IN  PXENBUS_FDO         Fdo,
     IN  KINTERRUPT_MODE     InterruptMode,
-    IN  ULONG               Cpu,
+    IN  USHORT              Group,
+    IN  UCHAR               Number,
     IN  KSERVICE_ROUTINE    Callback,
     IN  PVOID               Argument OPTIONAL
     );

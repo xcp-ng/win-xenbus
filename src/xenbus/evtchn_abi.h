@@ -39,13 +39,18 @@ typedef PVOID *PXENBUS_EVTCHN_ABI_CONTEXT;
 
 typedef NTSTATUS
 (*XENBUS_EVTCHN_ABI_ACQUIRE)(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  Context,
-    OUT PKAFFINITY                  Affinity
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT  Context
     );
 
 typedef VOID
 (*XENBUS_EVTCHN_ABI_RELEASE)(
     IN  PXENBUS_EVTCHN_ABI_CONTEXT  Context
+    );
+
+typedef BOOLEAN
+(*XENBUS_EVTCHN_ABI_IS_PROCESSOR_ENABLED)(
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT  Context,
+    IN  ULONG                       Index
     );
 
 typedef BOOLEAN
@@ -57,7 +62,7 @@ typedef BOOLEAN
 typedef BOOLEAN
 (*XENBUS_EVTCHN_ABI_POLL)(
     IN  PXENBUS_EVTCHN_ABI_CONTEXT  Context,
-    IN  ULONG                       Cpu,
+    IN  ULONG                       Index,
     IN  XENBUS_EVTCHN_ABI_EVENT     Event,
     IN  PVOID                       Argument
     );
@@ -93,15 +98,16 @@ typedef BOOLEAN
     );
 
 typedef struct _XENBUS_EVTCHN_ABI {
-    PXENBUS_EVTCHN_ABI_CONTEXT      Context;
-    XENBUS_EVTCHN_ABI_ACQUIRE       EvtchnAbiAcquire;
-    XENBUS_EVTCHN_ABI_RELEASE       EvtchnAbiRelease;
-    XENBUS_EVTCHN_ABI_POLL          EvtchnAbiPoll;
-    XENBUS_EVTCHN_ABI_PORT_ENABLE   EvtchnAbiPortEnable;
-    XENBUS_EVTCHN_ABI_PORT_DISABLE  EvtchnAbiPortDisable;
-    XENBUS_EVTCHN_ABI_PORT_ACK      EvtchnAbiPortAck;
-    XENBUS_EVTCHN_ABI_PORT_MASK     EvtchnAbiPortMask;
-    XENBUS_EVTCHN_ABI_PORT_UNMASK   EvtchnAbiPortUnmask;
+    PXENBUS_EVTCHN_ABI_CONTEXT              Context;
+    XENBUS_EVTCHN_ABI_ACQUIRE               EvtchnAbiAcquire;
+    XENBUS_EVTCHN_ABI_RELEASE               EvtchnAbiRelease;
+    XENBUS_EVTCHN_ABI_IS_PROCESSOR_ENABLED  EvtchnAbiIsProcessorEnabled;
+    XENBUS_EVTCHN_ABI_POLL                  EvtchnAbiPoll;
+    XENBUS_EVTCHN_ABI_PORT_ENABLE           EvtchnAbiPortEnable;
+    XENBUS_EVTCHN_ABI_PORT_DISABLE          EvtchnAbiPortDisable;
+    XENBUS_EVTCHN_ABI_PORT_ACK              EvtchnAbiPortAck;
+    XENBUS_EVTCHN_ABI_PORT_MASK             EvtchnAbiPortMask;
+    XENBUS_EVTCHN_ABI_PORT_UNMASK           EvtchnAbiPortUnmask;
 } XENBUS_EVTCHN_ABI, *PXENBUS_EVTCHN_ABI;
 
 #define XENBUS_EVTCHN_ABI(_Method, _Abi, ...)   \

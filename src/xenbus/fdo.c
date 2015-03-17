@@ -32,6 +32,7 @@
 #define INITGUID 1
 
 #include <ntddk.h>
+#include <procgrp.h>
 #include <wdmguid.h>
 #include <ntstrsafe.h>
 #include <stdlib.h>
@@ -70,7 +71,7 @@ struct _XENBUS_INTERRUPT {
     LIST_ENTRY          ListEntry;
     KINTERRUPT_MODE     InterruptMode;
     PKINTERRUPT         InterruptObject;
-    ULONG               Cpu;
+    PROCESSOR_NUMBER    ProcNumber;
     UCHAR               Vector;
     ULONG               Line;
     PKSERVICE_ROUTINE   Callback;
@@ -1205,12 +1206,15 @@ FdoSuspend(
     )
 {
     PXENBUS_FDO         Fdo = Context;
+    GROUP_AFFINITY      Affinity;
     PKEVENT             Event;
 
     Info("====>\n");
 
     // We really want to know what CPU this thread will run on
-    KeSetSystemAffinityThread((KAFFINITY)1);
+    Affinity.Group = 0;
+    Affinity.Mask = (KAFFINITY)1;
+    KeSetSystemGroupAffinityThread(&Affinity, NULL);
 
     Event = ThreadGetEvent(Self);
 
@@ -1521,7 +1525,7 @@ FdoDumpIoResourceDescriptor(
     else if (Descriptor->Option == (IO_RESOURCE_ALTERNATIVE | IO_RESOURCE_PREFERRED))
         Trace("Preferred Alternative\n");
 
-    Trace("ShareDisposition=%s Flags=%04x\n",
+    Trace("ShareDisposition = %s Flags = %04x\n",
           ResourceDescriptorShareDispositionName(Descriptor->ShareDisposition),
           Descriptor->Flags);
 
@@ -1537,11 +1541,12 @@ FdoDumpIoResourceDescriptor(
         break;
 
     case CmResourceTypeInterrupt:
-        Trace("MinimumVector=%08x MaximumVector=%08x AffinityPolicy=%s PriorityPolicy=%s TargettedProcessors = %p\n",
+        Trace("MinimumVector = %08x MaximumVector = %08x AffinityPolicy = %s PriorityPolicy = %s Group = %u TargettedProcessors = %p\n",
               Descriptor->u.Interrupt.MinimumVector,
               Descriptor->u.Interrupt.MaximumVector,
               IrqDevicePolicyName(Descriptor->u.Interrupt.AffinityPolicy),
               IrqPriorityName(Descriptor->u.Interrupt.PriorityPolicy),
+              Descriptor->u.Interrupt.Group,
               (PVOID)Descriptor->u.Interrupt.TargetedProcessors);
         break;
 
@@ -1594,7 +1599,7 @@ FdoFilterResourceRequirements(
     Old = (PIO_RESOURCE_REQUIREMENTS_LIST)Irp->IoStatus.Information;
     ASSERT3U(Old->AlternativeLists, ==, 1);
 
-    Count = KeQueryActiveProcessorCount(NULL);
+    Count = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
     Size = Old->ListSize +
         (sizeof (IO_RESOURCE_DESCRIPTOR) * Count);
@@ -1618,6 +1623,7 @@ FdoFilterResourceRequirements(
 
         Descriptor->Flags |= CM_RESOURCE_INTERRUPT_POLICY_INCLUDED;
         Descriptor->u.Interrupt.AffinityPolicy = IrqPolicySpecifiedProcessors;
+        Descriptor->u.Interrupt.Group = 0;
         Descriptor->u.Interrupt.TargetedProcessors = (KAFFINITY)1;
     }
 
@@ -1635,7 +1641,13 @@ FdoFilterResourceRequirements(
     Interrupt.u.Interrupt.PriorityPolicy = IrqPriorityUndefined;
 
     for (Index = 0; Index < Count; Index++) {
-        Interrupt.u.Interrupt.TargetedProcessors = (KAFFINITY)1 << Index;
+        PROCESSOR_NUMBER    ProcNumber;
+
+        status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+        ASSERT(NT_SUCCESS(status));
+
+        Interrupt.u.Interrupt.Group = ProcNumber.Group;
+        Interrupt.u.Interrupt.TargetedProcessors = (KAFFINITY)1 << ProcNumber.Number;
         List->Descriptors[List->Count++] = Interrupt;
     }
 
@@ -1825,7 +1837,7 @@ FdoConnectInterrupt(
 {
     IO_CONNECT_INTERRUPT_PARAMETERS     Connect;
     BOOLEAN                             Found;
-    ULONG                               Cpu;
+    ULONG                               Number;
     NTSTATUS                            status;
 
     Trace("====>\n");
@@ -1845,7 +1857,7 @@ FdoConnectInterrupt(
         (*Interrupt)->Line = Raw->u.Interrupt.Vector;
 
     RtlZeroMemory(&Connect, sizeof (IO_CONNECT_INTERRUPT_PARAMETERS));
-    Connect.Version = CONNECT_FULLY_SPECIFIED;
+    Connect.Version = CONNECT_FULLY_SPECIFIED_GROUP;
     Connect.FullySpecified.PhysicalDeviceObject = __FdoGetPhysicalDeviceObject(Fdo);
     Connect.FullySpecified.ShareVector = (BOOLEAN)(Translated->ShareDisposition == CmResourceShareShared);
     Connect.FullySpecified.InterruptMode = (*Interrupt)->InterruptMode;
@@ -1857,11 +1869,13 @@ FdoConnectInterrupt(
         Connect.FullySpecified.Vector = Translated->u.MessageInterrupt.Translated.Vector;
         Connect.FullySpecified.Irql = (KIRQL)Translated->u.MessageInterrupt.Translated.Level;
         Connect.FullySpecified.SynchronizeIrql = (KIRQL)Translated->u.MessageInterrupt.Translated.Level;
+        Connect.FullySpecified.Group = Translated->u.MessageInterrupt.Translated.Group;
         Connect.FullySpecified.ProcessorEnableMask = Translated->u.MessageInterrupt.Translated.Affinity;
     } else {
         Connect.FullySpecified.Vector = Translated->u.Interrupt.Vector;
         Connect.FullySpecified.Irql = (KIRQL)Translated->u.Interrupt.Level;
         Connect.FullySpecified.SynchronizeIrql = (KIRQL)Translated->u.Interrupt.Level;
+        Connect.FullySpecified.Group = Translated->u.Interrupt.Group;
         Connect.FullySpecified.ProcessorEnableMask = Translated->u.Interrupt.Affinity;
     }
 
@@ -1871,22 +1885,25 @@ FdoConnectInterrupt(
 
     (*Interrupt)->Vector = (UCHAR)Connect.FullySpecified.Vector;
 
+    (*Interrupt)->ProcNumber.Group = Connect.FullySpecified.Group;
+
 #if defined(__i386__)
-    Found = _BitScanReverse(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
+    Found = _BitScanReverse(&Number, Connect.FullySpecified.ProcessorEnableMask);
 #elif defined(__x86_64__)
-    Found = _BitScanReverse64(&Cpu, Connect.FullySpecified.ProcessorEnableMask);
+    Found = _BitScanReverse64(&Number, Connect.FullySpecified.ProcessorEnableMask);
 #else
 #error 'Unrecognised architecture'
 #endif
     ASSERT(Found);
 
-    (*Interrupt)->Cpu = Cpu;
+    (*Interrupt)->ProcNumber.Number = (UCHAR)Number;
 
-    Info("%p: %s %s CPU %u VECTOR %02x\n",
+    Info("%p: %s %s CPU %u:%u VECTOR %02x\n",
          (*Interrupt)->InterruptObject,
          ResourceDescriptorShareDispositionName(Translated->ShareDisposition),
          InterruptModeName((*Interrupt)->InterruptMode),
-         (*Interrupt)->Cpu,
+         (*Interrupt)->ProcNumber.Group,
+         (*Interrupt)->ProcNumber.Number,
          (*Interrupt)->Vector);
 
     Trace("<====\n");
@@ -1917,12 +1934,13 @@ FdoDisconnectInterrupt(
 
     Trace("====>\n");
 
-    Info("%p: CPU %u VECTOR %02x\n",
+    Info("%p: CPU %u:%u VECTOR %02x\n",
          Interrupt->InterruptObject,
-         Interrupt->Cpu,
+         Interrupt->ProcNumber.Group,
+         Interrupt->ProcNumber.Number,
          Interrupt->Vector);
 
-    Interrupt->Cpu = 0;
+    RtlZeroMemory(&Interrupt->ProcNumber, sizeof (PROCESSOR_NUMBER));
     Interrupt->Vector = 0;
 
     RtlZeroMemory(&Disconnect, sizeof (IO_DISCONNECT_INTERRUPT_PARAMETERS));
@@ -1994,7 +2012,8 @@ PXENBUS_INTERRUPT
 FdoAllocateInterrupt(
     IN  PXENBUS_FDO         Fdo,
     IN  KINTERRUPT_MODE     InterruptMode,
-    IN  ULONG               Cpu,
+    IN  USHORT              Group,
+    IN  UCHAR               Number,
     IN  KSERVICE_ROUTINE    Callback,
     IN  PVOID               Argument OPTIONAL
     )
@@ -2010,7 +2029,8 @@ FdoAllocateInterrupt(
 
         if (Interrupt->Callback == NULL &&
             Interrupt->InterruptMode == InterruptMode &&
-            Interrupt->Cpu == Cpu)
+            Interrupt->ProcNumber.Group == Group &&
+            Interrupt->ProcNumber.Number == Number)
             goto found;
     }
 

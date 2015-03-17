@@ -45,6 +45,7 @@
 #include <public/grant_table.h>
 #include <public/sched.h>
 #include <public/hvm/params.h>
+#include <public/hvm/hvm_info_table.h>
 
 // xs_wire.h gates the definition of the xsd_errors enumeration
 // on whether EINVAL is defined. Unfortunately EINVAL is actually

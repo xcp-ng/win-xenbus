@@ -821,99 +821,13 @@ PdoS3ToS4(
     Trace("(%s) <====\n", __PdoGetName(Pdo));
 }
 
-static VOID
-PdoParseResources(
-    IN  PXENBUS_PDO             Pdo,
-    IN  PCM_RESOURCE_LIST       RawResourceList,
-    IN  PCM_RESOURCE_LIST       TranslatedResourceList
-    )
-{
-    PCM_PARTIAL_RESOURCE_LIST   RawPartialList;
-    PCM_PARTIAL_RESOURCE_LIST   TranslatedPartialList;
-    ULONG                       Index;
-
-    UNREFERENCED_PARAMETER(Pdo);
-
-    ASSERT3U(RawResourceList->Count, ==, 1);
-    RawPartialList = &RawResourceList->List[0].PartialResourceList;
-
-    ASSERT3U(RawPartialList->Version, ==, 1);
-    ASSERT3U(RawPartialList->Revision, ==, 1);
-
-    ASSERT3U(TranslatedResourceList->Count, ==, 1);
-    TranslatedPartialList = &TranslatedResourceList->List[0].PartialResourceList;
-
-    ASSERT3U(TranslatedPartialList->Version, ==, 1);
-    ASSERT3U(TranslatedPartialList->Revision, ==, 1);
-
-    for (Index = 0; Index < TranslatedPartialList->Count; Index++) {
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR RawPartialDescriptor;
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR TranslatedPartialDescriptor;
-
-        RawPartialDescriptor = &RawPartialList->PartialDescriptors[Index];
-        TranslatedPartialDescriptor = &TranslatedPartialList->PartialDescriptors[Index];
-
-        Trace("%s: [%d] %02x:%s\n",
-              __PdoGetName(Pdo),
-              Index,
-              TranslatedPartialDescriptor->Type,
-              ResourceDescriptorTypeName(TranslatedPartialDescriptor->Type));
-
-        switch (TranslatedPartialDescriptor->Type) {
-        case CmResourceTypeMemory:
-            Trace("RAW: SharedDisposition=%02x Flags=%04x Start = %08x.%08x Length = %08x\n",
-                  RawPartialDescriptor->ShareDisposition,
-                  RawPartialDescriptor->Flags,
-                  RawPartialDescriptor->u.Memory.Start.HighPart,
-                  RawPartialDescriptor->u.Memory.Start.LowPart,
-                  RawPartialDescriptor->u.Memory.Length);
-
-            Trace("TRANSLATED: SharedDisposition=%02x Flags=%04x Start = %08x.%08x Length = %08x\n",
-                  TranslatedPartialDescriptor->ShareDisposition,
-                  TranslatedPartialDescriptor->Flags,
-                  TranslatedPartialDescriptor->u.Memory.Start.HighPart,
-                  TranslatedPartialDescriptor->u.Memory.Start.LowPart,
-                  TranslatedPartialDescriptor->u.Memory.Length);
-            break;
-
-        case CmResourceTypeInterrupt:
-            Trace("RAW: SharedDisposition=%02x Flags=%04x Level = %08x Vector = %08x Affinity = %p\n",
-                  RawPartialDescriptor->ShareDisposition,
-                  RawPartialDescriptor->Flags,
-                  RawPartialDescriptor->u.Interrupt.Level,
-                  RawPartialDescriptor->u.Interrupt.Vector,
-                  (PVOID)RawPartialDescriptor->u.Interrupt.Affinity);
-
-            Trace("TRANSLATED: SharedDisposition=%02x Flags=%04x Level = %08x Vector = %08x Affinity = %p\n",
-                  TranslatedPartialDescriptor->ShareDisposition,
-                  TranslatedPartialDescriptor->Flags,
-                  TranslatedPartialDescriptor->u.Interrupt.Level,
-                  TranslatedPartialDescriptor->u.Interrupt.Vector,
-                  (PVOID)TranslatedPartialDescriptor->u.Interrupt.Affinity);
-            break;
-
-        default:
-            break;
-        }
-    }
-
-    Trace("<====\n");
-}
-
 static NTSTATUS
 PdoStartDevice(
     IN  PXENBUS_PDO     Pdo,
     IN  PIRP            Irp
     )
 {
-    PIO_STACK_LOCATION  StackLocation;
     NTSTATUS            status;
-
-    StackLocation = IoGetCurrentIrpStackLocation(Irp);
-
-    PdoParseResources(Pdo,
-                      StackLocation->Parameters.StartDevice.AllocatedResources,
-                      StackLocation->Parameters.StartDevice.AllocatedResourcesTranslated);
 
     PdoD3ToD0(Pdo);
 
@@ -1375,6 +1289,7 @@ PdoQueryResourceRequirements(
     Interrupt.u.Interrupt.MaximumVector = (ULONG)-1;
     Interrupt.u.Interrupt.AffinityPolicy = IrqPolicyOneCloseProcessor;
     Interrupt.u.Interrupt.PriorityPolicy = IrqPriorityUndefined;
+    Interrupt.u.Interrupt.Group = ALL_PROCESSOR_GROUPS;
 
     Size = sizeof (IO_RESOURCE_DESCRIPTOR) * 2;
     Size += FIELD_OFFSET(IO_RESOURCE_LIST, Descriptors);

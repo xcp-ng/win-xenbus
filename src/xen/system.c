@@ -32,6 +32,7 @@
 #define XEN_API __declspec(dllexport)
 
 #include <ntddk.h>
+#include <procgrp.h>
 #include <ntstrsafe.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -47,19 +48,19 @@
 
 #define XEN_SYSTEM_TAG  'TSYS'
 
-typedef struct _SYSTEM_CPU {
-    ULONG   Index;
+typedef struct _SYSTEM_PROCESSOR {
     CHAR    Manufacturer[13];
     UCHAR   ApicID;
     UCHAR   ProcessorID;
-} SYSTEM_CPU, *PSYSTEM_CPU;
+} SYSTEM_PROCESSOR, *PSYSTEM_PROCESSOR;
 
 typedef struct _SYSTEM_CONTEXT {
-    LONG        References;
-    PACPI_MADT  Madt;
-    PSYSTEM_CPU Cpu[MAXIMUM_PROCESSORS];
-    PVOID       PowerStateHandle;
-    PVOID       ProcessorChangeHandle;
+    LONG                References;
+    PACPI_MADT          Madt;
+    PSYSTEM_PROCESSOR   Processor;
+    ULONG               ProcessorCount;
+    PVOID               PowerStateHandle;
+    PVOID               ProcessorChangeHandle;
 } SYSTEM_CONTEXT, *PSYSTEM_CONTEXT;
 
 static SYSTEM_CONTEXT   SystemContext;
@@ -334,51 +335,51 @@ _IRQL_requires_min_(DISPATCH_LEVEL)
 _IRQL_requires_(DISPATCH_LEVEL)
 _IRQL_requires_same_
 VOID
-SystemCpuInformation(
-    IN  PKDPC       Dpc,
-    IN  PVOID       _Context,
-    IN  PVOID       Argument1,
-    IN  PVOID       Argument2
+SystemProcessorInformation(
+    IN  PKDPC           Dpc,
+    IN  PVOID           _Context,
+    IN  PVOID           Argument1,
+    IN  PVOID           Argument2
     )
 {
-    PSYSTEM_CONTEXT Context = &SystemContext;
-    PKEVENT         Event = _Context;
-    ULONG           Index;
-    PSYSTEM_CPU     Cpu;
-    ULONG           EBX;
-    ULONG           ECX;
-    ULONG           EDX;
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    PKEVENT             Event = _Context;
+    ULONG               Index;
+    PROCESSOR_NUMBER    ProcNumber;
+    PSYSTEM_PROCESSOR   Processor;
+    ULONG               EBX;
+    ULONG               ECX;
+    ULONG               EDX;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
-    Index = KeGetCurrentProcessorNumber();
-    Cpu = Context->Cpu[Index];
+    Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
+    ASSERT3U(Index, <, Context->ProcessorCount);
 
-    ASSERT(Cpu != NULL);
-    ASSERT3U(Cpu->Index, ==, Index);
+    Processor = &Context->Processor[Index];
 
-    Info("====> (%u)\n", Index);
+    Info("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
 
     __CpuId(0, NULL, &EBX, &ECX, &EDX);
 
-    RtlCopyMemory(&Cpu->Manufacturer[0], &EBX, sizeof (ULONG));
-    RtlCopyMemory(&Cpu->Manufacturer[4], &EDX, sizeof (ULONG));
-    RtlCopyMemory(&Cpu->Manufacturer[8], &ECX, sizeof (ULONG));
+    RtlCopyMemory(&Processor->Manufacturer[0], &EBX, sizeof (ULONG));
+    RtlCopyMemory(&Processor->Manufacturer[4], &EDX, sizeof (ULONG));
+    RtlCopyMemory(&Processor->Manufacturer[8], &ECX, sizeof (ULONG));
 
     __CpuId(1, NULL, &EBX, NULL, NULL);
 
-    Cpu->ApicID = EBX >> 24;
-    Cpu->ProcessorID = SystemApicIDToProcessorID(Cpu->ApicID);
+    Processor->ApicID = EBX >> 24;
+    Processor->ProcessorID = SystemApicIDToProcessorID(Processor->ApicID);
 
-    Info("Manufacturer: %s\n", Cpu->Manufacturer);
-    Info("APIC ID: %02X\n", Cpu->ApicID);
-    Info("PROCESSOR ID: %02X\n", Cpu->ProcessorID);
+    Info("Manufacturer: %s\n", Processor->Manufacturer);
+    Info("APIC ID: %02X\n", Processor->ApicID);
+    Info("PROCESSOR ID: %02X\n", Processor->ProcessorID);
 
     KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
 
-    Info("<==== (%u)\n", Index);
+    Info("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
 }
 
 static
@@ -391,42 +392,62 @@ SystemProcessorChangeCallback(
     )
 {
     PSYSTEM_CONTEXT                             Context = &SystemContext;
+    PROCESSOR_NUMBER                            ProcNumber;
     ULONG                                       Index;
+    NTSTATUS                                    status;
 
     UNREFERENCED_PARAMETER(Argument);
 
     Index = Change->NtNumber;
-    Trace("====> (%u:%s)\n", Index, ProcessorChangeName(Change->State));
+
+    status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+    ASSERT(NT_SUCCESS(status));
+
+    Trace("====> (%u:%u:%s)\n",
+          ProcNumber.Group,
+          ProcNumber.Number,
+          ProcessorChangeName(Change->State));
 
     switch (Change->State) {
     case KeProcessorAddStartNotify: {
-        PSYSTEM_CPU Cpu;
+        PSYSTEM_PROCESSOR   Processor;
+        ULONG               ProcessorCount;
 
-        Cpu = __SystemAllocate(sizeof (SYSTEM_CPU));
+        if (Index < Context->ProcessorCount)
+            break;
 
-        if (Cpu == NULL) {
+        ProcessorCount = Index + 1;
+        Processor = __SystemAllocate(sizeof (SYSTEM_PROCESSOR) *
+                                     ProcessorCount);
+
+        if (Processor == NULL) {
             *Status = STATUS_NO_MEMORY;
             break;
         }
 
-        Cpu->Index = Index;
-        ASSERT3P(Context->Cpu[Index], ==, NULL);
-        Context->Cpu[Index] = Cpu;
+        if (Context->ProcessorCount != 0) {
+            RtlCopyMemory(Processor,
+                          Context->Processor,
+                          sizeof (SYSTEM_PROCESSOR) *
+                          Context->ProcessorCount);
+            __SystemFree(Context->Processor);
+        }
+
+        Context->Processor = Processor;
+        Context->ProcessorCount = ProcessorCount;
         break;
     }
     case KeProcessorAddCompleteNotify: {
-        PSYSTEM_CPU Cpu = Context->Cpu[Index];
-        KEVENT      Event;
-        KDPC        Dpc;
+        KEVENT              Event;
+        KDPC                Dpc;
 
-        ASSERT(Cpu != NULL);
-        ASSERT3U(Cpu->Index, ==, Index);
+        ASSERT3U(Index, <, Context->ProcessorCount);
 
         KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
-        KeInitializeDpc(&Dpc, SystemCpuInformation, &Event);
+        KeInitializeDpc(&Dpc, SystemProcessorInformation, &Event);
         KeSetImportanceDpc(&Dpc, HighImportance);
-        KeSetTargetProcessorDpc(&Dpc, (CCHAR)Index);
+        KeSetTargetProcessorDpcEx(&Dpc, &ProcNumber);
 
         KeInsertQueueDpc(&Dpc, NULL, NULL);
 
@@ -437,20 +458,15 @@ SystemProcessorChangeCallback(
                                      NULL);
         break;
     }
-    case KeProcessorAddFailureNotify: {
-        PSYSTEM_CPU Cpu = Context->Cpu[Index];
-
-        ASSERT(Cpu != NULL);
-        ASSERT3U(Cpu->Index, ==, Index);
-
-        Context->Cpu[Index] = NULL;
-        __SystemFree(Cpu);
-
+    default:
+        ASSERT(FALSE);
         break;
     }
-    }
 
-    Trace("<==== (%u:%s)\n", Index, ProcessorChangeName(Change->State));
+    Trace("<==== (%u:%u:%s)\n",
+          ProcNumber.Group,
+          ProcNumber.Number,
+          ProcessorChangeName(Change->State));
 }
 
 static NTSTATUS
@@ -459,15 +475,18 @@ SystemRegisterProcessorChangeCallback(
     )
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
+    PVOID           Handle;
     NTSTATUS        status;
 
-    Context->ProcessorChangeHandle = KeRegisterProcessorChangeCallback(SystemProcessorChangeCallback,
-                                                                       NULL,
-                                                                       KE_PROCESSOR_CHANGE_ADD_EXISTING);
+    Handle = KeRegisterProcessorChangeCallback(SystemProcessorChangeCallback,
+                                               NULL,
+                                               KE_PROCESSOR_CHANGE_ADD_EXISTING);
 
     status = STATUS_UNSUCCESSFUL;
-    if (Context->ProcessorChangeHandle == NULL)
+    if (Handle == NULL)
         goto fail1;
+
+    Context->ProcessorChangeHandle = Handle;
 
     return STATUS_SUCCESS;
 
@@ -483,22 +502,12 @@ SystemDeregisterProcessorChangeCallback(
     )
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
-    ULONG           Index;
 
     KeDeregisterProcessorChangeCallback(Context->ProcessorChangeHandle);
     Context->ProcessorChangeHandle = NULL;
 
-    for (Index = 0; Index < MAXIMUM_PROCESSORS; Index++) {
-        PSYSTEM_CPU Cpu = Context->Cpu[Index];
-
-        if (Cpu == NULL)
-            continue;
-
-        Context->Cpu[Index] = NULL;
-        __SystemFree(Cpu);
-    }
-
-    ASSERT(IsZeroMemory(Context->Cpu, sizeof (SYSTEM_CPU) * MAXIMUM_PROCESSORS));
+    __SystemFree(Context->Processor);
+    Context->ProcessorCount = 0;
 }
 
 static NTSTATUS
@@ -732,11 +741,11 @@ SystemVirtualCpuIndex(
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
-    PSYSTEM_CPU         Cpu = Context->Cpu[Index];
+    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Index];
 
-    ASSERT(Cpu != NULL);
+    ASSERT3U(Index, <, Context->ProcessorCount);
 
-    return Cpu->ProcessorID;
+    return Processor->ProcessorID;
 }
 
 VOID

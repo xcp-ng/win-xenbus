@@ -66,7 +66,7 @@ typedef VOID
 typedef BOOLEAN
 (*XENBUS_SHARED_INFO_UPCALL_PENDING)(
     IN  PINTERFACE  Interface,
-    IN  ULONG       Cpu
+    IN  ULONG       Index
     );
 
 typedef BOOLEAN
@@ -81,7 +81,7 @@ typedef BOOLEAN
 typedef BOOLEAN
 (*XENBUS_SHARED_INFO_EVTCHN_POLL)(
     IN  PINTERFACE                  Interface,
-    IN  ULONG                       Cpu,
+    IN  ULONG                       Index,
     IN  XENBUS_SHARED_INFO_EVENT    Event,
     IN  PVOID                       Argument
     );

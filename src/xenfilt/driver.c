@@ -30,6 +30,7 @@
  */
 
 #include <ntddk.h>
+#include <procgrp.h>
 #include <xen.h>
 
 #include "registry.h"
@@ -775,6 +776,7 @@ DriverEntry(
     ASSERT3P(__DriverGetDriverObject(), ==, NULL);
 
     ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
+    WdmlibProcgrpInitialize();
 
     __DbgPrintEnable();
 
