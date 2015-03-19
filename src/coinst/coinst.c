@@ -1827,6 +1827,50 @@ fail1:
 }
 
 static BOOLEAN
+RequestReboot(
+    IN  HDEVINFO            DeviceInfoSet,
+    IN  PSP_DEVINFO_DATA    DeviceInfoData
+    )
+{
+    SP_DEVINSTALL_PARAMS    DeviceInstallParams;
+    HRESULT                 Error;
+
+    DeviceInstallParams.cbSize = sizeof (DeviceInstallParams);
+
+    if (!SetupDiGetDeviceInstallParams(DeviceInfoSet,
+                                       DeviceInfoData,
+                                       &DeviceInstallParams))
+        goto fail1;
+
+    DeviceInstallParams.Flags |= DI_NEEDREBOOT;
+
+    Log("Flags = %08x", DeviceInstallParams.Flags);
+
+    if (!SetupDiSetDeviceInstallParams(DeviceInfoSet,
+                                       DeviceInfoData,
+                                       &DeviceInstallParams))
+        goto fail2;
+
+    return TRUE;
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
 SetFriendlyName(
     IN  HDEVINFO            DeviceInfoSet,
     IN  PSP_DEVINFO_DATA    DeviceInfoData,
@@ -2205,6 +2249,7 @@ DifInstallPostProcess(
 
         (VOID) InstallFilter(&GUID_DEVCLASS_SYSTEM, "XENFILT");
         (VOID) InstallFilter(&GUID_DEVCLASS_HDC, "XENFILT");
+        (VOID) RequestReboot(DeviceInfoSet, DeviceInfoData);
     }
 
     free(DeviceID);

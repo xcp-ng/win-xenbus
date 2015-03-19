@@ -787,9 +787,7 @@ DriverEntry(
     if (*InitSafeBootMode > 0)
         goto done;
 
-    XenTouch();
-
-    Info("XENFILT %d.%d.%d (%d) (%02d.%02d.%04d)\n",
+    Info("%d.%d.%d (%d) (%02d.%02d.%04d)\n",
          MAJOR_VERSION,
          MINOR_VERSION,
          MICRO_VERSION,
@@ -797,6 +795,14 @@ DriverEntry(
          DAY,
          MONTH,
          YEAR);
+
+    status = XenTouch(__MODULE__,
+                      MAJOR_VERSION,
+                      MINOR_VERSION,
+                      MICRO_VERSION,
+                      BUILD_NUMBER);
+    if (!NT_SUCCESS(status))
+        goto done;
 
     status = RegistryInitialize(RegistryPath);
     if (!NT_SUCCESS(status))

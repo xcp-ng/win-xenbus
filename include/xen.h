@@ -62,9 +62,13 @@
 
 // Dummy function to cause XEN.SYS to be loaded and initialized
 XEN_API
-VOID
+NTSTATUS
 XenTouch(
-    VOID
+    IN  const CHAR  *Name,
+    IN  ULONG       MajorVersion,
+    IN  ULONG       MinorVersion,
+    IN  ULONG       MicroVersion,
+    IN  ULONG       BuildNumber
     );
 
 // HYPERCALL

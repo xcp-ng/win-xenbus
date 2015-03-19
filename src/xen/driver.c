@@ -55,10 +55,14 @@ typedef struct _XEN_DRIVER {
 static XEN_DRIVER   Driver;
 
 XEN_API
-VOID
+NTSTATUS
 XenTouch(
-    VOID
-    )
+    IN  const CHAR  *Name,
+    IN  ULONG       MajorVersion,
+    IN  ULONG       MinorVersion,
+    IN  ULONG       MicroVersion,
+    IN  ULONG       BuildNumber
+   )
 {
     static ULONG    Reference;
     ULONG           Major;
@@ -66,8 +70,14 @@ XenTouch(
     CHAR            Extra[XEN_EXTRAVERSION_LEN];
     NTSTATUS        status;
 
+    if (MajorVersion != MAJOR_VERSION ||
+        MinorVersion != MINOR_VERSION ||
+        MicroVersion != MICRO_VERSION ||
+        BuildNumber != BUILD_NUMBER)
+        goto fail1;
+
     if (Reference++ != 0)
-        return;
+        goto done;
 
     status = XenVersion(&Major, &Minor);
     ASSERT(NT_SUCCESS(status));
@@ -81,6 +91,14 @@ XenTouch(
               Minor,
               Extra,
               __XEN_INTERFACE_VERSION__);
+
+done:
+    return STATUS_SUCCESS;
+
+fail1:
+    Info("MODULE '%s' NOT COMPATIBLE (REBOOT REQUIRED)\n", Name);
+
+    return STATUS_INCOMPATIBLE_DRIVER_BLOCKED;
 }
 
 static VOID
@@ -136,7 +154,7 @@ DllInitialize(
                                &Driver.InfoDisposition);
     ASSERT(NT_SUCCESS(status));
 
-    Info("XEN %d.%d.%d (%d) (%02d.%02d.%04d)\n",
+    Info("%d.%d.%d (%d) (%02d.%02d.%04d)\n",
          MAJOR_VERSION,
          MINOR_VERSION,
          MICRO_VERSION,
