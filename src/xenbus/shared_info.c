@@ -470,8 +470,11 @@ SharedInfoDebugCallback(
              Index++) {
             PROCESSOR_NUMBER    ProcNumber;
             int                 vcpu_id;
+            NTSTATUS            status;
 
-            (VOID) KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+            status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+            ASSERT(NT_SUCCESS(status));
+
             vcpu_id = SystemVirtualCpuIndex(Index);
 
             XENBUS_DEBUG(Printf,
