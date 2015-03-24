@@ -79,8 +79,10 @@ struct _XENBUS_CACHE {
     VOID                    (*ReleaseLock)(PVOID);
     PVOID                   Argument;
     LIST_ENTRY              GetList;
+    LONG                    GetCount;
     PLIST_ENTRY             PutList;
-    LONG                    ObjectCount;
+    LONG                    PutCount;
+    LONG                    ListCount;
     PXENBUS_CACHE_MAGAZINE  Magazine;
     ULONG                   MagazineCount;
     XENBUS_CACHE_FIST       FIST;
@@ -225,7 +227,7 @@ CacheGetObjectFromList(
     KIRQL                       Irql = PASSIVE_LEVEL;
     NTSTATUS                    status;
 
-    Count = InterlockedDecrement(&Cache->ObjectCount);
+    Count = InterlockedDecrement(&Cache->ListCount);
 
     status = STATUS_NO_MEMORY;
     if (Count < 0)
@@ -255,7 +257,7 @@ CacheGetObjectFromList(
     return Object;
 
 fail1:
-    (VOID) InterlockedIncrement(&Cache->ObjectCount);
+    (VOID) InterlockedIncrement(&Cache->ListCount);
 
     return NULL;    
 }
@@ -294,7 +296,7 @@ CachePutObjectToList(
 
     KeMemoryBarrier();
 
-    (VOID) InterlockedIncrement(&Cache->ObjectCount);
+    (VOID) InterlockedIncrement(&Cache->ListCount);
 }
 
 static PVOID
@@ -305,6 +307,7 @@ CacheGetObjectFromMagazine(
 {
     PXENBUS_CACHE_MAGAZINE  Magazine;
 
+    ASSERT3U(Index, <, Cache->MagazineCount);
     Magazine = &Cache->Magazine[Index];
 
     for (Index = 0; Index < XENBUS_CACHE_MAGAZINE_SLOTS; Index++) {
@@ -330,6 +333,7 @@ CachePutObjectToMagazine(
 {
     PXENBUS_CACHE_MAGAZINE  Magazine;
 
+    ASSERT3U(Index, <, Cache->MagazineCount);
     Magazine = &Cache->Magazine[Index];
 
     for (Index = 0; Index < XENBUS_CACHE_MAGAZINE_SLOTS; Index++) {
@@ -385,6 +389,8 @@ CacheGet(
 done:
     KeLowerIrql(Irql);
 
+    (VOID) InterlockedIncrement(&Cache->GetCount);
+
     return Object;
 }
 
@@ -400,6 +406,8 @@ CachePut(
     ULONG               Index;
 
     UNREFERENCED_PARAMETER(Interface);
+
+    (VOID) InterlockedIncrement(&Cache->PutCount);
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
     Index = KeGetCurrentProcessorNumberEx(NULL);
@@ -679,17 +687,22 @@ CacheDestroy(
 
     RtlZeroMemory(&Cache->ListEntry, sizeof (LIST_ENTRY));
 
+    ASSERT3U(Cache->PutCount, ==, Cache->GetCount);
+    Cache->PutCount = 0;
+    Cache->GetCount = 0;
+
     Cache->Reservation = 0;
     CacheFlushMagazines(Cache);
-    CacheSpill(Cache, Cache->ObjectCount);
-
-    ASSERT3U(Cache->ObjectCount, ==, 0);
 
     ASSERT(IsZeroMemory(Cache->Magazine, sizeof (XENBUS_CACHE_MAGAZINE) * Cache->MagazineCount));
     __CacheFree(Cache->Magazine);
     Cache->Magazine = NULL;
     Cache->MagazineCount = 0;
 
+    CacheSpill(Cache, Cache->ListCount);
+    ASSERT3U(Cache->ListCount, ==, 0);
+
+    ASSERT(IsListEmpty(&Cache->GetList));
     RtlZeroMemory(&Cache->GetList, sizeof (LIST_ENTRY));
 
     RtlZeroMemory(&Cache->FIST, sizeof (XENBUS_CACHE_FIST));
@@ -737,7 +750,7 @@ CacheDebugCallback(
                          &Context->DebugInterface,
                          "- %s: Count = %d (Reservation = %d)\n",
                          Cache->Name,
-                         Cache->ObjectCount,
+                         Cache->ListCount,
                          Cache->Reservation);
         }
     }
@@ -793,7 +806,7 @@ CacheMonitor(
 
             Cache = CONTAINING_RECORD(ListEntry, XENBUS_CACHE, ListEntry);
 
-            Count = Cache->ObjectCount;
+            Count = Cache->ListCount;
 
             if (Count < Cache->Reservation)
                 CacheFill(Cache, Cache->Reservation - Count);

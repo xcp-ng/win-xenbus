@@ -53,8 +53,9 @@
 #define MAXNAMELEN  128
 
 struct _XENBUS_GNTTAB_CACHE {
-    PXENBUS_GNTTAB_CONTEXT  Context;
+    LIST_ENTRY              ListEntry;
     CHAR                    Name[MAXNAMELEN];
+    PXENBUS_GNTTAB_CONTEXT  Context;
     VOID                    (*AcquireLock)(PVOID);
     VOID                    (*ReleaseLock)(PVOID);
     PVOID                   Argument;
@@ -81,6 +82,7 @@ struct _XENBUS_GNTTAB_CONTEXT {
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
     XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
+    LIST_ENTRY                  List;
 };
 
 #define XENBUS_GNTTAB_TAG   'TTNG'
@@ -321,6 +323,7 @@ GnttabCreateCache(
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
+    KIRQL                       Irql;
     NTSTATUS                    status;
 
     *Cache = __GnttabAllocate(sizeof (XENBUS_GNTTAB_CACHE));
@@ -356,6 +359,10 @@ GnttabCreateCache(
     if (!NT_SUCCESS(status))
         goto fail3;
 
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+    InsertTailList(&Context->List, &(*Cache)->ListEntry);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     return STATUS_SUCCESS;
 
 fail3:
@@ -388,6 +395,13 @@ GnttabDestroyCache(
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
+    KIRQL                       Irql;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+    RemoveEntryList(&Cache->ListEntry);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    RtlZeroMemory(&Cache->ListEntry, sizeof (LIST_ENTRY));
 
     XENBUS_CACHE(Destroy,
                  &Context->CacheInterface,
@@ -717,6 +731,9 @@ GnttabRelease(
 
     Trace("====>\n");
 
+    if (!IsListEmpty(&Context->List))
+        BUG("OUTSTANDING CACHES");
+
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
                  Context->DebugCallback);
@@ -816,6 +833,7 @@ GnttabInitialize(
     ASSERT(NT_SUCCESS(status));
     ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
 
+    InitializeListHead(&(*Context)->List);
     KeInitializeSpinLock(&(*Context)->Lock);
 
     (*Context)->Fdo = Fdo;
@@ -878,6 +896,7 @@ GnttabTeardown(
     Context->Fdo = NULL;
 
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
+    RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
 
     RtlZeroMemory(&Context->DebugInterface,
                   sizeof (XENBUS_DEBUG_INTERFACE));
