@@ -49,6 +49,7 @@
 #define XEN_SYSTEM_TAG  'TSYS'
 
 typedef struct _SYSTEM_PROCESSOR {
+    KDPC    Dpc;
     CHAR    Manufacturer[13];
     UCHAR   ApicID;
     UCHAR   ProcessorID;
@@ -343,7 +344,7 @@ SystemProcessorInformation(
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
-    PKEVENT             Event = _Context;
+    PKEVENT             Event = Argument1;
     ULONG               Index;
     PROCESSOR_NUMBER    ProcNumber;
     PSYSTEM_PROCESSOR   Processor;
@@ -352,7 +353,7 @@ SystemProcessorInformation(
     ULONG               EDX;
 
     UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(_Context);
     UNREFERENCED_PARAMETER(Argument2);
 
     Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
@@ -438,18 +439,20 @@ SystemProcessorChangeCallback(
         break;
     }
     case KeProcessorAddCompleteNotify: {
+        PSYSTEM_PROCESSOR   Processor;
         KEVENT              Event;
-        KDPC                Dpc;
 
         ASSERT3U(Index, <, Context->ProcessorCount);
 
+        Processor = &Context->Processor[Index];
+
         KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
-        KeInitializeDpc(&Dpc, SystemProcessorInformation, &Event);
-        KeSetImportanceDpc(&Dpc, HighImportance);
-        KeSetTargetProcessorDpcEx(&Dpc, &ProcNumber);
+        KeInitializeDpc(&Processor->Dpc, SystemProcessorInformation, NULL);
+        KeSetImportanceDpc(&Processor->Dpc, HighImportance);
+        KeSetTargetProcessorDpcEx(&Processor->Dpc, &ProcNumber);
 
-        KeInsertQueueDpc(&Dpc, NULL, NULL);
+        KeInsertQueueDpc(&Processor->Dpc, &Event, NULL);
 
         (VOID) KeWaitForSingleObject(&Event,
                                      Executive,
@@ -507,6 +510,7 @@ SystemDeregisterProcessorChangeCallback(
     Context->ProcessorChangeHandle = NULL;
 
     __SystemFree(Context->Processor);
+    Context->Processor = NULL;
     Context->ProcessorCount = 0;
 }
 
