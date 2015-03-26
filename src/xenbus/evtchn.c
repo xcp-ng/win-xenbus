@@ -1374,6 +1374,7 @@ EvtchnRelease(
 
         EvtchnFlush(Context, Index);
 
+        (VOID) KeRemoveQueueDpc(&Processor->Dpc);
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
         RtlZeroMemory(&Processor->PendingList, sizeof (LIST_ENTRY));
 
@@ -1383,6 +1384,7 @@ EvtchnRelease(
 
     ASSERT(IsZeroMemory(Context->Processor, sizeof (XENBUS_EVTCHN_PROCESSOR) * Context->ProcessorCount));
     __EvtchnFree(Context->Processor);
+    Context->Processor = NULL;
     Context->ProcessorCount = 0;
 
     FdoFreeInterrupt(Fdo, Context->Interrupt);
