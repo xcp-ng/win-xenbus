@@ -1857,7 +1857,6 @@ FdoConnectInterrupt(
         (*Interrupt)->Line = Raw->u.Interrupt.Vector;
 
     RtlZeroMemory(&Connect, sizeof (IO_CONNECT_INTERRUPT_PARAMETERS));
-    Connect.Version = CONNECT_FULLY_SPECIFIED_GROUP;
     Connect.FullySpecified.PhysicalDeviceObject = __FdoGetPhysicalDeviceObject(Fdo);
     Connect.FullySpecified.ShareVector = (BOOLEAN)(Translated->ShareDisposition == CmResourceShareShared);
     Connect.FullySpecified.InterruptMode = (*Interrupt)->InterruptMode;
@@ -1878,6 +1877,10 @@ FdoConnectInterrupt(
         Connect.FullySpecified.Group = Translated->u.Interrupt.Group;
         Connect.FullySpecified.ProcessorEnableMask = Translated->u.Interrupt.Affinity;
     }
+
+    Connect.Version = (Connect.FullySpecified.Group != 0) ?
+                      CONNECT_FULLY_SPECIFIED_GROUP :
+                      CONNECT_FULLY_SPECIFIED;
 
     status = IoConnectInterruptEx(&Connect);
     if (!NT_SUCCESS(status))
