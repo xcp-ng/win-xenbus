@@ -255,7 +255,7 @@ SyncCapture(
 
     Trace("====> (%u:%u)\n", Group, Number);
 
-    ASSERT(IsZeroMemory(Context, sizeof (SYNC_CONTEXT)));
+    ASSERT(IsZeroMemory(Context, PAGE_SIZE));
 
     Context->Sequence++;
     Context->CompletionCount = 0;
@@ -427,7 +427,7 @@ SyncRelease(
         KeMemoryBarrier();
     }
 
-    RtlZeroMemory(Context, sizeof (SYNC_CONTEXT));
+    RtlZeroMemory(Context, PAGE_SIZE);
 
     Index = KeGetCurrentProcessorNumberEx(NULL);
     __SyncRelease(Index);
