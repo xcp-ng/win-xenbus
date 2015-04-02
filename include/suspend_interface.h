@@ -126,7 +126,7 @@ typedef VOID
 
     This method must always be invoked with IRQL == PASSIVE_LEVEL
 */
-typedef VOID
+typedef NTSTATUS
 (*XENBUS_SUSPEND_TRIGGER)(
     IN  PINTERFACE  Interface
     );

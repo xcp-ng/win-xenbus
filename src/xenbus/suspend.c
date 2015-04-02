@@ -143,7 +143,7 @@ SuspendDeregister(
     __SuspendFree(Callback);
 }
 
-VOID
+NTSTATUS
 #pragma prefast(suppress:28167) // Function changes IRQL
 SuspendTrigger(
     IN  PINTERFACE          Interface
@@ -152,6 +152,10 @@ SuspendTrigger(
     PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
     KIRQL                   Irql;
     NTSTATUS                status;
+
+    status = STATUS_NOT_SUPPORTED;
+    if (Context->UnplugInterface.Interface.Context == NULL)
+        goto fail1;
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
@@ -175,8 +179,7 @@ SuspendTrigger(
 
         HypercallPopulate();
 
-        if (Context->UnplugInterface.Interface.Context != NULL)
-            XENFILT_UNPLUG(Replay, &Context->UnplugInterface);
+        XENFILT_UNPLUG(Replay, &Context->UnplugInterface);
 
         for (ListEntry = Context->EarlyList.Flink;
              ListEntry != &Context->EarlyList;
@@ -211,6 +214,13 @@ SuspendTrigger(
     LogPrintf(LOG_LEVEL_INFO, "SUSPEND: <====\n");
 
     KeLowerIrql(Irql);
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }
 
 static ULONG

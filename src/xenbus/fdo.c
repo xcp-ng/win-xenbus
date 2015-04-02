@@ -1272,7 +1272,7 @@ FdoSuspend(
                             "control",
                             "shutdown");
 
-        XENBUS_SUSPEND(Trigger, &Fdo->SuspendInterface);
+        (VOID) XENBUS_SUSPEND(Trigger, &Fdo->SuspendInterface);
 
         __FdoSuspendClearActive(Fdo);
 
@@ -4581,42 +4581,51 @@ FdoCreate(
     if (!__FdoIsActive(Fdo))
         goto done;
 
-    status = DebugInitialize(Fdo, &Fdo->DebugContext);
+    status = FDO_QUERY_INTERFACE(Fdo,
+                                 XENFILT,
+                                 UNPLUG,
+                                 (PINTERFACE)&Fdo->UnplugInterface,
+                                 sizeof (Fdo->UnplugInterface),
+                                 TRUE);
     if (!NT_SUCCESS(status))
         goto fail7;
 
-    status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
+    status = DebugInitialize(Fdo, &Fdo->DebugContext);
     if (!NT_SUCCESS(status))
         goto fail8;
 
-    status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
+    status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
     if (!NT_SUCCESS(status))
         goto fail9;
 
-    status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
+    status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
     if (!NT_SUCCESS(status))
         goto fail10;
 
-    status = StoreInitialize(Fdo, &Fdo->StoreContext);
+    status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
     if (!NT_SUCCESS(status))
         goto fail11;
 
-    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
+    status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
         goto fail12;
 
-    status = CacheInitialize(Fdo, &Fdo->CacheContext);
+    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
         goto fail13;
 
-    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
+    status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
         goto fail14;
+
+    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
+    if (!NT_SUCCESS(status))
+        goto fail15;
 
     if (FdoIsBalloonEnabled(Fdo)) {
         status = BalloonInitialize(Fdo, &Fdo->BalloonContext);
         if (!NT_SUCCESS(status))
-            goto fail15;
+            goto fail16;
     }
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
@@ -4660,15 +4669,6 @@ FdoCreate(
                                  sizeof (Fdo->BalloonInterface));
     ASSERT(NT_SUCCESS(status));
 
-    status = FDO_QUERY_INTERFACE(Fdo,
-                                 XENFILT,
-                                 UNPLUG,
-                                 (PINTERFACE)&Fdo->UnplugInterface,
-                                 sizeof (Fdo->UnplugInterface),
-                                 TRUE);
-    if (!NT_SUCCESS(status))
-        goto fail16;
-
 done:
     InitializeMutex(&Fdo->Mutex);
     InitializeListHead(&Dx->ListEntry);
@@ -4687,76 +4687,56 @@ done:
 fail16:
     Error("fail16\n");
 
-    RtlZeroMemory(&Fdo->BalloonInterface,
-                  sizeof (XENBUS_BALLOON_INTERFACE));
-
-    RtlZeroMemory(&Fdo->RangeSetInterface,
-                  sizeof (XENBUS_RANGE_SET_INTERFACE));
-
-    RtlZeroMemory(&Fdo->StoreInterface,
-                  sizeof (XENBUS_STORE_INTERFACE));
-
-    RtlZeroMemory(&Fdo->EvtchnInterface,
-                  sizeof (XENBUS_EVTCHN_INTERFACE));
-
-    RtlZeroMemory(&Fdo->SuspendInterface,
-                  sizeof (XENBUS_SUSPEND_INTERFACE));
-
-    RtlZeroMemory(&Fdo->DebugInterface,
-                  sizeof (XENBUS_DEBUG_INTERFACE));
-
-    if (Fdo->BalloonContext != NULL) {
-        BalloonTeardown(Fdo->BalloonContext);
-        Fdo->BalloonContext = NULL;
-    }
+    GnttabTeardown(Fdo->GnttabContext);
+    Fdo->GnttabContext = NULL;
 
 fail15:
     Error("fail15\n");
 
-    GnttabTeardown(Fdo->GnttabContext);
-    Fdo->GnttabContext = NULL;
+    CacheTeardown(Fdo->CacheContext);
+    Fdo->CacheContext = NULL;
 
 fail14:
     Error("fail14\n");
 
-    CacheTeardown(Fdo->CacheContext);
-    Fdo->CacheContext = NULL;
+    RangeSetTeardown(Fdo->RangeSetContext);
+    Fdo->RangeSetContext = NULL;
 
 fail13:
     Error("fail13\n");
 
-    RangeSetTeardown(Fdo->RangeSetContext);
-    Fdo->RangeSetContext = NULL;
+    StoreTeardown(Fdo->StoreContext);
+    Fdo->StoreContext = NULL;
 
 fail12:
     Error("fail12\n");
 
-    StoreTeardown(Fdo->StoreContext);
-    Fdo->StoreContext = NULL;
+    EvtchnTeardown(Fdo->EvtchnContext);
+    Fdo->EvtchnContext = NULL;
 
 fail11:
     Error("fail11\n");
 
-    EvtchnTeardown(Fdo->EvtchnContext);
-    Fdo->EvtchnContext = NULL;
+    SharedInfoTeardown(Fdo->SharedInfoContext);
+    Fdo->SharedInfoContext = NULL;
 
 fail10:
     Error("fail10\n");
 
-    SharedInfoTeardown(Fdo->SharedInfoContext);
-    Fdo->SharedInfoContext = NULL;
+    SuspendTeardown(Fdo->SuspendContext);
+    Fdo->SuspendContext = NULL;
 
 fail9:
     Error("fail9\n");
 
-    SuspendTeardown(Fdo->SuspendContext);
-    Fdo->SuspendContext = NULL;
+    DebugTeardown(Fdo->DebugContext);
+    Fdo->DebugContext = NULL;
 
 fail8:
     Error("fail8\n");
 
-    DebugTeardown(Fdo->DebugContext);
-    Fdo->DebugContext = NULL;
+    RtlZeroMemory(&Fdo->UnplugInterface,
+                  sizeof (XENFILT_UNPLUG_INTERFACE));
 
 fail7:
     Error("fail7\n");
@@ -4831,9 +4811,6 @@ FdoDestroy(
     RtlZeroMemory(&Fdo->Mutex, sizeof (MUTEX));
 
     if (__FdoIsActive(Fdo)) {
-        RtlZeroMemory(&Fdo->UnplugInterface,
-                      sizeof (XENFILT_UNPLUG_INTERFACE));
-
         RtlZeroMemory(&Fdo->BalloonInterface,
                       sizeof (XENBUS_BALLOON_INTERFACE));
 
@@ -4880,6 +4857,9 @@ FdoDestroy(
 
         DebugTeardown(Fdo->DebugContext);
         Fdo->DebugContext = NULL;
+
+        RtlZeroMemory(&Fdo->UnplugInterface,
+                      sizeof (XENFILT_UNPLUG_INTERFACE));
 
         __FdoSetActive(Fdo, FALSE);
     }

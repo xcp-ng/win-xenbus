@@ -183,8 +183,6 @@ done:
     return STATUS_SUCCESS;
 
 fail1:
-    Error("fail1 (%08x)\n", status);
-
     return status;
 }
 
