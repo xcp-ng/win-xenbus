@@ -145,8 +145,8 @@ GetErrorMessage(
     return Message;
 }
 
-static const CHAR *
-FunctionName(
+static FORCEINLINE const CHAR *
+__FunctionName(
     IN  DI_FUNCTION Function
     )
 {
@@ -2503,10 +2503,10 @@ Entry(
 
     if (!Context->PostProcessing) {
         Log("%s PreProcessing",
-            FunctionName(Function));
+            __FunctionName(Function));
     } else {
         Log("%s PostProcessing (%08x)",
-            FunctionName(Function),
+            __FunctionName(Function),
             Context->InstallResult);
     }
 
@@ -2569,8 +2569,8 @@ Version(
     return NO_ERROR;
 }
 
-static const CHAR *
-ReasonName(
+static FORCEINLINE const CHAR *
+__ReasonName(
     IN  DWORD       Reason
     )
 {
@@ -2605,7 +2605,7 @@ DllMain(
     Log("%s (%s): %s",
         MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR,
         DAY_STR "/" MONTH_STR "/" YEAR_STR,
-        ReasonName(Reason));
+        __ReasonName(Reason));
 
     return TRUE;
 }
