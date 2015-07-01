@@ -971,6 +971,7 @@ EvtchnInterruptEnable(
         PXENBUS_EVTCHN_PROCESSOR    Processor;
         unsigned int                vcpu_id;
         UCHAR                       Vector;
+        PROCESSOR_NUMBER            ProcNumber;
 
         Processor = &Context->Processor[Index];
 
@@ -981,21 +982,30 @@ EvtchnInterruptEnable(
         Vector = FdoGetInterruptVector(Context->Fdo, Processor->Interrupt);
 
         status = HvmSetEvtchnUpcallVector(vcpu_id, Vector);
-        if (NT_SUCCESS(status)) {
-            PROCESSOR_NUMBER    ProcNumber;
+        if (!NT_SUCCESS(status)) {
+            if (status != STATUS_NOT_IMPLEMENTED )
+                continue;
 
-            status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
-            ASSERT(NT_SUCCESS(status));
-
-            Info("CPU %u:%u\n", ProcNumber.Group, ProcNumber.Number);
-            Processor->UpcallEnabled = TRUE;
+            Info("PER-CPU UPCALL NOT IMPLEMENTED\n");
+            break;
         }
+
+        status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+        ASSERT(NT_SUCCESS(status));
+
+        Info("CPU %u:%u (Vector = %u)\n",
+             ProcNumber.Group,
+             ProcNumber.Number,
+             Vector);
+        Processor->UpcallEnabled = TRUE;
     }
 
     Line = FdoGetInterruptLine(Context->Fdo, Context->Interrupt);
 
     status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, Line);
     ASSERT(NT_SUCCESS(status));
+
+    Info("CALLBACK VIA (Vector = %u)\n", Line);
 
     Trace("<====\n");
 }
