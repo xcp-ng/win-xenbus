@@ -1160,7 +1160,7 @@ FdoQueryDeviceRelations(
     }
 
     Size = FIELD_OFFSET(DEVICE_RELATIONS, Objects) +
-           (sizeof (DEVICE_OBJECT) * __min(Count, 1));
+           (sizeof (PDEVICE_OBJECT) * __max(Count, 1));
 
     Relations = __AllocatePoolWithTag(PagedPool, Size, 'TLIF');
 
