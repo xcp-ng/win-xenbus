@@ -469,52 +469,6 @@ EvtchnFifoPortDisable(
     EvtchnFifoPortMask(_Context, Port);
 }
 
-static VOID
-EvtchnFifoReset(
-    IN  PXENBUS_EVTCHN_FIFO_CONTEXT Context
-    )
-{
-    ULONGLONG                       Value;
-    ULONG                           LocalPort;
-    ULONG                           RemotePort;
-    USHORT                          RemoteDomain;
-    NTSTATUS                        status;
-
-    UNREFERENCED_PARAMETER(Context);
-
-    status = HvmGetParam(HVM_PARAM_STORE_EVTCHN, &Value);
-    ASSERT(NT_SUCCESS(status));
-
-    LocalPort = (LONG)Value;
-
-    //
-    // When we reset the event channel ABI we will lose our
-    // binding to the STORE event channel, which was set up
-    // by the toolstack during domain build.
-    // We need to get the binding back, so we must query the
-    // remote domain and port, and then re-bind after the
-    // reset.
-    //
-
-    status = EventChannelQueryInterDomain(LocalPort,
-                                          &RemoteDomain,
-                                          &RemotePort);
-    ASSERT(NT_SUCCESS(status));
-
-    LogPrintf(LOG_LEVEL_INFO, "EVTCHN_FIFO: RESET\n");
-    (VOID) EventChannelReset();
-
-    status = EventChannelBindInterDomain(RemoteDomain,
-                                         RemotePort,
-                                         &LocalPort);
-    ASSERT(NT_SUCCESS(status));
-
-    Value = LocalPort;
-
-    status = HvmSetParam(HVM_PARAM_STORE_EVTCHN, Value);
-    ASSERT(NT_SUCCESS(status));
-}
-
 static NTSTATUS
 EvtchnFifoAcquire(
     IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context
@@ -578,7 +532,7 @@ fail2:
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    (VOID) EventChannelReset();
+    EvtchnReset();
 
     while (--Index >= 0) {
         unsigned int    vcpu_id;
@@ -614,7 +568,7 @@ EvtchnFifoRelease(
 
     Trace("====>\n");
 
-    EvtchnFifoReset(Context);
+    EvtchnReset();
 
     EvtchnFifoContract(Context);
 

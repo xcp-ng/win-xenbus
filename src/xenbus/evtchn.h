@@ -59,6 +59,11 @@ EvtchnTeardown(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     );
 
+VOID
+EvtchnReset(
+    VOID
+    );
+
 extern BOOLEAN
 EvtchnInterrupt(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
