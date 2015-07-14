@@ -62,8 +62,6 @@ struct _XENFILT_PDO {
     PIRP                            DevicePowerIrp;
 
     PXENFILT_FDO                    Fdo;
-    BOOLEAN                         Missing;
-    const CHAR                      *Reason;
 
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     PXENFILT_EMULATED_OBJECT        EmulatedObject;
@@ -187,41 +185,6 @@ PdoGetPhysicalDeviceObject(
     )
 {
     return Pdo->PhysicalDeviceObject;
-}
-
-static FORCEINLINE VOID
-__PdoSetMissing(
-    IN  PXENFILT_PDO    Pdo,
-    IN  const CHAR      *Reason
-    )
-{
-    Pdo->Reason = Reason;
-    Pdo->Missing = TRUE;
-}
-
-VOID
-PdoSetMissing(
-    IN  PXENFILT_PDO    Pdo,
-    IN  const CHAR      *Reason
-    )
-{
-    __PdoSetMissing(Pdo, Reason);
-}
-
-static FORCEINLINE BOOLEAN
-__PdoIsMissing(
-    IN  PXENFILT_PDO    Pdo
-    )
-{
-    return Pdo->Missing;
-}
-
-BOOLEAN
-PdoIsMissing(
-    IN  PXENFILT_PDO    Pdo
-    )
-{
-    return __PdoIsMissing(Pdo);
 }
 
 static FORCEINLINE PDEVICE_OBJECT
@@ -817,22 +780,18 @@ PdoRemoveDevice(
     __PdoSetDevicePowerState(Pdo, PowerDeviceD3);
 
 done:
-    if (__PdoIsMissing(Pdo)) {
-        __PdoSetDevicePnpState(Pdo, Deleted);
-        IoReleaseRemoveLockAndWait(&Pdo->Dx->RemoveLock, Irp);
-    } else {
-        __PdoSetDevicePnpState(Pdo, Enumerated);
-        IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-    }
+    FdoAcquireMutex(Fdo);
+    __PdoSetDevicePnpState(Pdo, Deleted);
+    FdoReleaseMutex(Fdo);
+
+    IoReleaseRemoveLockAndWait(&Pdo->Dx->RemoveLock, Irp);
 
     status = PdoForwardIrpSynchronously(Pdo, Irp);
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
-    if (__PdoIsMissing(Pdo)) {
-        FdoAcquireMutex(Fdo);
-        PdoDestroy(Pdo);
-        FdoReleaseMutex(Fdo);
-    }
+    FdoAcquireMutex(Fdo);
+    PdoDestroy(Pdo);
+    FdoReleaseMutex(Fdo);
 
     return status;
 
@@ -1086,7 +1045,6 @@ PdoEject(
     PXENFILT_FDO        Fdo = __PdoGetFdo(Pdo);
     NTSTATUS            status;
 
-    __PdoSetMissing(Pdo, "Ejected");
     __PdoSetDevicePnpState(Pdo, Deleted);
 
     status = PdoForwardIrpSynchronously(Pdo, Irp);
@@ -2072,18 +2030,13 @@ PdoDestroy(
 
     ASSERT3U(__PdoGetDevicePnpState(Pdo), ==, Deleted);
 
-    ASSERT(__PdoIsMissing(Pdo));
-    Pdo->Missing = FALSE;
-
     FdoRemovePhysicalDeviceObject(Fdo, Pdo);
 
     Dx->Pdo = NULL;
 
-    Info("%p (%s) (%s)\n",
+    Info("%p (%s)\n",
          FilterDeviceObject,
-         __PdoGetName(Pdo),
-         Pdo->Reason);
-    Pdo->Reason = NULL;
+         __PdoGetName(Pdo));
 
     RtlZeroMemory(Pdo->Name, sizeof (Pdo->Name));
 
