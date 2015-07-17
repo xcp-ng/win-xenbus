@@ -53,8 +53,21 @@ RegistryOpenKey(
     );
 
 extern NTSTATUS
+RegistryCreateKey(
+    IN  HANDLE          Parent,
+    IN  PUNICODE_STRING Path,
+    IN  ULONG           Options,
+    OUT PHANDLE         Key
+    );
+
+extern NTSTATUS
 RegistryOpenServiceKey(
     IN  ACCESS_MASK DesiredAccess,
+    OUT PHANDLE     Key
+    );
+
+extern NTSTATUS
+RegistryCreateServiceKey(
     OUT PHANDLE     Key
     );
 
@@ -83,8 +96,7 @@ RegistryOpenSubKey(
 extern NTSTATUS
 RegistryCreateSubKey(
     IN  HANDLE      Key,
-    IN  PCHAR       Name,
-    IN  ULONG       Options,
+    IN  PCHAR       Name,    IN  ULONG       Options,
     OUT PHANDLE     SubKey
     );
 

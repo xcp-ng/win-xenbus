@@ -33,7 +33,6 @@
 #define _XENBUS_FDO_H
 
 #include <ntddk.h>
-#include <unplug_interface.h>
 
 #include "driver.h"
 #include "types.h"
@@ -249,10 +248,11 @@ FdoGetGnttabContext(
     IN  PXENBUS_FDO Fdo
     );
 
-extern VOID
-FdoGetUnplugInterface(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENFILT_UNPLUG_INTERFACE   UnplugInterface
+#include "unplug.h"
+
+extern PXENBUS_UNPLUG_CONTEXT
+FdoGetUnplugContext(
+    IN  PXENBUS_FDO Fdo
     );
 
 extern NTSTATUS

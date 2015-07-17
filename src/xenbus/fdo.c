@@ -38,8 +38,6 @@
 #include <stdlib.h>
 #include <xen.h>
 
-#include <unplug_interface.h>
-
 #include "names.h"
 #include "registry.h"
 #include "fdo.h"
@@ -58,6 +56,7 @@
 #include "balloon.h"
 #include "driver.h"
 #include "range_set.h"
+#include "unplug.h"
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"
@@ -122,6 +121,7 @@ struct _XENBUS_FDO {
     PXENBUS_RANGE_SET_CONTEXT       RangeSetContext;
     PXENBUS_CACHE_CONTEXT           CacheContext;
     PXENBUS_GNTTAB_CONTEXT          GnttabContext;
+    PXENBUS_UNPLUG_CONTEXT          UnplugContext;
     PXENBUS_BALLOON_CONTEXT         BalloonContext;
 
     XENBUS_DEBUG_INTERFACE          DebugInterface;
@@ -130,7 +130,6 @@ struct _XENBUS_FDO {
     XENBUS_STORE_INTERFACE          StoreInterface;
     XENBUS_RANGE_SET_INTERFACE      RangeSetInterface;
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
-    XENFILT_UNPLUG_INTERFACE        UnplugInterface;
 
     PXENBUS_RANGE_SET               RangeSet;
     LIST_ENTRY                      List;
@@ -548,6 +547,7 @@ DEFINE_FDO_GET_CONTEXT(Store, PXENBUS_STORE_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(RangeSet, PXENBUS_RANGE_SET_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Cache, PXENBUS_CACHE_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Gnttab, PXENBUS_GNTTAB_CONTEXT)
+DEFINE_FDO_GET_CONTEXT(Unplug, PXENBUS_UNPLUG_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Balloon, PXENBUS_BALLOON_CONTEXT)
 
 __drv_functionClass(IO_COMPLETION_ROUTINE)
@@ -2508,15 +2508,9 @@ FdoD3ToD0(
             goto fail7;
     }
 
-    if (Fdo->UnplugInterface.Interface.Context != NULL) {
-        status = XENFILT_UNPLUG(Acquire, &Fdo->UnplugInterface);
-        if (!NT_SUCCESS(status))
-            goto fail8;
-    }
-
     status = __FdoD3ToD0(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail8;
 
     status = XENBUS_SUSPEND(Register,
                             &Fdo->SuspendInterface,
@@ -2525,7 +2519,7 @@ FdoD3ToD0(
                             Fdo,
                             &Fdo->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail9;
 
     KeLowerIrql(Irql);
 
@@ -2556,16 +2550,10 @@ not_active:
 
     return STATUS_SUCCESS;
 
-fail10:
-    Error("fail10\n");
-
-    __FdoD0ToD3(Fdo);
-
 fail9:
     Error("fail9\n");
 
-    if (Fdo->UnplugInterface.Interface.Context != NULL)
-        XENFILT_UNPLUG(Release, &Fdo->UnplugInterface);
+    __FdoD0ToD3(Fdo);
 
 fail8:
     Error("fail8\n");
@@ -2692,9 +2680,6 @@ FdoD0ToD3(
 
     __FdoD0ToD3(Fdo);
 
-    if (Fdo->UnplugInterface.Interface.Context != NULL)
-        XENFILT_UNPLUG(Release, &Fdo->UnplugInterface);
-
     if (Fdo->BalloonInterface.Interface.Context != NULL)
         XENBUS_BALLOON(Release, &Fdo->BalloonInterface);
 
@@ -2733,8 +2718,7 @@ FdoS4ToS3(
 
     HypercallPopulate();
 
-    if (Fdo->UnplugInterface.Interface.Context != NULL)
-        XENFILT_UNPLUG(Replay, &Fdo->UnplugInterface);
+    UnplugDevices();
 
     KeLowerIrql(Irql);
 
@@ -4471,15 +4455,6 @@ fail1:
                       (_Size),                                                          \
                       (_Optional))
 
-VOID
-FdoGetUnplugInterface(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENFILT_UNPLUG_INTERFACE   UnplugInterface
-    )
-{
-    *UnplugInterface = Fdo->UnplugInterface;
-}
-
 static BOOLEAN
 FdoIsBalloonEnabled(
     IN  PXENBUS_FDO Fdo
@@ -4581,44 +4556,39 @@ FdoCreate(
     if (!__FdoIsActive(Fdo))
         goto done;
 
-    status = FDO_QUERY_INTERFACE(Fdo,
-                                 XENFILT,
-                                 UNPLUG,
-                                 (PINTERFACE)&Fdo->UnplugInterface,
-                                 sizeof (Fdo->UnplugInterface),
-                                 TRUE);
+    status = DebugInitialize(Fdo, &Fdo->DebugContext);
     if (!NT_SUCCESS(status))
         goto fail7;
 
-    status = DebugInitialize(Fdo, &Fdo->DebugContext);
+    status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
     if (!NT_SUCCESS(status))
         goto fail8;
 
-    status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
+    status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
     if (!NT_SUCCESS(status))
         goto fail9;
 
-    status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
+    status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
     if (!NT_SUCCESS(status))
         goto fail10;
 
-    status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
+    status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
         goto fail11;
 
-    status = StoreInitialize(Fdo, &Fdo->StoreContext);
+    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
         goto fail12;
 
-    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
+    status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
         goto fail13;
 
-    status = CacheInitialize(Fdo, &Fdo->CacheContext);
+    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
         goto fail14;
 
-    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
+    status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
     if (!NT_SUCCESS(status))
         goto fail15;
 
@@ -4687,56 +4657,56 @@ done:
 fail16:
     Error("fail16\n");
 
-    GnttabTeardown(Fdo->GnttabContext);
-    Fdo->GnttabContext = NULL;
+    UnplugTeardown(Fdo->UnplugContext);
+    Fdo->UnplugContext = NULL;
 
 fail15:
     Error("fail15\n");
 
-    CacheTeardown(Fdo->CacheContext);
-    Fdo->CacheContext = NULL;
+    GnttabTeardown(Fdo->GnttabContext);
+    Fdo->GnttabContext = NULL;
 
 fail14:
     Error("fail14\n");
 
-    RangeSetTeardown(Fdo->RangeSetContext);
-    Fdo->RangeSetContext = NULL;
+    CacheTeardown(Fdo->CacheContext);
+    Fdo->CacheContext = NULL;
 
 fail13:
     Error("fail13\n");
 
-    StoreTeardown(Fdo->StoreContext);
-    Fdo->StoreContext = NULL;
+    RangeSetTeardown(Fdo->RangeSetContext);
+    Fdo->RangeSetContext = NULL;
 
 fail12:
     Error("fail12\n");
 
-    EvtchnTeardown(Fdo->EvtchnContext);
-    Fdo->EvtchnContext = NULL;
+    StoreTeardown(Fdo->StoreContext);
+    Fdo->StoreContext = NULL;
 
 fail11:
     Error("fail11\n");
 
-    SharedInfoTeardown(Fdo->SharedInfoContext);
-    Fdo->SharedInfoContext = NULL;
+    EvtchnTeardown(Fdo->EvtchnContext);
+    Fdo->EvtchnContext = NULL;
 
 fail10:
     Error("fail10\n");
 
-    SuspendTeardown(Fdo->SuspendContext);
-    Fdo->SuspendContext = NULL;
+    SharedInfoTeardown(Fdo->SharedInfoContext);
+    Fdo->SharedInfoContext = NULL;
 
 fail9:
     Error("fail9\n");
 
-    DebugTeardown(Fdo->DebugContext);
-    Fdo->DebugContext = NULL;
+    SuspendTeardown(Fdo->SuspendContext);
+    Fdo->SuspendContext = NULL;
 
 fail8:
     Error("fail8\n");
 
-    RtlZeroMemory(&Fdo->UnplugInterface,
-                  sizeof (XENFILT_UNPLUG_INTERFACE));
+    DebugTeardown(Fdo->DebugContext);
+    Fdo->DebugContext = NULL;
 
 fail7:
     Error("fail7\n");
@@ -4834,6 +4804,9 @@ FdoDestroy(
             Fdo->BalloonContext = NULL;
         }
 
+        UnplugTeardown(Fdo->UnplugContext);
+        Fdo->UnplugContext = NULL;
+
         GnttabTeardown(Fdo->GnttabContext);
         Fdo->GnttabContext = NULL;
 
@@ -4857,9 +4830,6 @@ FdoDestroy(
 
         DebugTeardown(Fdo->DebugContext);
         Fdo->DebugContext = NULL;
-
-        RtlZeroMemory(&Fdo->UnplugInterface,
-                      sizeof (XENFILT_UNPLUG_INTERFACE));
 
         __FdoSetActive(Fdo, FALSE);
     }

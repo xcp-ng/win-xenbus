@@ -863,7 +863,6 @@ done:                                                               \
 }                                                                   \
 
 DEFINE_PDO_QUERY_INTERFACE(Emulated)
-DEFINE_PDO_QUERY_INTERFACE(Unplug)
 
 struct _INTERFACE_ENTRY {
     const GUID  *Guid;
@@ -876,7 +875,6 @@ struct _INTERFACE_ENTRY {
 
 struct _INTERFACE_ENTRY PdoInterfaceTable[] = {
     DEFINE_INTERFACE_ENTRY(EMULATED_INTERFACE, Emulated),
-    DEFINE_INTERFACE_ENTRY(UNPLUG_INTERFACE, Unplug),
     { NULL, NULL, NULL }
 };
 

@@ -116,12 +116,54 @@ fail1:
 }
 
 NTSTATUS
+RegistryCreateKey(
+    IN  HANDLE          Parent,
+    IN  PUNICODE_STRING Path,
+    IN  ULONG           Options,
+    OUT PHANDLE         Key
+    )
+{
+    OBJECT_ATTRIBUTES   Attributes;
+    NTSTATUS            status;
+
+    InitializeObjectAttributes(&Attributes,
+                               Path,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               Parent,
+                               NULL);
+
+    status = ZwCreateKey(Key,
+                         KEY_ALL_ACCESS,
+                         &Attributes,
+                         0,
+                         NULL,
+                         Options,
+                         NULL
+                         );
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    return status;
+}
+
+NTSTATUS
 RegistryOpenServiceKey(
     IN  ACCESS_MASK     DesiredAccess,
     OUT PHANDLE         Key
     )
 {
     return RegistryOpenKey(NULL, &RegistryPath, DesiredAccess, Key);
+}
+
+NTSTATUS
+RegistryCreateServiceKey(
+    OUT PHANDLE         Key
+    )
+{
+    return RegistryCreateKey(NULL, &RegistryPath, REG_OPTION_NON_VOLATILE, Key);
 }
 
 NTSTATUS

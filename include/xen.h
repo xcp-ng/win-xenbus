@@ -307,6 +307,32 @@ ModuleLookup(
     OUT PULONG_PTR  Offset
     );
 
+// UNPLUG
+
+typedef enum _UNPLUG_TYPE {
+    UNPLUG_DISKS = 0,
+    UNPLUG_NICS,
+    UNPLUG_TYPE_COUNT
+} UNPLUG_TYPE, *PUNPLUG_TYPE;
+
+XEN_API
+VOID
+UnplugDevices(
+    VOID
+    );
+
+XEN_API
+NTSTATUS
+UnplugIncrementValue(
+    IN  UNPLUG_TYPE Type
+    );
+
+XEN_API
+NTSTATUS
+UnplugDecrementValue(
+    IN  UNPLUG_TYPE Type
+    );
+
 // LOG
 
 typedef enum _LOG_LEVEL {

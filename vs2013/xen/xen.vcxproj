@@ -93,6 +93,7 @@
     <ClCompile Include="..\..\src\xen\process.c" />
     <ClCompile Include="..\..\src\xen\acpi.c" />
     <ClCompile Include="..\..\src\xen\system.c" />
+    <ClCompile Include="..\..\src\xen\unplug.c" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="..\..\src\xen\amd64\hypercall_thunk.asm">

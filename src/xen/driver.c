@@ -35,12 +35,15 @@
 #include <procgrp.h>
 #include <xen.h>
 
+#include "registry.h"
+#include "driver.h"
 #include "hypercall.h"
 #include "log.h"
 #include "module.h"
 #include "process.h"
 #include "system.h"
 #include "acpi.h"
+#include "unplug.h"
 #include "bug_check.h"
 #include "dbg_print.h"
 #include "assert.h"
@@ -51,6 +54,7 @@ extern PULONG   InitSafeBootMode;
 typedef struct _XEN_DRIVER {
     PLOG_DISPOSITION    TraceDisposition;
     PLOG_DISPOSITION    InfoDisposition;
+    HANDLE              UnplugKey;
 } XEN_DRIVER, *PXEN_DRIVER;
 
 static XEN_DRIVER   Driver;
@@ -102,6 +106,30 @@ fail1:
     return STATUS_INCOMPATIBLE_DRIVER_BLOCKED;
 }
 
+static FORCEINLINE VOID
+__DriverSetUnplugKey(
+    IN  HANDLE  Key
+    )
+{
+    Driver.UnplugKey = Key;
+}
+
+static FORCEINLINE HANDLE
+__DriverGetUnplugKey(
+    VOID
+    )
+{
+    return Driver.UnplugKey;
+}
+
+HANDLE
+DriverGetUnplugKey(
+    VOID
+    )
+{
+    return __DriverGetUnplugKey();
+}
+
 static VOID
 DriverOutputBuffer(
     IN  PVOID   Argument,
@@ -122,9 +150,9 @@ DllInitialize(
     IN  PUNICODE_STRING RegistryPath
     )
 {
-    NTSTATUS    status;
-
-    UNREFERENCED_PARAMETER(RegistryPath);
+    HANDLE              ServiceKey;
+    HANDLE              UnplugKey;
+    NTSTATUS            status;
 
     ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
     WdmlibProcgrpInitialize();
@@ -165,59 +193,103 @@ DllInitialize(
          MONTH,
          YEAR);
 
-    status = AcpiInitialize();
+    status = RegistryInitialize(RegistryPath);
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = SystemInitialize();
+    status = RegistryCreateServiceKey(&ServiceKey);
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    status = HypercallInitialize();
+    status = RegistryCreateSubKey(ServiceKey,
+                                  "Unplug",
+                                  REG_OPTION_NON_VOLATILE,
+                                  &UnplugKey);
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    status = BugCheckInitialize();
+    __DriverSetUnplugKey(UnplugKey);
+
+    status = AcpiInitialize();
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    status = ModuleInitialize();
+    status = SystemInitialize();
     if (!NT_SUCCESS(status))
         goto fail6;
 
-    status = ProcessInitialize();
+    status = HypercallInitialize();
     if (!NT_SUCCESS(status))
         goto fail7;
+
+    status = BugCheckInitialize();
+    if (!NT_SUCCESS(status))
+        goto fail8;
+
+    status = ModuleInitialize();
+    if (!NT_SUCCESS(status))
+        goto fail9;
+
+    status = ProcessInitialize();
+    if (!NT_SUCCESS(status))
+        goto fail10;
+
+    status = UnplugInitialize();
+    if (!NT_SUCCESS(status))
+        goto fail11;
+
+    RegistryCloseKey(ServiceKey);
 
 done:
     Trace("<====\n");
 
     return STATUS_SUCCESS;
 
+fail11:
+    Error("fail11\n");
+
+    ProcessTeardown();
+
+fail10:
+    Error("fail10\n");
+
+    ModuleTeardown();
+
+fail9:
+    Error("fail9\n");
+
+    BugCheckTeardown();
+
+fail8:
+    Error("fail8\n");
+
+    HypercallTeardown();
+
 fail7:
     Error("fail7\n");
 
-    ModuleTeardown();
+    SystemTeardown();
 
 fail6:
     Error("fail6\n");
 
-    BugCheckTeardown();
+    AcpiTeardown();
 
 fail5:
     Error("fail5\n");
 
-    HypercallTeardown();
+    RegistryCloseKey(UnplugKey);
+    __DriverSetUnplugKey(NULL);
 
 fail4:
     Error("fail4\n");
 
-    SystemTeardown();
+    RegistryCloseKey(ServiceKey);
 
 fail3:
     Error("fail3\n");
 
-    AcpiTeardown();
+    RegistryTeardown();
 
 fail2:
     Error("fail2\n");
@@ -231,7 +303,7 @@ fail2:
     LogTeardown();
 
 fail1:
-    Error("fail1 (%08x)", status);
+    Error("fail1 (%08x)\n", status);
 
     ASSERT(IsZeroMemory(&Driver, sizeof (XEN_DRIVER)));
 
@@ -243,10 +315,14 @@ DllUnload(
     VOID
     )
 {
+    HANDLE  UnplugKey;
+
     Trace("====>\n");
 
     if (*InitSafeBootMode > 0)
         goto done;
+
+    UnplugTeardown();
 
     ProcessTeardown();
 
@@ -257,6 +333,13 @@ DllUnload(
     HypercallTeardown();
 
     SystemTeardown();
+
+    UnplugKey = __DriverGetUnplugKey();
+
+    RegistryCloseKey(UnplugKey);
+    __DriverSetUnplugKey(NULL);
+
+    RegistryTeardown();
 
     Info("XEN %d.%d.%d (%d) (%02d.%02d.%04d)\n",
          MAJOR_VERSION,

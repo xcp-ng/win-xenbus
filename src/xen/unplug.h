@@ -29,22 +29,20 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _REVISION_H
-#define _REVISION_H
+#ifndef _XEN_UNPLUG_H
+#define _XEN_UNPLUG_H
 
-// Key:
-// S  - XENBUS_SUSPEND_INTERFACE
-// SI - XENBUS_SHARED_INFO_INTERFACE
-// E  - XENBUS_EVTCHN_INTERFACE
-// D  - XENBUS_DEBUG_INTEFACE
-// ST - XENBUS_STORE_INTERFACE
-// R  - XENBUS_RANGE_SET_INTERFACE
-// C  - XENBUS_CACHE_INTERFACE
-// G  - XENBUS_GNTTAB_INTERFACE
-// EM - XENFILT_EMULATED_INTERFACE
+#include <ntddk.h>
+#include <xen.h>
 
-//                    REVISION   S  SI   E   D  ST   R   C   G   U  EM
-#define DEFINE_REVISION_TABLE                                           \
-    DEFINE_REVISION(0x08000009,  1,  2,  4,  1,  1,  1,  1,  1,  1,  1)
+extern NTSTATUS
+UnplugInitialize(
+    VOID
+    );
 
-#endif  // _REVISION_H
+extern VOID
+UnplugTeardown(
+    VOID
+    );
+
+#endif  // _XEN_UNPLUG_H

@@ -42,11 +42,6 @@ DriverGetParametersKey(
     VOID
     );
 
-extern HANDLE
-DriverGetUnplugKey(
-    VOID
-    );
-
 extern PCHAR
 DriverGetActiveDeviceID(
     VOID
@@ -87,13 +82,6 @@ DriverGetFilterState(
 
 PXENFILT_EMULATED_CONTEXT
 DriverGetEmulatedContext(
-    VOID
-    );
-
-#include "unplug.h"
-
-PXENFILT_UNPLUG_CONTEXT
-DriverGetUnplugContext(
     VOID
     );
 

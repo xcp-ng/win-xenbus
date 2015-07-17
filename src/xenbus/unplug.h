@@ -29,22 +29,34 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _REVISION_H
-#define _REVISION_H
+#ifndef _XENBUS_UNPLUG_H
+#define _XENBUS_UNPLUG_H
 
-// Key:
-// S  - XENBUS_SUSPEND_INTERFACE
-// SI - XENBUS_SHARED_INFO_INTERFACE
-// E  - XENBUS_EVTCHN_INTERFACE
-// D  - XENBUS_DEBUG_INTEFACE
-// ST - XENBUS_STORE_INTERFACE
-// R  - XENBUS_RANGE_SET_INTERFACE
-// C  - XENBUS_CACHE_INTERFACE
-// G  - XENBUS_GNTTAB_INTERFACE
-// EM - XENFILT_EMULATED_INTERFACE
+#include <ntddk.h>
+#include <xen.h>
+#include <unplug_interface.h>
 
-//                    REVISION   S  SI   E   D  ST   R   C   G   U  EM
-#define DEFINE_REVISION_TABLE                                           \
-    DEFINE_REVISION(0x08000009,  1,  2,  4,  1,  1,  1,  1,  1,  1,  1)
+typedef struct _XENBUS_UNPLUG_CONTEXT  XENBUS_UNPLUG_CONTEXT, *PXENBUS_UNPLUG_CONTEXT;
 
-#endif  // _REVISION_H
+#include "fdo.h"
+
+extern NTSTATUS
+UnplugInitialize(
+    IN  PXENBUS_FDO             Fdo,
+    OUT PXENBUS_UNPLUG_CONTEXT  *Context
+    );
+
+extern NTSTATUS
+UnplugGetInterface(
+    IN      PXENBUS_UNPLUG_CONTEXT  Context,
+    IN      ULONG                   Version,
+    IN OUT  PINTERFACE              Interface,
+    IN      ULONG                   Size
+    );
+
+extern VOID
+UnplugTeardown(
+    IN  PXENBUS_UNPLUG_CONTEXT   Context
+    );
+
+#endif  // _XENBUS_UNPLUG_H

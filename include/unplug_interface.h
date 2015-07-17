@@ -30,75 +30,87 @@
  */
 
 /*! \file unplug_interface.h
-    \brief XENFILT UNPLUG Interface
+    \brief XENBUS UNPLUG Interface
 
-    This interface provides a primitive to re-unplug emulated devices,
-    which is required on resume-from-suspend
+    This interface provides a method to request emulated device unplug
 */
 
-#ifndef _XENFILT_UNPLUG_INTERFACE_H
-#define _XENFILT_UNPLUG_INTERFACE_H
+#ifndef _XENBUS_UNPLUG_INTERFACE_H
+#define _XENBUS_UNPLUG_INTERFACE_H
 
 #ifndef _WINDLL
 
-/*! \typedef XENFILT_UNPLUG_ACQUIRE
+/*! \typedef XENBUS_UNPLUG_ACQUIRE
     \brief Acquire a reference to the UNPLUG interface
 
     \param Interface The interface header
 */  
 typedef NTSTATUS
-(*XENFILT_UNPLUG_ACQUIRE)(
+(*XENBUS_UNPLUG_ACQUIRE)(
     IN  PINTERFACE  Interface
     );
 
-/*! \typedef XENFILT_UNPLUG_RELEASE
+/*! \typedef XENBUS_UNPLUG_RELEASE
     \brief Release a reference to the UNPLUG interface
 
     \param Interface The interface header
 */  
 typedef VOID
-(*XENFILT_UNPLUG_RELEASE)(
+(*XENBUS_UNPLUG_RELEASE)(
     IN  PINTERFACE  Interface
     );
 
-/*! \typedef XENFILT_UNPLUG_REPLAY
-    \brief Re-unplug emulated devices that were previously unplugged
-    at boot time
+/*! \enum _XENBUS_UNPLUG_DEVICE_TYPE
+    \brief Type of device to be unplugged
+*/
+typedef enum _XENBUS_UNPLUG_DEVICE_TYPE {
+    XENBUS_UNPLUG_DEVICE_TYPE_INVALID = 0,
+    XENBUS_UNPLUG_DEVICE_TYPE_NICS,     /*!< NICs */
+    XENBUS_UNPLUG_DEVICE_TYPE_DISKS,    /*!< Disks */
+} XENBUS_UNPLUG_DEVICE_TYPE, *PXENBUS_UNPLUG_DEVICE_TYPE;
+
+/*! \typedef XENBUS_UNPLUG_REQUEST
+    \brief Request unplug of a type of emulated device
 
     \param Interface The interface header
+    \param Type The type of device
+    \param Make Set to TRUE if the request is being made, FALSE if it is
+           being revoked.
 */  
 typedef VOID
-(*XENFILT_UNPLUG_REPLAY)(
-    IN  PINTERFACE  Interface
+(*XENBUS_UNPLUG_REQUEST)(
+    IN  PINTERFACE                  Interface,
+    IN  XENBUS_UNPLUG_DEVICE_TYPE   Type,
+    IN  BOOLEAN                     Make
     );
 
-// {D5657CFD-3DB5-4A23-A94F-61FD89247FE7}
-DEFINE_GUID(GUID_XENFILT_UNPLUG_INTERFACE,
-0xd5657cfd, 0x3db5, 0x4a23, 0xa9, 0x4f, 0x61, 0xfd, 0x89, 0x24, 0x7f, 0xe7);
+// {73db6517-3d06-4937-989f-199b7501e229}
+DEFINE_GUID(GUID_XENBUS_UNPLUG_INTERFACE,
+0x73db6517, 0x3d06, 0x4937, 0x98, 0x9f, 0x19, 0x9b, 0x75, 0x01, 0xe2, 0x29);
 
-/*! \struct _XENFILT_UNPLUG_INTERFACE_V1
+/*! \struct _XENBUS_UNPLUG_INTERFACE_V1
     \brief UNPLUG interface version 1
     \ingroup interfaces
 */
-struct _XENFILT_UNPLUG_INTERFACE_V1 {
+struct _XENBUS_UNPLUG_INTERFACE_V1 {
     INTERFACE               Interface;
-    XENFILT_UNPLUG_ACQUIRE  Acquire;
-    XENFILT_UNPLUG_RELEASE  Release;
-    XENFILT_UNPLUG_REPLAY   Replay;
+    XENBUS_UNPLUG_ACQUIRE   UnplugAcquire;
+    XENBUS_UNPLUG_RELEASE   UnplugRelease;
+    XENBUS_UNPLUG_REQUEST   UnplugRequest;
 };
 
-typedef struct _XENFILT_UNPLUG_INTERFACE_V1 XENFILT_UNPLUG_INTERFACE, *PXENFILT_UNPLUG_INTERFACE;
+typedef struct _XENBUS_UNPLUG_INTERFACE_V1 XENBUS_UNPLUG_INTERFACE, *PXENBUS_UNPLUG_INTERFACE;
 
-/*! \def XENFILT_UNPLUG
+/*! \def XENBUS_UNPLUG
     \brief Macro at assist in method invocation
 */
-#define XENFILT_UNPLUG(_Method, _Interface, ...)    \
-    (_Interface)-> ## _Method((PINTERFACE)(_Interface), __VA_ARGS__)
+#define XENBUS_UNPLUG(_Method, _Interface, ...)    \
+    (_Interface)->Unplug ## _Method((PINTERFACE)(_Interface), __VA_ARGS__)
 
 #endif  // _WINDLL
 
-#define XENFILT_UNPLUG_INTERFACE_VERSION_MIN  1
-#define XENFILT_UNPLUG_INTERFACE_VERSION_MAX  1
+#define XENBUS_UNPLUG_INTERFACE_VERSION_MIN  1
+#define XENBUS_UNPLUG_INTERFACE_VERSION_MAX  1
 
-#endif  // _XENFILT_UNPLUG_INTERFACE_H
+#endif  // _XENBUS_UNPLUG_INTERFACE_H
 

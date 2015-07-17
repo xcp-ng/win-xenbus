@@ -97,6 +97,7 @@
     <ClCompile Include="..\..\src\xenbus\balloon.c" />
     <ClCompile Include="..\..\src\xenbus\cache.c" />
     <ClCompile Include="..\..\src\xenbus\hash_table.c" />
+    <ClCompile Include="..\..\src\xenbus\unplug.c" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\src\xenbus\xenbus.rc" />

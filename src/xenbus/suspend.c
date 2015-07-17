@@ -33,8 +33,6 @@
 #include <stdarg.h>
 #include <xen.h>
 
-#include <unplug_interface.h>
-
 #include "suspend.h"
 #include "thread.h"
 #include "fdo.h"
@@ -58,7 +56,6 @@ struct _XENBUS_SUSPEND_CONTEXT {
     LIST_ENTRY                  LateList;
     XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
-    XENFILT_UNPLUG_INTERFACE    UnplugInterface;
 };
 
 #define XENBUS_SUSPEND_TAG  'PSUS'
@@ -153,10 +150,6 @@ SuspendTrigger(
     KIRQL                   Irql;
     NTSTATUS                status;
 
-    status = STATUS_NOT_SUPPORTED;
-    if (Context->UnplugInterface.Interface.Context == NULL)
-        goto fail1;
-
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
     LogPrintf(LOG_LEVEL_INFO,
@@ -179,7 +172,7 @@ SuspendTrigger(
 
         HypercallPopulate();
 
-        XENFILT_UNPLUG(Replay, &Context->UnplugInterface);
+        UnplugDevices();
 
         for (ListEntry = Context->EarlyList.Flink;
              ListEntry != &Context->EarlyList;
@@ -216,11 +209,6 @@ SuspendTrigger(
     KeLowerIrql(Irql);
 
     return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
 }
 
 static ULONG
@@ -338,27 +326,12 @@ SuspendAcquire(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    if (Context->UnplugInterface.Interface.Context != NULL) {
-        status = XENFILT_UNPLUG(Acquire, &Context->UnplugInterface);
-
-        if (!NT_SUCCESS(status))
-            goto fail3;
-    }
-
     Trace("<====\n");
 
 done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     return STATUS_SUCCESS;
-
-fail3:
-    Error("fail3\n");
-
-    XENBUS_DEBUG(Deregister,
-                 &Context->DebugInterface,
-                 Context->DebugCallback);
-    Context->DebugCallback = NULL;
 
 fail2:
     Error("fail2\n");
@@ -395,9 +368,6 @@ SuspendRelease(
         BUG("OUTSTANDING CALLBACKS");
 
     Context->Count = 0;
-
-    if (Context->UnplugInterface.Interface.Context != NULL)
-        XENFILT_UNPLUG(Release, &Context->UnplugInterface);
 
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
@@ -443,8 +413,6 @@ SuspendInitialize(
                                (PINTERFACE)&(*Context)->DebugInterface,
                                sizeof ((*Context)->DebugInterface));
     ASSERT(NT_SUCCESS(status));
-
-    FdoGetUnplugInterface(Fdo, &(*Context)->UnplugInterface);
 
     InitializeListHead(&(*Context)->EarlyList);
     InitializeListHead(&(*Context)->LateList);
@@ -508,9 +476,6 @@ SuspendTeardown(
     Trace("====>\n");
 
     Context->Fdo = NULL;
-
-    RtlZeroMemory(&Context->UnplugInterface,
-                  sizeof (XENFILT_UNPLUG_INTERFACE));
 
     RtlZeroMemory(&Context->DebugInterface,
                   sizeof (XENBUS_DEBUG_INTERFACE));
