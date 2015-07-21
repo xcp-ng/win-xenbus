@@ -96,7 +96,8 @@ RegistryOpenSubKey(
 extern NTSTATUS
 RegistryCreateSubKey(
     IN  HANDLE      Key,
-    IN  PCHAR       Name,    IN  ULONG       Options,
+    IN  PCHAR       Name,
+    IN  ULONG       Options,
     OUT PHANDLE     SubKey
     );
 
@@ -109,14 +110,14 @@ RegistryDeleteSubKey(
 extern NTSTATUS
 RegistryEnumerateSubKeys(
     IN  HANDLE      Key,
-    IN  NTSTATUS    (*Callback)(PVOID, HANDLE, PCHAR),
+    IN  NTSTATUS    (*Callback)(PVOID, HANDLE, PANSI_STRING),
     IN  PVOID       Context
     );
 
 extern NTSTATUS
 RegistryEnumerateValues(
     IN  HANDLE      Key,
-    IN  NTSTATUS    (*Callback)(PVOID, HANDLE, PCHAR),
+    IN  NTSTATUS    (*Callback)(PVOID, HANDLE, PANSI_STRING, ULONG),
     IN  PVOID       Context
     );
 
@@ -148,6 +149,22 @@ RegistryQuerySzValue(
     );
 
 extern NTSTATUS
+RegistryQueryBinaryValue(
+    IN  HANDLE          Key,
+    IN  PCHAR           Name,
+    OUT PVOID           *Buffer,
+    OUT PULONG          Length
+    );
+
+extern NTSTATUS
+RegistryUpdateBinaryValue(
+    IN  HANDLE          Key,
+    IN  PCHAR           Name,
+    IN  PVOID           Buffer,
+    IN  ULONG           Length
+    );
+
+extern NTSTATUS
 RegistryQueryKeyName(
     IN  HANDLE              Key,
     OUT PANSI_STRING        *Array
@@ -164,12 +181,16 @@ RegistryFreeSzValue(
     IN  PANSI_STRING    Array
     );
 
+extern VOID
+RegistryFreeBinaryValue(
+    IN  PVOID           Buffer
+    );
+
 extern NTSTATUS
 RegistryUpdateSzValue(
     IN  HANDLE          Key,
     IN  PCHAR           Name,
-    IN  ULONG           Type,
-    ...
+    IN  PANSI_STRING    Array
     );
 
 extern VOID
