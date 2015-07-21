@@ -55,9 +55,72 @@ typedef struct _XEN_DRIVER {
     PLOG_DISPOSITION    TraceDisposition;
     PLOG_DISPOSITION    InfoDisposition;
     HANDLE              UnplugKey;
+    HANDLE              StatusKey;
 } XEN_DRIVER, *PXEN_DRIVER;
 
 static XEN_DRIVER   Driver;
+
+static FORCEINLINE VOID
+__DriverSetUnplugKey(
+    IN  HANDLE  Key
+    )
+{
+    Driver.UnplugKey = Key;
+}
+
+static FORCEINLINE HANDLE
+__DriverGetUnplugKey(
+    VOID
+    )
+{
+    return Driver.UnplugKey;
+}
+
+HANDLE
+DriverGetUnplugKey(
+    VOID
+    )
+{
+    return __DriverGetUnplugKey();
+}
+
+static FORCEINLINE VOID
+__DriverSetStatusKey(
+    IN  HANDLE  Key
+    )
+{
+    Driver.StatusKey = Key;
+}
+
+static FORCEINLINE HANDLE
+__DriverGetStatusKey(
+    VOID
+    )
+{
+    return Driver.StatusKey;
+}
+
+HANDLE
+DriverGetStatusKey(
+    VOID
+    )
+{
+    return __DriverGetStatusKey();
+}
+
+static FORCEINLINE VOID
+__DriverRequestReboot(
+    VOID
+    )
+{
+    Info("<===>\n");
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    (VOID) RegistryUpdateDwordValue(__DriverGetStatusKey(),
+                                    "NeedReboot",
+                                    1);
+}
 
 XEN_API
 NTSTATUS
@@ -102,32 +165,9 @@ done:
 
 fail1:
     Info("MODULE '%s' NOT COMPATIBLE (REBOOT REQUIRED)\n", Name);
+    __DriverRequestReboot();
 
     return STATUS_INCOMPATIBLE_DRIVER_BLOCKED;
-}
-
-static FORCEINLINE VOID
-__DriverSetUnplugKey(
-    IN  HANDLE  Key
-    )
-{
-    Driver.UnplugKey = Key;
-}
-
-static FORCEINLINE HANDLE
-__DriverGetUnplugKey(
-    VOID
-    )
-{
-    return Driver.UnplugKey;
-}
-
-HANDLE
-DriverGetUnplugKey(
-    VOID
-    )
-{
-    return __DriverGetUnplugKey();
 }
 
 static VOID
@@ -152,6 +192,7 @@ DllInitialize(
 {
     HANDLE              ServiceKey;
     HANDLE              UnplugKey;
+    HANDLE              StatusKey;
     NTSTATUS            status;
 
     ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
@@ -210,33 +251,42 @@ DllInitialize(
 
     __DriverSetUnplugKey(UnplugKey);
 
-    status = AcpiInitialize();
+    status = RegistryCreateSubKey(ServiceKey,
+                                  "Status",
+                                  REG_OPTION_VOLATILE,
+                                  &StatusKey);
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    status = SystemInitialize();
+    __DriverSetUnplugKey(UnplugKey);
+
+    status = AcpiInitialize();
     if (!NT_SUCCESS(status))
         goto fail6;
 
-    status = HypercallInitialize();
+    status = SystemInitialize();
     if (!NT_SUCCESS(status))
         goto fail7;
 
-    status = BugCheckInitialize();
+    status = HypercallInitialize();
     if (!NT_SUCCESS(status))
         goto fail8;
 
-    status = ModuleInitialize();
+    status = BugCheckInitialize();
     if (!NT_SUCCESS(status))
         goto fail9;
 
-    status = ProcessInitialize();
+    status = ModuleInitialize();
     if (!NT_SUCCESS(status))
         goto fail10;
 
-    status = UnplugInitialize();
+    status = ProcessInitialize();
     if (!NT_SUCCESS(status))
         goto fail11;
+
+    status = UnplugInitialize();
+    if (!NT_SUCCESS(status))
+        goto fail12;
 
     RegistryCloseKey(ServiceKey);
 
@@ -245,35 +295,41 @@ done:
 
     return STATUS_SUCCESS;
 
+fail12:
+    Error("fail12\n");
+
+    ProcessTeardown();
+
 fail11:
     Error("fail11\n");
 
-    ProcessTeardown();
+    ModuleTeardown();
 
 fail10:
     Error("fail10\n");
 
-    ModuleTeardown();
+    BugCheckTeardown();
 
 fail9:
     Error("fail9\n");
 
-    BugCheckTeardown();
+    HypercallTeardown();
 
 fail8:
     Error("fail8\n");
 
-    HypercallTeardown();
+    SystemTeardown();
 
 fail7:
     Error("fail7\n");
 
-    SystemTeardown();
+    AcpiTeardown();
 
 fail6:
     Error("fail6\n");
 
-    AcpiTeardown();
+    RegistryCloseKey(StatusKey);
+    __DriverSetStatusKey(NULL);
 
 fail5:
     Error("fail5\n");
@@ -315,6 +371,7 @@ DllUnload(
     VOID
     )
 {
+    HANDLE  StatusKey;
     HANDLE  UnplugKey;
 
     Trace("====>\n");
@@ -333,6 +390,11 @@ DllUnload(
     HypercallTeardown();
 
     SystemTeardown();
+
+    StatusKey = __DriverGetStatusKey();
+
+    RegistryCloseKey(StatusKey);
+    __DriverSetStatusKey(NULL);
 
     UnplugKey = __DriverGetUnplugKey();
 

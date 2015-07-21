@@ -448,7 +448,7 @@ PdoDumpRevisions(
              "RANGE_SET v%u "
              "CACHE v%u "
              "GNTTAB v%u "
-             "UNPLUG v%u\n"
+             "UNPLUG v%u "
              "EMULATED v%u\n",
              Revision->Number,
              Revision->SuspendInterfaceVersion,

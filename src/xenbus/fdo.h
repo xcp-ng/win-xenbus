@@ -41,8 +41,7 @@ typedef struct _XENBUS_INTERRUPT XENBUS_INTERRUPT, *PXENBUS_INTERRUPT;
 
 extern NTSTATUS
 FdoCreate(
-    IN  PDEVICE_OBJECT  PhysicalDeviceObject,
-    IN  BOOLEAN         Active
+    IN  PDEVICE_OBJECT  PhysicalDeviceObject
     );
 
 extern VOID

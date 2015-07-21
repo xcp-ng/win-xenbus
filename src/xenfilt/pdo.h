@@ -65,8 +65,8 @@ extern NTSTATUS
 PdoCreate(
     IN  PXENFILT_FDO                    Fdo,
     IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
-    IN  PWCHAR                          DeviceID,
-    IN  PWCHAR                          InstanceID,
+    IN  PCHAR                           DeviceID,
+    IN  PCHAR                           InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type
     );
 

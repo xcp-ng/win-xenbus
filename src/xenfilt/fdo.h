@@ -43,8 +43,8 @@ typedef struct _XENFILT_FDO XENFILT_FDO, *PXENFILT_FDO;
 extern NTSTATUS
 FdoCreate(
     IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
-    IN  PWCHAR                          DeviceID,
-    IN  PWCHAR                          InstanceID,
+    IN  PCHAR                           DeviceID,
+    IN  PCHAR                           InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type
     );
 
@@ -82,6 +82,11 @@ FdoReleaseMutex(
 
 extern PDEVICE_OBJECT
 FdoGetDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    );
+
+extern PDEVICE_OBJECT
+FdoGetPhysicalDeviceObject(
     IN  PXENFILT_FDO    Fdo
     );
 

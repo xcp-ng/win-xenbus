@@ -186,23 +186,39 @@ FdoGetDeviceObject(
     return __FdoGetDeviceObject(Fdo);
 }
 
+static FORCEINLINE PDEVICE_OBJECT
+__FdoGetPhysicalDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    return Fdo->PhysicalDeviceObject;
+}
+
+PDEVICE_OBJECT
+FdoGetPhysicalDeviceObject(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    return __FdoGetPhysicalDeviceObject(Fdo);
+}
+
 static FORCEINLINE VOID
 __FdoSetDeviceID(
     IN  PXENFILT_FDO    Fdo,
-    IN  PWCHAR          DeviceID
+    IN  PCHAR           DeviceID
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
     NTSTATUS            status;
 
-    status = RtlStringCbPrintfW(Dx->DeviceID,
+    status = RtlStringCbPrintfA(Dx->DeviceID,
                                 MAX_DEVICE_ID_LEN,
-                                L"%ws",
+                                "%s",
                                 DeviceID);
     ASSERT(NT_SUCCESS(status));
 }
 
-static FORCEINLINE PWCHAR
+static FORCEINLINE PCHAR
 __FdoGetDeviceID(
     IN  PXENFILT_FDO    Fdo
     )
@@ -215,20 +231,20 @@ __FdoGetDeviceID(
 static FORCEINLINE VOID
 __FdoSetInstanceID(
     IN  PXENFILT_FDO    Fdo,
-    IN  PWCHAR          InstanceID
+    IN  PCHAR           InstanceID
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
     NTSTATUS            status;
 
-    status = RtlStringCbPrintfW(Dx->InstanceID,
+    status = RtlStringCbPrintfA(Dx->InstanceID,
                                 MAX_DEVICE_ID_LEN,
-                                L"%ws",
+                                "%s",
                                 InstanceID);
     ASSERT(NT_SUCCESS(status));
 }
 
-static FORCEINLINE PWCHAR
+static FORCEINLINE PCHAR
 __FdoGetInstanceID(
     IN  PXENFILT_FDO    Fdo
     )
@@ -247,7 +263,7 @@ __FdoSetName(
 
     status = RtlStringCbPrintfA(Fdo->Name,
                                 MAXNAMELEN,
-                                "%ws\\%ws",
+                                "%s\\%s",
                                 __FdoGetDeviceID(Fdo),
                                 __FdoGetInstanceID(Fdo));
     ASSERT(NT_SUCCESS(status));
@@ -259,14 +275,6 @@ __FdoGetName(
     )
 {
     return Fdo->Name;
-}
-
-static FORCEINLINE PDEVICE_OBJECT
-__FdoGetPhysicalDeviceObject(
-    IN  PXENFILT_FDO    Fdo
-    )
-{
-    return Fdo->PhysicalDeviceObject;
 }
 
 VOID
@@ -388,8 +396,8 @@ static NTSTATUS
 FdoQueryId(
     IN  PXENFILT_FDO        Fdo,
     IN  PDEVICE_OBJECT      DeviceObject,
-    IN  BUS_QUERY_ID_TYPE   IdType,
-    OUT PVOID               *Information
+    IN  BUS_QUERY_ID_TYPE   Type,
+    OUT PCHAR               Id
     )
 {
     PIRP                    Irp;
@@ -412,7 +420,7 @@ FdoQueryId(
     StackLocation->MajorFunction = IRP_MJ_PNP;
     StackLocation->MinorFunction = IRP_MN_QUERY_ID;
     StackLocation->Flags = 0;
-    StackLocation->Parameters.QueryId.IdType = IdType;
+    StackLocation->Parameters.QueryId.IdType = Type;
     StackLocation->DeviceObject = DeviceObject;
     StackLocation->FileObject = NULL;
 
@@ -443,7 +451,13 @@ FdoQueryId(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    *Information = (PVOID)Irp->IoStatus.Information;
+    status = RtlStringCbPrintfA(Id,
+                                MAX_DEVICE_ID_LEN,
+                                "%ws",
+                                (PWCHAR)Irp->IoStatus.Information);
+    ASSERT(NT_SUCCESS(status));
+
+    ExFreePool((PVOID)Irp->IoStatus.Information);
 
     IoFreeIrp(Irp);
 
@@ -462,21 +476,21 @@ FdoAddDevice(
     IN  PDEVICE_OBJECT  PhysicalDeviceObject
     )
 {
-    PWCHAR              DeviceID;
-    PWCHAR              InstanceID;
+    CHAR                DeviceID[MAX_DEVICE_ID_LEN];
+    CHAR                InstanceID[MAX_DEVICE_ID_LEN];
     NTSTATUS            status;
 
     status = FdoQueryId(Fdo,
                         PhysicalDeviceObject,
                         BusQueryDeviceID,
-                        &DeviceID);
+                        DeviceID);
     if (!NT_SUCCESS(status))
         goto fail1;
 
     status = FdoQueryId(Fdo,
                         PhysicalDeviceObject,
                         BusQueryInstanceID,
-                        &InstanceID);
+                        InstanceID);
     if (!NT_SUCCESS(status))
         goto fail2;
 
@@ -488,17 +502,10 @@ FdoAddDevice(
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    ExFreePool(InstanceID);
-    ExFreePool(DeviceID);
-
     return STATUS_SUCCESS;
 
 fail3:
-    ExFreePool(InstanceID);
-
 fail2:
-    ExFreePool(DeviceID);
-
 fail1:
     return status;
 }
@@ -1983,8 +1990,8 @@ FdoDispatch(
 NTSTATUS
 FdoCreate(
     IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
-    IN  PWCHAR                          DeviceID,
-    IN  PWCHAR                          InstanceID,
+    IN  PCHAR                           DeviceID,
+    IN  PCHAR                           InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type
     )
 {

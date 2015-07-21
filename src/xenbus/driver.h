@@ -42,6 +42,21 @@ DriverGetParametersKey(
     VOID
     );
 
+extern VOID
+DriverRequestReboot(
+    VOID
+    );
+
+extern VOID
+DriverAddFilters(
+    VOID
+    );
+
+extern VOID
+DriverRemoveFilters(
+    VOID
+    );
+
 typedef struct _XENBUS_FDO      XENBUS_FDO, *PXENBUS_FDO;
 typedef struct _XENBUS_PDO      XENBUS_PDO, *PXENBUS_PDO;
 

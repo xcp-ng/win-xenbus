@@ -92,21 +92,21 @@ __EmulatedFree(
 static NTSTATUS
 EmulatedSetObjectDeviceData(
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PWCHAR                      DeviceID,
-    IN  PWCHAR                      InstanceID
+    IN  PCHAR                       DeviceID,
+    IN  PCHAR                       InstanceID
     )
 {
     NTSTATUS                        status;
 
     status = RtlStringCbPrintfA(EmulatedObject->Data.Device.DeviceID,
                                 MAXNAMELEN,
-                                "%ws",
+                                "%s",
                                 DeviceID);
     ASSERT(NT_SUCCESS(status));
 
     status = RtlStringCbPrintfA(EmulatedObject->Data.Device.InstanceID,
                                 MAXNAMELEN,
-                                "%ws",
+                                "%s",
                                 InstanceID);
     ASSERT(NT_SUCCESS(status));
 
@@ -116,12 +116,10 @@ EmulatedSetObjectDeviceData(
 static NTSTATUS
 EmulatedSetObjectDiskData(
     IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PWCHAR                      DeviceID,
-    IN  PWCHAR                      InstanceID
+    IN  PCHAR                       DeviceID,
+    IN  PCHAR                       InstanceID
     )
 {
-    UNICODE_STRING                  Unicode;
-    ANSI_STRING                     Ansi;
     PCHAR                           End;
     ULONG                           Controller;
     ULONG                           Target;
@@ -130,17 +128,11 @@ EmulatedSetObjectDiskData(
 
     UNREFERENCED_PARAMETER(DeviceID);
 
-    RtlInitUnicodeString(&Unicode, InstanceID);
-
-    status = RtlUnicodeStringToAnsiString(&Ansi, &Unicode, TRUE);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    Controller = strtol(Ansi.Buffer, &End, 10);
+    Controller = strtol(InstanceID, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '.')
-        goto fail2;
+        goto fail1;
 
     End++;
 
@@ -148,7 +140,7 @@ EmulatedSetObjectDiskData(
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '.')
-        goto fail3;
+        goto fail2;
 
     End++;
 
@@ -156,26 +148,19 @@ EmulatedSetObjectDiskData(
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '\0')
-        goto fail4;
+        goto fail3;
 
     EmulatedObject->Data.Disk.Controller = Controller;
     EmulatedObject->Data.Disk.Target = Target;
     EmulatedObject->Data.Disk.Lun = Lun;
 
-    RtlFreeAnsiString(&Ansi);
-
     return STATUS_SUCCESS;
-
-fail4:
-    Error("fail4\n");
 
 fail3:
     Error("fail3\n");
 
 fail2:
     Error("fail2\n");
-
-    RtlFreeAnsiString(&Ansi);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -186,8 +171,8 @@ fail1:
 NTSTATUS
 EmulatedAddObject(
     IN  PXENFILT_EMULATED_CONTEXT       Context,
-    IN  PWCHAR                          DeviceID,
-    IN  PWCHAR                          InstanceID,
+    IN  PCHAR                           DeviceID,
+    IN  PCHAR                           InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
     OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
     )
