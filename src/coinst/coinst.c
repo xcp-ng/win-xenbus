@@ -649,110 +649,6 @@ fail1:
 }
 
 static BOOLEAN
-GetDeviceInstanceID(
-    IN  HDEVINFO            DeviceInfoSet,
-    IN  PSP_DEVINFO_DATA    DeviceInfoData,
-    OUT PTCHAR              *DeviceID,
-    OUT PTCHAR              *InstanceID
-    )
-{
-    DWORD                   DeviceInstanceIDLength;
-    PTCHAR                  DeviceInstanceID;
-    DWORD                   Index;
-    PTCHAR                  Prefix;
-    DWORD                   InstanceIDLength;
-    HRESULT                 Result;
-    HRESULT                 Error;
-
-    if (!SetupDiGetDeviceInstanceId(DeviceInfoSet,
-                                    DeviceInfoData,
-                                    NULL,
-                                    0,
-                                    &DeviceInstanceIDLength)) {
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-            goto fail1;
-    }
-
-    DeviceInstanceIDLength += sizeof (TCHAR);
-
-    DeviceInstanceID = calloc(1, DeviceInstanceIDLength);
-    if (DeviceInstanceID == NULL)
-        goto fail2;
-
-    if (!SetupDiGetDeviceInstanceId(DeviceInfoSet,
-                                    DeviceInfoData,
-                                    DeviceInstanceID,
-                                    DeviceInstanceIDLength,
-                                    NULL))
-        goto fail3;
-
-    for (Index = 0; Index < strlen(DeviceInstanceID); Index++)
-        DeviceInstanceID[Index] = (CHAR)toupper(DeviceInstanceID[Index]);
-
-    *DeviceID = DeviceInstanceID;
-
-    Prefix = strrchr(DeviceInstanceID, '\\');
-    assert(Prefix != NULL);
-    *Prefix++ = '\0';
-
-    DeviceInstanceID = strrchr(Prefix, '&');
-    if (DeviceInstanceID != NULL) {
-        *DeviceInstanceID++ = '\0';
-    } else {
-        DeviceInstanceID = Prefix;
-        Prefix = NULL;
-    }
-
-    if (Prefix != NULL)
-        Log("Parent Prefix = %s", Prefix);
-
-    InstanceIDLength = (ULONG)((strlen(DeviceInstanceID) +
-                                1) * sizeof (TCHAR));
-
-    *InstanceID = calloc(1, InstanceIDLength);
-    if (*InstanceID == NULL)
-        goto fail4;
-
-    Result = StringCbPrintf(*InstanceID,
-                            InstanceIDLength,
-                            "%s",
-                            DeviceInstanceID);
-    assert(SUCCEEDED(Result));
-    
-    Log("DeviceID = %s", *DeviceID);
-    Log("InstanceID = %s", *InstanceID);
-
-    return TRUE;
-
-fail4:
-    Log("fail4");
-
-    DeviceInstanceID = *DeviceID;
-    *DeviceID = NULL;
-
-fail3:
-    Log("fail3");
-
-    free(DeviceInstanceID);
-
-fail2:
-    Log("fail2");
-
-fail1:
-    Error = GetLastError();
-
-    {
-        PTCHAR  Message;
-
-        Message = GetErrorMessage(Error);
-        Log("fail1 (%s)", Message);
-        LocalFree(Message);
-    }
-
-    return FALSE;
-}
-
-static BOOLEAN
 MatchExistingDriver(
     VOID
     )
@@ -1423,20 +1319,11 @@ DifInstallPostProcess(
     IN  PCOINSTALLER_CONTEXT_DATA   Context
     )
 {
-    BOOLEAN                         Success;
-    PTCHAR                          DeviceID;
-    PTCHAR                          InstanceID;
     BOOLEAN                         NeedReboot;
-    HRESULT                         Error;
 
     UNREFERENCED_PARAMETER(Context);
 
     Log("====>");
-
-    Success = GetDeviceInstanceID(DeviceInfoSet, DeviceInfoData,
-                                  &DeviceID, &InstanceID);
-    if (!Success)
-        goto fail1;
 
     NeedReboot = FALSE;
 
@@ -1447,25 +1334,9 @@ DifInstallPostProcess(
     if (NeedReboot)
         (VOID) RequestReboot(DeviceInfoSet, DeviceInfoData);
 
-    free(DeviceID);
-    free(InstanceID);
-
     Log("<====");
 
     return NO_ERROR;
-
-fail1:
-    Error = GetLastError();
-
-    {
-        PTCHAR  Message;
-
-        Message = GetErrorMessage(Error);
-        Log("fail1 (%s)", Message);
-        LocalFree(Message);
-    }
-
-    return Error;
 }
 
 static HRESULT
