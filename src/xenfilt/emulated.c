@@ -316,7 +316,7 @@ EmulatedIsDiskPresent(
             Controller == EmulatedObject->Data.Disk.Controller &&
             Target == EmulatedObject->Data.Disk.Target &&
             Lun == EmulatedObject->Data.Disk.Lun) {
-            Trace("FOUND");
+            Trace("FOUND\n");
             break;
         }
 
