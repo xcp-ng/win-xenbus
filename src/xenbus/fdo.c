@@ -136,7 +136,7 @@ struct _XENBUS_FDO {
     XENBUS_RANGE_SET_INTERFACE      RangeSetInterface;
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
 
-    PXENBUS_RANGE_SET               RangeSet;
+    PXENBUS_RANGE_SET               IoRangeSet;
     LIST_ENTRY                      InterruptList;
 
     PXENBUS_EVTCHN_CHANNEL          Channel;
@@ -2583,13 +2583,13 @@ found:
     status = XENBUS_RANGE_SET(Create,
                               &Fdo->RangeSetInterface,
                               "io_space",
-                              &Fdo->RangeSet);
+                              &Fdo->IoRangeSet);
     if (!NT_SUCCESS(status))
         goto fail2;
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
+                              Fdo->IoRangeSet,
                               Translated->u.Memory.Start.QuadPart,
                               Translated->u.Memory.Length);
     if (!NT_SUCCESS(status))
@@ -2610,8 +2610,8 @@ fail3:
 
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
-                     Fdo->RangeSet);
-    Fdo->RangeSet = NULL;
+                     Fdo->IoRangeSet);
+    Fdo->IoRangeSet = NULL;
 
 fail2:
     Error("fail2\n");
@@ -2635,7 +2635,7 @@ FdoAllocateIoSpace(
 
     status = XENBUS_RANGE_SET(Pop,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
+                              Fdo->IoRangeSet,
                               Size,
                               &Address->QuadPart);
     if (!NT_SUCCESS(status))
@@ -2665,7 +2665,7 @@ FdoFreeIoSpace(
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
+                              Fdo->IoRangeSet,
                               Address.QuadPart,
                               Size);
     ASSERT(NT_SUCCESS(status));
@@ -2693,15 +2693,15 @@ FdoDestroyIoSpace(
 found:
     status = XENBUS_RANGE_SET(Get,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
+                              Fdo->IoRangeSet,
                               Translated->u.Memory.Start.QuadPart,
                               Translated->u.Memory.Length);
     ASSERT(NT_SUCCESS(status));
 
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
-                     Fdo->RangeSet);
-    Fdo->RangeSet = NULL;
+                     Fdo->IoRangeSet);
+    Fdo->IoRangeSet = NULL;
 }
 
 // This function must not touch pageable code or data
