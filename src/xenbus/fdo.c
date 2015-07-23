@@ -137,7 +137,7 @@ struct _XENBUS_FDO {
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
 
     PXENBUS_RANGE_SET               RangeSet;
-    LIST_ENTRY                      List;
+    LIST_ENTRY                      InterruptList;
 
     PXENBUS_EVTCHN_CHANNEL          Channel;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
@@ -2220,7 +2220,7 @@ FdoCreateInterrupt(
     PXENBUS_INTERRUPT   Interrupt;
     NTSTATUS            status;
 
-    InitializeListHead(&Fdo->List);
+    InitializeListHead(&Fdo->InterruptList);
 
     for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
         PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw = &Fdo->RawResourceList->PartialDescriptors[Index];
@@ -2233,7 +2233,7 @@ FdoCreateInterrupt(
         if (!NT_SUCCESS(status))
             goto fail1;
 
-        InsertTailList(&Fdo->List, &Interrupt->ListEntry);
+        InsertTailList(&Fdo->InterruptList, &Interrupt->ListEntry);
     }
 
     return STATUS_SUCCESS;
@@ -2241,11 +2241,11 @@ FdoCreateInterrupt(
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    while (!IsListEmpty(&Fdo->List)) {
+    while (!IsListEmpty(&Fdo->InterruptList)) {
         PLIST_ENTRY ListEntry;
 
-        ListEntry = RemoveHeadList(&Fdo->List);
-        ASSERT(ListEntry != &Fdo->List);
+        ListEntry = RemoveHeadList(&Fdo->InterruptList);
+        ASSERT(ListEntry != &Fdo->InterruptList);
 
         RtlZeroMemory(ListEntry, sizeof (LIST_ENTRY));
 
@@ -2254,7 +2254,7 @@ fail1:
         FdoDisconnectInterrupt(Fdo, Interrupt);
     }
 
-    RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
+    RtlZeroMemory(&Fdo->InterruptList, sizeof (LIST_ENTRY));
 
     return status;
 }
@@ -2273,8 +2273,8 @@ FdoAllocateInterrupt(
     PXENBUS_INTERRUPT       Interrupt;
     KIRQL                   Irql;
 
-    for (ListEntry = Fdo->List.Flink;
-         ListEntry != &Fdo->List;
+    for (ListEntry = Fdo->InterruptList.Flink;
+         ListEntry != &Fdo->InterruptList;
          ListEntry = ListEntry->Flink) {
         Interrupt = CONTAINING_RECORD(ListEntry, XENBUS_INTERRUPT, ListEntry);
 
@@ -2340,12 +2340,12 @@ FdoDestroyInterrupt(
     IN  PXENBUS_FDO     Fdo
     )
 {
-    while (!IsListEmpty(&Fdo->List)) {
+    while (!IsListEmpty(&Fdo->InterruptList)) {
         PLIST_ENTRY         ListEntry;
         PXENBUS_INTERRUPT   Interrupt;
 
-        ListEntry = RemoveHeadList(&Fdo->List);
-        ASSERT(ListEntry != &Fdo->List);
+        ListEntry = RemoveHeadList(&Fdo->InterruptList);
+        ASSERT(ListEntry != &Fdo->InterruptList);
 
         RtlZeroMemory(ListEntry, sizeof (LIST_ENTRY));
 
@@ -2361,7 +2361,7 @@ FdoDestroyInterrupt(
         FdoDisconnectInterrupt(Fdo, Interrupt);
     }
 
-    RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
+    RtlZeroMemory(&Fdo->InterruptList, sizeof (LIST_ENTRY));
 }
 
 static
