@@ -97,6 +97,7 @@ struct _XENBUS_FDO {
     CHAR                            VendorName[MAXNAMELEN];
 
     MUTEX                           Mutex;
+    LIST_ENTRY                      List;
     ULONG                           References;
 
     PXENBUS_THREAD                  ScanThread;
@@ -951,7 +952,7 @@ FdoAddPhysicalDeviceObject(
     Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
     ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
-    InsertTailList(&Fdo->Dx->ListEntry, &Dx->ListEntry);
+    InsertTailList(&Fdo->List, &Dx->ListEntry);
     ASSERT3U(Fdo->References, !=, 0);
     Fdo->References++;
 
@@ -1048,8 +1049,8 @@ FdoEnumerate(
 
     __FdoAcquireMutex(Fdo);
 
-    ListEntry = Fdo->Dx->ListEntry.Flink;
-    while (ListEntry != &Fdo->Dx->ListEntry) {
+    ListEntry = Fdo->List.Flink;
+    while (ListEntry != &Fdo->List) {
         PLIST_ENTRY     Next = ListEntry->Flink;
         PXENBUS_DX      Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PCHAR           Name = Dx->Name;
@@ -2781,8 +2782,8 @@ not_active:
 
     __FdoAcquireMutex(Fdo);
 
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
+    for (ListEntry = Fdo->List.Flink;
+         ListEntry != &Fdo->List;
          ListEntry = ListEntry->Flink) {
         PXENBUS_DX  Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PXENBUS_PDO Pdo = Dx->Pdo;
@@ -2864,8 +2865,8 @@ FdoD0ToD3(
 
     __FdoAcquireMutex(Fdo);
 
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
+    for (ListEntry = Fdo->List.Flink;
+         ListEntry != &Fdo->List;
          ListEntry = ListEntry->Flink) {
         PXENBUS_DX  Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PXENBUS_PDO Pdo = Dx->Pdo;
@@ -3384,8 +3385,8 @@ FdoSurpriseRemoval(
 
     __FdoAcquireMutex(Fdo);
 
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
+    for (ListEntry = Fdo->List.Flink;
+         ListEntry != &Fdo->List;
          ListEntry = ListEntry->Flink) {
         PXENBUS_DX  Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PXENBUS_PDO Pdo = Dx->Pdo;
@@ -3437,8 +3438,8 @@ FdoRemoveDevice(
 
     __FdoAcquireMutex(Fdo);
 
-    ListEntry = Fdo->Dx->ListEntry.Flink;
-    while (ListEntry != &Fdo->Dx->ListEntry) {
+    ListEntry = Fdo->List.Flink;
+    while (ListEntry != &Fdo->List) {
         PLIST_ENTRY Flink = ListEntry->Flink;
         PXENBUS_DX  Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PXENBUS_PDO Pdo = Dx->Pdo;
@@ -3574,8 +3575,8 @@ FdoQueryDeviceRelations(
     __FdoAcquireMutex(Fdo);
 
     Count = 0;
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
+    for (ListEntry = Fdo->List.Flink;
+         ListEntry != &Fdo->List;
          ListEntry = ListEntry->Flink)
         Count++;
 
@@ -3587,8 +3588,8 @@ FdoQueryDeviceRelations(
     if (Relations == NULL)
         goto fail1;
 
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
+    for (ListEntry = Fdo->List.Flink;
+         ListEntry != &Fdo->List;
          ListEntry = ListEntry->Flink) {
         PXENBUS_DX  Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PXENBUS_PDO Pdo = Dx->Pdo;
@@ -3626,8 +3627,8 @@ FdoQueryDeviceRelations(
 
     __FdoAcquireMutex(Fdo);
 
-    for (ListEntry = Fdo->Dx->ListEntry.Flink;
-         ListEntry != &Fdo->Dx->ListEntry;
+    for (ListEntry = Fdo->List.Flink;
+         ListEntry != &Fdo->List;
          ListEntry = ListEntry->Flink) {
         PXENBUS_DX  Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PXENBUS_PDO Pdo = Dx->Pdo;
@@ -4909,7 +4910,7 @@ FdoCreate(
 
 done:
     InitializeMutex(&Fdo->Mutex);
-    InitializeListHead(&Dx->ListEntry);
+    InitializeListHead(&Fdo->List);
     Fdo->References = 1;
 
     (VOID) FdoSetFriendlyName(Fdo, Header.DeviceID);
@@ -5048,7 +5049,7 @@ FdoDestroy(
     PXENBUS_DX      Dx = Fdo->Dx;
     PDEVICE_OBJECT  FunctionDeviceObject = Dx->DeviceObject;
 
-    ASSERT(IsListEmpty(&Dx->ListEntry));
+    ASSERT(IsListEmpty(&Fdo->List));
     ASSERT3U(Fdo->References, ==, 0);
     ASSERT3U(__FdoGetDevicePnpState(Fdo), ==, Deleted);
 
@@ -5060,6 +5061,7 @@ FdoDestroy(
 
     Dx->Fdo = NULL;
 
+    RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&Fdo->Mutex, sizeof (MUTEX));
 
     if (__FdoIsActive(Fdo)) {
