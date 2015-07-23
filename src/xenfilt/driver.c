@@ -572,6 +572,8 @@ DriverAddDevice(
                                   DeviceID,
                                   &Type);
     if (NT_SUCCESS(status)) {
+        __DriverAcquireMutex();
+
         status = FdoCreate(PhysicalDeviceObject,
                            DeviceID,
                            InstanceID,
@@ -580,12 +582,16 @@ DriverAddDevice(
         if (!NT_SUCCESS(status))
             goto fail3;
 
+        __DriverReleaseMutex();
+
         RegistryFreeSzValue(Type);
     }
 
     return STATUS_SUCCESS;
 
 fail3:
+        __DriverReleaseMutex();
+
 fail2:
 fail1:
     return status;

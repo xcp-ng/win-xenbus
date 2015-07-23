@@ -38,6 +38,7 @@
 #include "pdo.h"
 #include "driver.h"
 #include "names.h"
+#include "mutex.h"
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"
@@ -49,6 +50,10 @@ typedef struct _XENBUS_DRIVER {
     PDRIVER_OBJECT      DriverObject;
     HANDLE              ParametersKey;
     HANDLE              StatusKey;
+
+    MUTEX               Mutex;
+    LIST_ENTRY          List;
+    ULONG               References;
 } XENBUS_DRIVER, *PXENBUS_DRIVER;
 
 static XENBUS_DRIVER    Driver;
@@ -149,6 +154,71 @@ DriverRequestReboot(
                                     1);
 }
 
+static FORCEINLINE VOID
+__DriverAcquireMutex(
+    VOID
+    )
+{
+    AcquireMutex(&Driver.Mutex);
+}
+
+VOID
+DriverAcquireMutex(
+    VOID
+    )
+{
+    __DriverAcquireMutex();
+}
+
+static FORCEINLINE VOID
+__DriverReleaseMutex(
+    VOID
+    )
+{
+    ReleaseMutex(&Driver.Mutex);
+}
+
+VOID
+DriverReleaseMutex(
+    VOID
+    )
+{
+    __DriverReleaseMutex();
+}
+
+VOID
+DriverAddFunctionDeviceObject(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    PDEVICE_OBJECT  DeviceObject;
+    PXENBUS_DX      Dx;
+
+    DeviceObject = FdoGetDeviceObject(Fdo);
+    Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
+    ASSERT3U(Dx->Type, ==, FUNCTION_DEVICE_OBJECT);
+
+    InsertTailList(&Driver.List, &Dx->ListEntry);
+    Driver.References++;
+}
+
+VOID
+DriverRemoveFunctionDeviceObject(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    PDEVICE_OBJECT  DeviceObject;
+    PXENBUS_DX      Dx;
+
+    DeviceObject = FdoGetDeviceObject(Fdo);
+    Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
+    ASSERT3U(Dx->Type, ==, FUNCTION_DEVICE_OBJECT);
+
+    RemoveEntryList(&Dx->ListEntry);
+    ASSERT3U(Driver.References, !=, 0);
+    --Driver.References;
+}
+
 DRIVER_UNLOAD       DriverUnload;
 
 VOID
@@ -165,6 +235,13 @@ DriverUnload(
 
     if (*InitSafeBootMode > 0)
         goto done;
+
+    ASSERT(IsListEmpty(&Driver.List));
+    ASSERT3U(Driver.References, ==, 1);
+    --Driver.References;
+
+    RtlZeroMemory(&Driver.List, sizeof (LIST_ENTRY));
+    RtlZeroMemory(&Driver.Mutex, sizeof (MUTEX));
 
     StatusKey = __DriverGetStatusKey();
     __DriverSetStatusKey(NULL);
@@ -210,16 +287,20 @@ DriverAddDevice(
 
     Trace("====>\n");
 
+    __DriverAcquireMutex();
+
     status = FdoCreate(DeviceObject);
     if (!NT_SUCCESS(status))
         goto fail1;
+
+    __DriverReleaseMutex();
 
     Trace("<====\n");
 
     return STATUS_SUCCESS;
 
 fail1:
-    Error("fail1 (%08x)\n", status);
+    __DriverReleaseMutex();
 
     return status;
 }
@@ -351,6 +432,10 @@ DriverEntry(
 #pragma prefast(suppress:28168) // No matching __drv_dispatchType annotation for IRP_MJ_CREATE
        DriverObject->MajorFunction[Index] = DriverDispatch;
     }
+
+    InitializeMutex(&Driver.Mutex);
+    InitializeListHead(&Driver.List);
+    Driver.References = 1;
 
 done:
     Trace("<====\n");

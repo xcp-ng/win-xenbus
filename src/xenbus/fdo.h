@@ -78,6 +78,11 @@ FdoReleaseMutex(
     );
 
 extern PDEVICE_OBJECT
+FdoGetDeviceObject(
+    IN  PXENBUS_FDO Fdo
+    );
+
+extern PDEVICE_OBJECT
 FdoGetPhysicalDeviceObject(
     IN  PXENBUS_FDO Fdo
     );

@@ -250,6 +250,24 @@ __FdoGetSystemPowerState(
 }
 
 static FORCEINLINE PDEVICE_OBJECT
+__FdoGetDeviceObject(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    PXENBUS_DX      Dx = Fdo->Dx;
+
+    return Dx->DeviceObject;
+}
+
+PDEVICE_OBJECT
+FdoGetDeviceObject(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    return __FdoGetDeviceObject(Fdo);
+}
+
+static FORCEINLINE PDEVICE_OBJECT
 __FdoGetPhysicalDeviceObject(
     IN  PXENBUS_FDO Fdo
     )
@@ -1015,8 +1033,11 @@ FdoReleaseMutex(
 {
     __FdoReleaseMutex(Fdo);
 
-    if (Fdo->References == 0)
+    if (Fdo->References == 0) {
+        DriverAcquireMutex();
         FdoDestroy(Fdo);
+        DriverReleaseMutex();
+    }
 }
 
 static BOOLEAN
@@ -3513,8 +3534,11 @@ done:
     --Fdo->References;
     __FdoReleaseMutex(Fdo);
 
-    if (Fdo->References == 0)
+    if (Fdo->References == 0) {
+        DriverAcquireMutex();
         FdoDestroy(Fdo);
+        DriverReleaseMutex();
+    }
 
     return status;
 }
@@ -4923,6 +4947,8 @@ done:
     Dx->Fdo = Fdo;
     FunctionDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
+    DriverAddFunctionDeviceObject(Fdo);
+
     return STATUS_SUCCESS;
 
 fail19:
@@ -5052,6 +5078,8 @@ FdoDestroy(
     ASSERT(IsListEmpty(&Fdo->List));
     ASSERT3U(Fdo->References, ==, 0);
     ASSERT3U(__FdoGetDevicePnpState(Fdo), ==, Deleted);
+
+    DriverRemoveFunctionDeviceObject(Fdo);
 
     Fdo->NotDisableable = FALSE;
 
