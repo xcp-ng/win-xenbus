@@ -59,7 +59,6 @@
 #include "driver.h"
 #include "range_set.h"
 #include "unplug.h"
-#include "filters.h"
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"
@@ -4837,7 +4836,6 @@ FdoCreate(
         goto fail8;
 
     if (Fdo->PvdeviceInterface.Interface.Context == NULL) {
-        (VOID) FiltersInstall();
         DriverRequestReboot();
         goto done;
     }
@@ -5147,8 +5145,6 @@ FdoDestroy(
 
         FdoClearActive(Fdo);
     }
-
-    (VOID) FiltersUninstall();
 
     RtlZeroMemory(&Fdo->PvdeviceInterface,
                   sizeof (XENFILT_PVDEVICE_INTERFACE));

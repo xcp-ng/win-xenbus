@@ -39,6 +39,7 @@
 #include "driver.h"
 #include "names.h"
 #include "mutex.h"
+#include "filters.h"
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"
@@ -193,13 +194,17 @@ DriverAddFunctionDeviceObject(
 {
     PDEVICE_OBJECT  DeviceObject;
     PXENBUS_DX      Dx;
+    ULONG           References;
 
     DeviceObject = FdoGetDeviceObject(Fdo);
     Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
     ASSERT3U(Dx->Type, ==, FUNCTION_DEVICE_OBJECT);
 
     InsertTailList(&Driver.List, &Dx->ListEntry);
-    Driver.References++;
+    References = Driver.References++;
+
+    if (References == 1)
+        FiltersInstall();
 }
 
 VOID
@@ -209,6 +214,7 @@ DriverRemoveFunctionDeviceObject(
 {
     PDEVICE_OBJECT  DeviceObject;
     PXENBUS_DX      Dx;
+    ULONG           References;
 
     DeviceObject = FdoGetDeviceObject(Fdo);
     Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
@@ -216,7 +222,10 @@ DriverRemoveFunctionDeviceObject(
 
     RemoveEntryList(&Dx->ListEntry);
     ASSERT3U(Driver.References, !=, 0);
-    --Driver.References;
+    References = --Driver.References;
+
+    if (References == 1)
+        FiltersUninstall();
 }
 
 DRIVER_UNLOAD       DriverUnload;
