@@ -535,8 +535,6 @@ FdoEnumerate(
                   Relations->Objects,
                   sizeof (PDEVICE_OBJECT) * Count);
 
-    __FdoAcquireMutex(Fdo);
-
     // Remove any PDOs that do not appear in the device list
     ListEntry = Fdo->List.Flink;
     while (ListEntry != &Fdo->List) {
@@ -561,8 +559,6 @@ FdoEnumerate(
             (VOID) FdoAddDevice(Fdo, PhysicalDeviceObject[Index]);
     }
     
-    __FdoReleaseMutex(Fdo);
-
     __FdoSetEnumerated(Fdo);
 
     __FdoFree(PhysicalDeviceObject);
@@ -1128,6 +1124,8 @@ FdoQueryDeviceRelations(
 
     LowerRelations = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
 
+    __FdoAcquireMutex(Fdo);
+
     if (LowerRelations->Count != 0)
         FdoEnumerate(Fdo, LowerRelations);
 
@@ -1145,7 +1143,20 @@ FdoQueryDeviceRelations(
         goto fail3;
 
     if (State == XENFILT_FILTER_DISABLED) {
-        ASSERT3U(Count, ==, LowerRelations->Count);
+        PLIST_ENTRY ListEntry;
+
+        for (ListEntry = Fdo->List.Flink;
+             ListEntry != &Fdo->List;
+             ListEntry = ListEntry->Flink) {
+            PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
+            PXENFILT_PDO    Pdo = Dx->Pdo;
+
+            ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
+
+            if (PdoGetDevicePnpState(Pdo) == Present)
+                PdoSetDevicePnpState(Pdo, Enumerated);
+        }
+
         RtlCopyMemory(Relations, LowerRelations, Size);
 
         Trace("%s: %d PDO(s)\n",
@@ -1163,6 +1174,8 @@ FdoQueryDeviceRelations(
         IoInvalidateDeviceRelations(__FdoGetPhysicalDeviceObject(Fdo),
                                     BusRelations);
     }
+
+    __FdoReleaseMutex(Fdo);
 
     ExFreePool(LowerRelations);
 
