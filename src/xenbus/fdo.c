@@ -2985,10 +2985,14 @@ FdoS4ToS3(
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
+    if (!__FdoIsActive(Fdo))
+        goto not_active;
+
     HypercallPopulate();
 
     UnplugDevices();
 
+not_active:
     KeLowerIrql(Irql);
 
     __FdoSetSystemPowerState(Fdo, PowerSystemSleeping3);
