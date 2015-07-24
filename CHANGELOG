@@ -10,3 +10,6 @@
 
 8.0.0 (2014-07-24):
 * Drivers with new API version scheme
+
+8.1.0 (2015-07-24):
+* Revised API versioning and unplug mechanism
