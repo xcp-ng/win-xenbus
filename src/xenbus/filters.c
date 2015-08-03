@@ -80,8 +80,6 @@ FiltersInstallClass(
 
     Trace("====>\n");
 
-    Info("%s %s\n", ClassName, DriverName);
-
     status = RegistryOpenSubKey(NULL,
                                 CLASS_PATH,
                                 KEY_ALL_ACCESS,
@@ -133,6 +131,8 @@ FiltersInstallClass(
         goto fail5;
 
     __FiltersFree(New);
+
+    Info("%s %s\n", ClassName, DriverName);
 
 done:
     if (Old != NULL)
@@ -198,8 +198,6 @@ FiltersUninstallClass(
 
     Trace("====>\n");
 
-    Info("%s %s\n", ClassName, DriverName);
-
     status = RegistryOpenSubKey(NULL,
                                 CLASS_PATH,
                                 KEY_ALL_ACCESS,
@@ -253,6 +251,8 @@ found:
         goto fail5;
 
     __FiltersFree(New);
+
+    Info("%s %s\n", ClassName, DriverName);
 
 done:
     if (Old != NULL)
