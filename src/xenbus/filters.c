@@ -126,7 +126,10 @@ FiltersInstallClass(
 
     RtlInitAnsiString(&New[Index], DriverName);
 
-    status = RegistryUpdateSzValue(Key, "UpperFilters", New);
+    status = RegistryUpdateSzValue(Key,
+                                   "UpperFilters",
+                                   REG_MULTI_SZ,
+                                   New);
     if (!NT_SUCCESS(status))
         goto fail5;
 
@@ -246,7 +249,10 @@ found:
         Count++;
     }
 
-    status = RegistryUpdateSzValue(Key, "UpperFilters", New);
+    status = RegistryUpdateSzValue(Key,
+                                   "UpperFilters",
+                                   REG_MULTI_SZ,
+                                   New);
     if (!NT_SUCCESS(status))
         goto fail5;
 

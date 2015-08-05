@@ -210,6 +210,7 @@ PvdeviceSetActive(
 
     status = RegistryUpdateSzValue(ParametersKey,
                                    "ActiveDeviceID",
+                                   REG_SZ,
                                    Ansi);
     if (!NT_SUCCESS(status))
         goto fail2;
@@ -218,6 +219,7 @@ PvdeviceSetActive(
 
     status = RegistryUpdateSzValue(ParametersKey,
                                    "ActiveInstanceID",
+                                   REG_SZ,
                                    Ansi);
     if (!NT_SUCCESS(status))
         goto fail3;

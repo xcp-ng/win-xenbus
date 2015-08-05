@@ -1300,12 +1300,12 @@ NTSTATUS
 RegistryUpdateSzValue(
     IN  HANDLE                      Key,
     IN  PCHAR                       Name,
+    IN  ULONG                       Type,
     IN  PANSI_STRING                Array
     )
 {
     ANSI_STRING                     Ansi;
     UNICODE_STRING                  Unicode;
-    ULONG                           Type;
     PKEY_VALUE_PARTIAL_INFORMATION  Partial;
     NTSTATUS                        status;
 
@@ -1314,8 +1314,6 @@ RegistryUpdateSzValue(
     status = RtlAnsiStringToUnicodeString(&Unicode, &Ansi, TRUE);
     if (!NT_SUCCESS(status))
         goto fail1;
-
-    Type = (Array[1].Buffer != NULL) ? REG_MULTI_SZ : REG_SZ;
 
     switch (Type) {
     case REG_SZ:

@@ -750,6 +750,7 @@ FdoSetFriendlyName(
 
     status = RegistryUpdateSzValue(HardwareKey,
                                    "FriendlyName",
+                                   REG_SZ,
                                    FriendlyName);
     if (!NT_SUCCESS(status))
         goto fail5;
