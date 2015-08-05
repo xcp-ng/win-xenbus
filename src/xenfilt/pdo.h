@@ -56,6 +56,22 @@ PdoGetPhysicalDeviceObject(
     IN  PXENFILT_PDO    Pdo
     );
 
+extern BOOLEAN
+PdoIsMissing(
+    IN  PXENFILT_PDO    Pdo
+    );
+
+extern VOID
+PdoSetMissing(
+    IN  PXENFILT_PDO    Pdo,
+    IN  const CHAR      *Reason
+    );
+
+extern BOOLEAN
+PdoIsMasked(
+    IN  PXENFILT_PDO    Pdo
+    );
+
 extern PDEVICE_OBJECT
 PdoGetDeviceObject(
     IN  PXENFILT_PDO    Pdo

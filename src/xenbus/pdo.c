@@ -848,6 +848,7 @@ PdoRemoveDevice(
     )
 {
     PXENBUS_FDO     Fdo = __PdoGetFdo(Pdo);
+    BOOLEAN         NeedInvalidate;
     NTSTATUS        status;
 
     if (__PdoGetDevicePowerState(Pdo) != PowerDeviceD0)
@@ -856,23 +857,28 @@ PdoRemoveDevice(
     PdoD0ToD3(Pdo);
 
 done:
+    NeedInvalidate = FALSE;
+
     FdoAcquireMutex(Fdo);
 
-    if (__PdoIsMissing(Pdo) ||
-        __PdoGetDevicePnpState(Pdo) == SurpriseRemovePending)
-        __PdoSetDevicePnpState(Pdo, Deleted);
-    else
-        __PdoSetDevicePnpState(Pdo, Enumerated);
-
     if (__PdoIsMissing(Pdo)) {
-        if (__PdoGetDevicePnpState(Pdo) == Deleted)
+        DEVICE_PNP_STATE    State = __PdoGetDevicePnpState(Pdo);
+
+        __PdoSetDevicePnpState(Pdo, Deleted);
+
+        if (State == SurpriseRemovePending)
             PdoDestroy(Pdo);
         else
-            IoInvalidateDeviceRelations(FdoGetPhysicalDeviceObject(Fdo), 
-                                        BusRelations);
+            NeedInvalidate = TRUE;
+    } else {
+        __PdoSetDevicePnpState(Pdo, Enumerated);
     }
 
     FdoReleaseMutex(Fdo);
+
+    if (NeedInvalidate)
+        IoInvalidateDeviceRelations(FdoGetPhysicalDeviceObject(Fdo),
+                                    BusRelations);
 
     status = STATUS_SUCCESS;
 
@@ -1559,9 +1565,10 @@ PdoEject(
     __PdoSetDevicePnpState(Pdo, Deleted);
     __PdoSetMissing(Pdo, "device ejected");
 
-    PdoDestroy(Pdo);
-
     FdoReleaseMutex(Fdo);
+
+    IoInvalidateDeviceRelations(FdoGetPhysicalDeviceObject(Fdo),
+                                BusRelations);
 
     status = STATUS_SUCCESS;
 

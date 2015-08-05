@@ -126,6 +126,16 @@ __FdoGetDevicePnpState(
     return Dx->DevicePnpState;
 }
 
+static FORCEINLINE DEVICE_PNP_STATE
+__FdoGetPreviousDevicePnpState(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    PXENFILT_DX         Dx = Fdo->Dx;
+
+    return Dx->PreviousDevicePnpState;
+}
+
 static FORCEINLINE VOID
 __FdoSetDevicePowerState(
     IN  PXENFILT_FDO        Fdo,
@@ -542,10 +552,32 @@ FdoEnumerate(
         PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
         PXENFILT_PDO    Pdo = Dx->Pdo;
 
-        for (Index = 0; Index < Count; Index++) {
-            if (PdoGetPhysicalDeviceObject(Pdo) == PhysicalDeviceObject[Index]) {
-                PhysicalDeviceObject[Index] = NULL; // avoid duplication
-                break;
+        if (!PdoIsMissing(Pdo) && PdoGetDevicePnpState(Pdo) != Deleted) {
+            BOOLEAN         Missing;
+
+            Missing = TRUE;
+
+            for (Index = 0; Index < Count; Index++) {
+                if (PdoGetPhysicalDeviceObject(Pdo) == PhysicalDeviceObject[Index]) {
+                    Missing = FALSE;
+#pragma prefast(suppress:6387)  // PhysicalDeviceObject[Index] could be NULL
+                    ObDereferenceObject(PhysicalDeviceObject[Index]);
+                    PhysicalDeviceObject[Index] = NULL; // avoid duplication
+                    break;
+                }
+            }
+
+            if (Missing) {
+                PdoSetMissing(Pdo, "device disappeared");
+
+                // If the PDO has not yet been enumerated then we can
+                // go ahead and mark it as deleted, otherwise we need
+                // to notify PnP manager and wait for the REMOVE_DEVICE
+                // IRP.
+                if (PdoGetDevicePnpState(Pdo) == Present) {
+                    PdoSetDevicePnpState(Pdo, Deleted);
+                    PdoDestroy(Pdo);
+                }
             }
         }
 
@@ -555,8 +587,10 @@ FdoEnumerate(
     // Walk the list and create PDO filters for any new devices
     for (Index = 0; Index < Count; Index++) {
 #pragma warning(suppress:6385)  // Reading invalid data from 'PhysicalDeviceObject'
-        if (PhysicalDeviceObject[Index] != NULL)
+        if (PhysicalDeviceObject[Index] != NULL) {
             (VOID) FdoAddDevice(Fdo, PhysicalDeviceObject[Index]);
+            ObDereferenceObject(PhysicalDeviceObject[Index]);
+        }
     }
     
     __FdoSetEnumerated(Fdo);
@@ -807,19 +841,22 @@ FdoStopDevice(
     IN  PIRP                    Irp
     )
 {
-    POWER_STATE                 PowerState;
     NTSTATUS                    status;
 
     status = IoAcquireRemoveLock(&Fdo->Dx->RemoveLock, Irp);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    PowerState.DeviceState = PowerDeviceD3;
-    PoSetPowerState(Fdo->Dx->DeviceObject,
-                    DevicePowerState,
-                    PowerState);
+    if (__FdoGetDevicePowerState(Fdo) == PowerDeviceD0) {
+        POWER_STATE PowerState;
 
-    __FdoSetDevicePowerState(Fdo, PowerDeviceD3);
+        PowerState.DeviceState = PowerDeviceD3;
+        PoSetPowerState(Fdo->Dx->DeviceObject,
+                        DevicePowerState,
+                        PowerState);
+
+        __FdoSetDevicePowerState(Fdo, PowerDeviceD3);
+    }
 
     __FdoSetDevicePnpState(Fdo, Stopped);
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -1014,20 +1051,49 @@ FdoRemoveDevice(
     IN  PIRP                    Irp
     )
 {
-    POWER_STATE                 PowerState;
+    PLIST_ENTRY                 ListEntry;
     NTSTATUS                    status;
 
     status = IoAcquireRemoveLock(&Fdo->Dx->RemoveLock, Irp);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    PowerState.DeviceState = PowerDeviceD3;
-    PoSetPowerState(Fdo->Dx->DeviceObject,
-                    DevicePowerState,
-                    PowerState);
+    if (__FdoGetPreviousDevicePnpState(Fdo) != Started)
+        goto done;
 
-    __FdoSetDevicePowerState(Fdo, PowerDeviceD3);
+    __FdoAcquireMutex(Fdo);
 
+    ListEntry = Fdo->List.Flink;
+    while (ListEntry != &Fdo->List) {
+        PLIST_ENTRY     Flink = ListEntry->Flink;
+        PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
+        PXENFILT_PDO    Pdo = Dx->Pdo;
+
+        ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
+
+        if (!PdoIsMissing(Pdo))
+            PdoSetMissing(Pdo, "FDO removed");
+
+        PdoSetDevicePnpState(Pdo, Deleted);
+        PdoDestroy(Pdo);
+
+        ListEntry = Flink;
+    }
+
+    __FdoReleaseMutex(Fdo);
+
+    if (__FdoGetDevicePowerState(Fdo) == PowerDeviceD0) {
+        POWER_STATE PowerState;
+
+        PowerState.DeviceState = PowerDeviceD3;
+        PoSetPowerState(Fdo->Dx->DeviceObject,
+                        DevicePowerState,
+                        PowerState);
+
+        __FdoSetDevicePowerState(Fdo, PowerDeviceD3);
+    }
+
+done:
     __FdoSetDevicePnpState(Fdo, Deleted);
 
     IoReleaseRemoveLockAndWait(&Fdo->Dx->RemoveLock, Irp);
@@ -1083,8 +1149,8 @@ FdoQueryDeviceRelations(
     KEVENT                  Event;
     PIO_STACK_LOCATION      StackLocation;
     ULONG                   Size;
-    PDEVICE_RELATIONS       LowerRelations;
     PDEVICE_RELATIONS       Relations;
+    PLIST_ENTRY             ListEntry;
     XENFILT_FILTER_STATE    State;
     ULONG                   Count;
     NTSTATUS                status;
@@ -1122,16 +1188,24 @@ FdoQueryDeviceRelations(
     if (StackLocation->Parameters.QueryDeviceRelations.Type != BusRelations)
         goto done;
 
-    LowerRelations = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
-
     __FdoAcquireMutex(Fdo);
 
-    if (LowerRelations->Count != 0)
-        FdoEnumerate(Fdo, LowerRelations);
+    Relations = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
+
+    if (Relations->Count != 0)
+        FdoEnumerate(Fdo, Relations);
+
+    ExFreePool(Relations);
 
     State = DriverGetFilterState();
+    Count = 0;
 
-    Count = (State == XENFILT_FILTER_DISABLED) ? LowerRelations->Count : 0;
+    if (State == XENFILT_FILTER_DISABLED) {
+        for (ListEntry = Fdo->List.Flink;
+             ListEntry != &Fdo->List;
+             ListEntry = ListEntry->Flink)
+            Count++;
+    }
 
     Size = FIELD_OFFSET(DEVICE_RELATIONS, Objects) +
            (sizeof (PDEVICE_OBJECT) * __max(Count, 1));
@@ -1145,39 +1219,44 @@ FdoQueryDeviceRelations(
     if (State == XENFILT_FILTER_DISABLED) {
         PLIST_ENTRY ListEntry;
 
-        for (ListEntry = Fdo->List.Flink;
-             ListEntry != &Fdo->List;
-             ListEntry = ListEntry->Flink) {
+        ListEntry = Fdo->List.Flink;
+        while (ListEntry != &Fdo->List) {
             PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
             PXENFILT_PDO    Pdo = Dx->Pdo;
+            PLIST_ENTRY     Next = ListEntry->Flink;
 
             ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
+            if (PdoIsMissing(Pdo)) {
+                if (PdoGetDevicePnpState(Pdo) == Deleted)
+                    PdoDestroy(Pdo);
+
+                continue;
+            }
+
             if (PdoGetDevicePnpState(Pdo) == Present)
                 PdoSetDevicePnpState(Pdo, Enumerated);
+
+            ObReferenceObject(PdoGetPhysicalDeviceObject(Pdo));
+            Relations->Objects[Relations->Count++] = PdoGetPhysicalDeviceObject(Pdo);
+
+            ListEntry = Next;
         }
 
-        RtlCopyMemory(Relations, LowerRelations, Size);
+        ASSERT3U(Relations->Count, <=, Count);
 
         Trace("%s: %d PDO(s)\n",
               __FdoGetName(Fdo),
               Relations->Count);
     } else {
-        ULONG   Index;
-
         Trace("%s: FILTERED\n",
               __FdoGetName(Fdo));
-
-        for (Index = 0; Index < LowerRelations->Count; Index++)
-            ObDereferenceObject(LowerRelations->Objects[Index]);
 
         IoInvalidateDeviceRelations(__FdoGetPhysicalDeviceObject(Fdo),
                                     BusRelations);
     }
 
     __FdoReleaseMutex(Fdo);
-
-    ExFreePool(LowerRelations);
 
     Irp->IoStatus.Information = (ULONG_PTR)Relations;
     status = STATUS_SUCCESS;
@@ -1191,16 +1270,12 @@ done:
     return status;
 
 fail3:
-    Error("fail3\n");
+    __FdoReleaseMutex(Fdo);
 
 fail2:
-    Error("fail2\n");
-
     IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
-
     Irp->IoStatus.Status = status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 

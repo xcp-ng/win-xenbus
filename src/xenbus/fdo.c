@@ -1074,41 +1074,43 @@ FdoEnumerate(
     while (ListEntry != &Fdo->List) {
         PLIST_ENTRY     Next = ListEntry->Flink;
         PXENBUS_DX      Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
-        PCHAR           Name = Dx->Name;
         PXENBUS_PDO     Pdo = Dx->Pdo;
-        BOOLEAN         Missing;
 
-        Name = PdoGetName(Pdo);
-        Missing = TRUE;
+        if (!PdoIsMissing(Pdo) && PdoGetDevicePnpState(Pdo) != Deleted) {
+            PCHAR           Name;
+            BOOLEAN         Missing;
 
-        // If the PDO already exists ans its name is in the class list then
-        // we don't want to remove it.
-        for (Index = 0; Classes[Index].Buffer != NULL; Index++) {
-            PANSI_STRING Class = &Classes[Index];
+            Name = PdoGetName(Pdo);
+            Missing = TRUE;
 
-            if (Class->Length == 0)
-                continue;
+            // If the PDO already exists and its name is in the class list
+            // then we don't want to remove it.
+            for (Index = 0; Classes[Index].Buffer != NULL; Index++) {
+                PANSI_STRING Class = &Classes[Index];
 
-            if (strcmp(Name, Class->Buffer) == 0) {
-                Missing = FALSE;
-                Class->Length = 0;  // avoid duplication
-                break;
+                if (Class->Length == 0)
+                    continue;
+
+                if (strcmp(Name, Class->Buffer) == 0) {
+                    Missing = FALSE;
+                    Class->Length = 0;  // avoid duplication
+                    break;
+                }
             }
-        }
 
-        if (Missing &&
-            !PdoIsMissing(Pdo) &&
-            PdoGetDevicePnpState(Pdo) != Deleted) {
-            PdoSetMissing(Pdo, "device disappeared");
+            if (Missing) {
+                PdoSetMissing(Pdo, "device disappeared");
 
-            // If the PDO has not yet been enumerated then we can go ahead
-            // and mark it as deleted, otherwise we need to notify PnP manager and
-            // wait for the REMOVE_DEVICE IRP.
-            if (PdoGetDevicePnpState(Pdo) == Present) {
-                PdoSetDevicePnpState(Pdo, Deleted);
-                PdoDestroy(Pdo);
-            } else {
-                NeedInvalidate = TRUE;
+                // If the PDO has not yet been enumerated then we can
+                // go ahead and mark it as deleted, otherwise we need
+                // to notify PnP manager and wait for the REMOVE_DEVICE
+                // IRP.
+                if (PdoGetDevicePnpState(Pdo) == Present) {
+                    PdoSetDevicePnpState(Pdo, Deleted);
+                    PdoDestroy(Pdo);
+                } else {
+                    NeedInvalidate = TRUE;
+                }
             }
         }
 
@@ -3624,10 +3626,6 @@ FdoQueryDeviceRelations(
 
         ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
-        if (PdoGetDevicePnpState(Pdo) == Deleted &&
-            !PdoIsMissing(Pdo))
-            PdoSetMissing(Pdo, "surprise remove");
-
         if (PdoIsMissing(Pdo))
             continue;
 
@@ -3655,17 +3653,19 @@ FdoQueryDeviceRelations(
 
     __FdoAcquireMutex(Fdo);
 
-    for (ListEntry = Fdo->List.Flink;
-         ListEntry != &Fdo->List;
-         ListEntry = ListEntry->Flink) {
+    ListEntry = Fdo->List.Flink;
+    while (ListEntry != &Fdo->List) {
         PXENBUS_DX  Dx = CONTAINING_RECORD(ListEntry, XENBUS_DX, ListEntry);
         PXENBUS_PDO Pdo = Dx->Pdo;
+        PLIST_ENTRY Next = ListEntry->Flink;
 
         ASSERT3U(Dx->Type, ==, PHYSICAL_DEVICE_OBJECT);
 
         if (PdoGetDevicePnpState(Pdo) == Deleted &&
             PdoIsMissing(Pdo))
             PdoDestroy(Pdo);
+
+        ListEntry = Next;
     }
 
     __FdoReleaseMutex(Fdo);
