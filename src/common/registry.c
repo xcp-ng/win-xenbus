@@ -1155,12 +1155,12 @@ RegistryQuerySystemStartOption(
     Length = (ULONG)strlen(Prefix);
 
     Option = __strtok_r(Ansi[0].Buffer, " ", &Context);
-    if (strncmp(Prefix, Option, Length) == 0)
-        goto found;
-
-    while ((Option = __strtok_r(NULL, " ", &Context)) != NULL)
+    while (Option != NULL) {
         if (strncmp(Prefix, Option, Length) == 0)
             goto found;
+
+        Option = __strtok_r(NULL, " ", &Context);
+    }
 
     status = STATUS_OBJECT_NAME_NOT_FOUND;
     goto fail3;
