@@ -258,7 +258,7 @@ DllInitialize(
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    __DriverSetUnplugKey(UnplugKey);
+    __DriverSetStatusKey(StatusKey);
 
     status = AcpiInitialize();
     if (!NT_SUCCESS(status))
