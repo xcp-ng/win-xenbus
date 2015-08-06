@@ -1217,8 +1217,6 @@ FdoQueryDeviceRelations(
         goto fail3;
 
     if (State == XENFILT_FILTER_DISABLED) {
-        PLIST_ENTRY ListEntry;
-
         ListEntry = Fdo->List.Flink;
         while (ListEntry != &Fdo->List) {
             PXENFILT_DX     Dx = CONTAINING_RECORD(ListEntry, XENFILT_DX, ListEntry);
