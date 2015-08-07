@@ -72,6 +72,7 @@ FiltersInstallClass(
     HANDLE          ClassKey;
     UNICODE_STRING  Unicode;
     HANDLE          Key;
+    ULONG           Type;
     ULONG           Count;
     PANSI_STRING    Old;
     ULONG           Index;
@@ -100,8 +101,12 @@ FiltersInstallClass(
 
     Count = 0;
 
-    status = RegistryQuerySzValue(Key, "UpperFilters", &Old);
+    status = RegistryQuerySzValue(Key, "UpperFilters", &Type, &Old);
     if (NT_SUCCESS(status)) {
+        status = STATUS_INVALID_PARAMETER;
+        if (Type != REG_MULTI_SZ)
+            goto fail4;
+
         for (Index = 0; Old[Index].Buffer != NULL; Index++) {
             if (_stricmp(Old[Index].Buffer, DriverName) == 0)
                 goto done;
@@ -116,7 +121,7 @@ FiltersInstallClass(
 
     status = STATUS_NO_MEMORY;
     if (New == NULL)
-        goto fail4;
+        goto fail5;
 
     Index = 0;
     while (Index < Count) {
@@ -131,7 +136,7 @@ FiltersInstallClass(
                                    REG_MULTI_SZ,
                                    New);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     __FiltersFree(New);
 
@@ -151,16 +156,19 @@ done:
 
     return STATUS_SUCCESS;
 
-fail5:
-    Error("fail5\n");
+fail6:
+    Error("fail6\n");
 
     __FiltersFree(New);
 
-fail4:
-    Error("fail4\n");
+fail5:
+    Error("fail5\n");
 
     if (Old != NULL)
         RegistryFreeSzValue(Old);
+
+fail4:
+    Error("fail4\n");
 
     RegistryCloseKey(Key);
 
@@ -193,6 +201,7 @@ FiltersUninstallClass(
     HANDLE          ClassKey;
     UNICODE_STRING  Unicode;
     HANDLE          Key;
+    ULONG           Type;
     ULONG           Count;
     PANSI_STRING    Old;
     ULONG           Index;
@@ -219,8 +228,12 @@ FiltersUninstallClass(
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    status = RegistryQuerySzValue(Key, "UpperFilters", &Old);
+    status = RegistryQuerySzValue(Key, "UpperFilters", &Type, &Old);
     if (NT_SUCCESS(status)) {
+        status = STATUS_INVALID_PARAMETER;
+        if (Type != REG_MULTI_SZ)
+            goto fail4;
+
         for (Index = 0; Old[Index].Buffer != NULL; Index++) {
             if (_stricmp(Old[Index].Buffer, DriverName) == 0)
                 goto found;
@@ -238,7 +251,7 @@ found:
 
     status = STATUS_NO_MEMORY;
     if (New == NULL)
-        goto fail4;
+        goto fail5;
 
     Count = 0;
     for (Index = 0; Old[Index].Buffer != NULL; Index++) {
@@ -254,7 +267,7 @@ found:
                                    REG_MULTI_SZ,
                                    New);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     __FiltersFree(New);
 
@@ -274,16 +287,19 @@ done:
 
     return STATUS_SUCCESS;
 
-fail5:
-    Error("fail5\n");
+fail6:
+    Error("fail6\n");
 
     __FiltersFree(New);
 
-fail4:
-    Error("fail4\n");
+fail5:
+    Error("fail5\n");
 
     if (Old != NULL)
         RegistryFreeSzValue(Old);
+
+fail4:
+    Error("fail4\n");
 
     RegistryCloseKey(Key);
 

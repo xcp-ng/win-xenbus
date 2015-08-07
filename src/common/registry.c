@@ -850,6 +850,7 @@ NTSTATUS
 RegistryQuerySzValue(
     IN  HANDLE                      Key,
     IN  PCHAR                       Name,
+    OUT PULONG                      Type OPTIONAL,
     OUT PANSI_STRING                *Array
     )
 {
@@ -910,6 +911,9 @@ RegistryQuerySzValue(
 
     if (*Array == NULL)
         goto fail5;
+
+    if (Type != NULL)
+        *Type = Value->Type;
 
     __RegistryFree(Value);
 
@@ -1146,7 +1150,7 @@ RegistryQuerySystemStartOption(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = RegistryQuerySzValue(Key, "SystemStartOptions", &Ansi);
+    status = RegistryQuerySzValue(Key, "SystemStartOptions", NULL, &Ansi);
     if (!NT_SUCCESS(status))
         goto fail2;
 

@@ -570,6 +570,7 @@ DriverAddDevice(
 
     status = RegistryQuerySzValue(ParametersKey,
                                   DeviceID,
+                                  NULL,
                                   &Type);
     if (NT_SUCCESS(status)) {
         __DriverAcquireMutex();

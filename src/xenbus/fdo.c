@@ -732,6 +732,7 @@ FdoSetFriendlyName(
 
     status = RegistryQuerySzValue(SoftwareKey,
                                   "DriverDesc",
+                                  NULL,
                                   &DriverDesc);
     if (!NT_SUCCESS(status))
         goto fail3;
@@ -1366,6 +1367,7 @@ FdoScan(
 
         status = RegistryQuerySzValue(ParametersKey,
                                       "SyntheticClasses",
+                                      NULL,
                                       &SyntheticClasses);
         if (!NT_SUCCESS(status))
             SyntheticClasses = NULL;
@@ -1384,6 +1386,7 @@ FdoScan(
         if (ParametersKey != NULL) {
             status = RegistryQuerySzValue(ParametersKey,
                                           "SupportedClasses",
+                                          NULL,
                                           &SupportedClasses);
             if (!NT_SUCCESS(status))
                 SupportedClasses = NULL;

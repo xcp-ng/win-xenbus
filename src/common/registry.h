@@ -145,6 +145,7 @@ extern NTSTATUS
 RegistryQuerySzValue(
     IN  HANDLE          Key,
     IN  PCHAR           Name,
+    OUT PULONG          Type OPTIONAL,
     OUT PANSI_STRING    *Array
     );
 

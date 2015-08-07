@@ -530,7 +530,7 @@ SystemGetStartOptions(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = RegistryQuerySzValue(Key, "SystemStartOptions", &Ansi);
+    status = RegistryQuerySzValue(Key, "SystemStartOptions", NULL, &Ansi);
     if (!NT_SUCCESS(status))
         goto fail2;
 

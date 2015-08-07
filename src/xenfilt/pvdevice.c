@@ -140,6 +140,7 @@ PvdeviceGetActive(
 
     status = RegistryQuerySzValue(ParametersKey,
                                   "ActiveDeviceID",
+                                  NULL,
                                   &Ansi);
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -154,6 +155,7 @@ PvdeviceGetActive(
 
     status = RegistryQuerySzValue(ParametersKey,
                                   "ActiveInstanceID",
+                                  NULL,
                                   &Ansi);
     if (!NT_SUCCESS(status))
         goto fail2;
