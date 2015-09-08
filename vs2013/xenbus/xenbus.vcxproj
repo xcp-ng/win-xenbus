@@ -22,16 +22,8 @@
     <EnableInf2cat>false</EnableInf2cat>
     <IntDir>..\$(ProjectName)\$(ConfigurationName)\$(Platform)\</IntDir>
     <OutDir>..\$(ConfigurationName)\$(Platform)\</OutDir>
-    <CustomBuildBeforeTargets>StampInf</CustomBuildBeforeTargets>
   </PropertyGroup>
   <ItemDefinitionGroup>
-    <CustomBuildStep>
-        <Command>echo "Build Inf"
-            powershell -Command "(Get-Content ..\..\src\xenbus.inf) -replace '@MAJOR_VERSION@', '$(MAJOR_VERSION)' -replace '@MINOR_VERSION@', '$(MINOR_VERSION)' -replace '@MICRO_VERSION@','$(MICRO_VERSION)' -replace '@BUILD_NUMBER@','$(BUILD_NUMBER)' -replace '@COMPANY_NAME@','$(COMPANY_NAME)' -replace '@PRODUCT_NAME@','$(PRODUCT_NAME)' | Set-Content ..\..\vs2013\xenbus.inf"
-        </Command>
-        <Outputs>..\..\vs2013\xenbus.inf</Outputs>
-        <Inputs>..\..\src\xenbus.inf</Inputs>
-    </CustomBuildStep>
     <ClCompile>
       <PreprocessorDefinitions>__MODULE__="XENBUS";POOL_NX_OPTIN=1;NT_PROCESSOR_GROUPS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(WindowsSdkDir)\include\km;..\..\include;..\..\include\xen;..\..\src\common;</AdditionalIncludeDirectories>

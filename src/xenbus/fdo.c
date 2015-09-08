@@ -39,6 +39,7 @@
 #include <xen.h>
 
 #include <pvdevice_interface.h>
+#include <version.h>
 
 #include "names.h"
 #include "registry.h"
@@ -479,7 +480,8 @@ __FdoSetVendorName(
 
     status = RtlStringCbPrintfA(Fdo->VendorName,
                                 MAXNAMELEN,
-                                "XS%04X",
+                                "%s%04X",
+                                VENDOR_PREFIX_STR,
                                 DeviceID);
     ASSERT(NT_SUCCESS(status));
 

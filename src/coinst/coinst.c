@@ -365,10 +365,8 @@ fail1:
     return FALSE;
 }
 
-#define PLATFORM_DEVICE_0001_NAME       "VEN_5853&DEV_0001"
-#define PLATFORM_DEVICE_0002_NAME       "VEN_5853&DEV_0002"
-
-#define XENSERVER_VENDOR_DEVICE_NAME    "VEN_5853&DEV_C000"
+#define XEN_PLATFORM_PCI_DEVICE_STR         "VEN_5853&DEV_0001"
+#define XENSERVER_PLATFORM_PCI_DEVICE_STR   "VEN_5853&DEV_0002"
 
 static BOOLEAN
 OpenDeviceKey(
@@ -669,7 +667,7 @@ MatchExistingDriver(
 
     // Look for a legacy platform device
     Success = GetDeviceKeyName("PCI",
-                               PLATFORM_DEVICE_0001_NAME,
+                               XEN_PLATFORM_PCI_DEVICE_STR,
                                &DeviceKeyName);
     if (!Success)
         goto fail1;
@@ -678,7 +676,7 @@ MatchExistingDriver(
         goto found;
 
     Success = GetDeviceKeyName("PCI",
-                               PLATFORM_DEVICE_0002_NAME,
+                               XENSERVER_PLATFORM_PCI_DEVICE_STR,
                                &DeviceKeyName);
     if (!Success)
         goto fail2;

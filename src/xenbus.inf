@@ -32,7 +32,7 @@
 Signature="$Windows NT$" 
 Class=System
 ClassGUID={4d36e97d-e325-11ce-bfc1-08002be10318}
-Provider=%Company% 
+Provider=%Vendor% 
 CatalogFile=xenbus.cat
 DriverVer=01/01/1900,0.0.0.0
 
@@ -58,13 +58,13 @@ xenfilt.sys
 xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll,xenbus_coinst.dll
 
 [Manufacturer] 
-%Company%=Inst,NT$ARCH$
+%Vendor%=Inst,NT$ARCH$
 
 [Inst.NT$ARCH$]
 ; DisplayName		Section		DeviceID
 ; -----------		-------		--------
 
-%XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_C000&SUBSYS_C0005853&REV_01
+%XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_@VENDOR_DEVICE_ID@&SUBSYS_@VENDOR_DEVICE_ID@5853&REV_01
 %XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_0002
 %XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_0001
 
@@ -118,7 +118,7 @@ HKR,,CoInstallers32,0x00010000,"xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@M
 
 [Strings] 
 
-Company="@COMPANY_NAME@" 
+Vendor="@VENDOR_NAME@" 
 DiskDesc="@PRODUCT_NAME@ PV Bus Package" 
 XenBusDesc="@PRODUCT_NAME@ PV Bus"
 XenFiltDesc="@PRODUCT_NAME@ Generic Bus Filter"
