@@ -704,7 +704,7 @@ found:
 
     Success = OpenDriverKey(DriverKeyName, &DriverKey);
     if (!Success)
-        goto fail5;
+        goto done;
 
     Error = RegQueryInfoKey(DriverKey,
                             NULL,
@@ -720,14 +720,14 @@ found:
                             NULL);
     if (Error != ERROR_SUCCESS) {
         SetLastError(Error);
-        goto fail6;
+        goto fail5;
     }
 
     DriverDescLength = MaxValueLength + sizeof (TCHAR);
 
     DriverDesc = calloc(1, DriverDescLength);
     if (DriverDesc == NULL)
-        goto fail7;
+        goto fail6;
 
     Error = RegQueryValueEx(DriverKey,
                             "DriverDesc",
@@ -740,12 +740,12 @@ found:
             goto done;
 
         SetLastError(Error);
-        goto fail8;
+        goto fail7;
     }
 
     if (Type != REG_SZ) {
         SetLastError(ERROR_BAD_FORMAT);
-        goto fail9;
+        goto fail8;
     }
 
     ProductNameLength = (DWORD)strlen(PRODUCT_NAME_STR);
@@ -754,13 +754,13 @@ found:
                 PRODUCT_NAME_STR,
                 ProductNameLength) != 0) {
         SetLastError(ERROR_INSTALL_FAILURE);
-        goto fail10;
+        goto fail9;
     }
 
     if (strcmp(DriverDesc + ProductNameLength,
                " PV Bus") != 0) {
         SetLastError(ERROR_INSTALL_FAILURE);
-        goto fail11;
+        goto fail10;
     }
 
 done:
@@ -781,9 +781,6 @@ done:
 
     return TRUE;
 
-fail11:
-    Log("fail11");
-
 fail10:
     Log("fail10");
 
@@ -793,18 +790,18 @@ fail9:
 fail8:
     Log("fail8");
 
-    free(DriverDesc);
-
 fail7:
     Log("fail7");
+
+    free(DriverDesc);
 
 fail6:
     Log("fail6");
 
-    RegCloseKey(DriverKey);
-
 fail5:
     Log("fail5");
+
+    RegCloseKey(DriverKey);
 
     free(DriverKeyName);
 
