@@ -90,7 +90,7 @@ HashTableHash(
 
         Accumulator = (Accumulator << 4) + Array[Index];
 
-        Overflow = Accumulator & 0x00000f00;
+        Overflow = Accumulator & 0x0000ff00;
         if (Overflow != 0) {
             Accumulator ^= Overflow >> 8;
             Accumulator ^= Overflow;
