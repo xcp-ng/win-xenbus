@@ -81,6 +81,7 @@ struct _XENBUS_EVTCHN_CHANNEL {
     PKSERVICE_ROUTINE           Callback;
     PVOID                       Argument;
     BOOLEAN                     Active; // Must be tested at >= DISPATCH_LEVEL
+    ULONG                       Events;
     XENBUS_EVTCHN_TYPE          Type;
     XENBUS_EVTCHN_PARAMETERS    Parameters;
     BOOLEAN                     Mask;
@@ -400,6 +401,8 @@ EvtchnReap(
 
     Trace("%u\n", LocalPort);
 
+    Channel->Events = 0;
+
     ASSERT(Channel->Closed);
     Channel->Closed = FALSE;
 
@@ -504,6 +507,8 @@ EvtchnPoll(
 
         KeMemoryBarrier();
         if (!Channel->Closed) {
+            Channel->Events++;
+
             RemoveEntryList(&Channel->PendingListEntry);
             InitializeListHead(&Channel->PendingListEntry);
 
@@ -879,6 +884,66 @@ EvtchnGetPort(
     return Channel->LocalPort;
 }
 
+static NTSTATUS
+EvtchnWait(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  PLARGE_INTEGER          Timeout
+    )
+{
+    KIRQL                       Irql;
+    ULONG                       Events;
+    LARGE_INTEGER               Start;
+    NTSTATUS                    status;
+
+    UNREFERENCED_PARAMETER(Interface);
+
+    ASSERT3U(KeGetCurrentIrql(), <=, DISPATCH_LEVEL);
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Prevent suspend
+
+    Events = Channel->Events;
+    KeMemoryBarrier();
+
+    KeQuerySystemTime(&Start);
+
+    for (;;) {
+        status = STATUS_SUCCESS;
+        if (Channel->Events != Events)
+            break;
+
+        if (Timeout != NULL) {
+            LARGE_INTEGER   Now;
+
+            KeQuerySystemTime(&Now);
+
+            status = STATUS_TIMEOUT;
+            if (Timeout->QuadPart > 0) {
+                // Absolute timeout
+                if (Now.QuadPart > Timeout->QuadPart)
+                    break;
+            } else if (Timeout->QuadPart < 0) {
+                LONGLONG   Delta;
+
+                // Relative timeout
+                Delta = Now.QuadPart - Start.QuadPart;
+                if (Delta > -Timeout->QuadPart)
+                    break;
+            } else {
+                // Immediate timeout
+                ASSERT(Timeout->QuadPart == 0);
+                break;
+            }
+        }
+
+        _mm_pause();
+        KeMemoryBarrier();
+    }
+
+    KeLowerIrql(Irql);
+
+    return status;
+}
+
 static
 _Function_class_(KSERVICE_ROUTINE)
 __drv_requiresIRQL(HIGH_LEVEL)
@@ -1017,8 +1082,6 @@ EvtchnReset(
                   Console.LocalPort);
     }
 }
-
-
 
 static NTSTATUS
 EvtchnAbiAcquire(
@@ -1286,6 +1349,11 @@ EvtchnDebugCallback(
             default:
                 break;
             }
+
+            XENBUS_DEBUG(Printf,
+                         &Context->DebugInterface,
+                         "Events = %lu\n",
+                         Channel->Events);
         }
     }
 }
@@ -1597,6 +1665,20 @@ static struct _XENBUS_EVTCHN_INTERFACE_V4 EvtchnInterfaceVersion4 = {
     EvtchnClose
 };
 
+static struct _XENBUS_EVTCHN_INTERFACE_V5 EvtchnInterfaceVersion5 = {
+    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V5), 5, NULL, NULL, NULL },
+    EvtchnAcquire,
+    EvtchnRelease,
+    EvtchnOpen,
+    EvtchnBind,
+    EvtchnUnmask,
+    EvtchnSend,
+    EvtchnTrigger,
+    EvtchnWait,
+    EvtchnGetPort,
+    EvtchnClose,
+};
+
 NTSTATUS
 EvtchnInitialize(
     IN  PXENBUS_FDO             Fdo,
@@ -1766,6 +1848,23 @@ EvtchnGetInterface(
             break;
 
         *EvtchnInterface = EvtchnInterfaceVersion4;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 5: {
+        struct _XENBUS_EVTCHN_INTERFACE_V5  *EvtchnInterface;
+
+        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V5 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V5))
+            break;
+
+        *EvtchnInterface = EvtchnInterfaceVersion5;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
