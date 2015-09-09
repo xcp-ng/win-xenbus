@@ -180,6 +180,20 @@ typedef VOID
     IN  PXENBUS_EVTCHN_CHANNEL  Channel
     );
 
+/*! \typedef XENBUS_EVTCHN_WAIT
+    \brief Wait for an event to the local end of the channel
+
+    \param Interface The interface header
+    \param Channel The channel handle
+    \param Timeout An optional timeout value (similar to KeWaitForSingleObject(), but non-zero values are allowed at DISPATCH_LEVEL).
+*/
+typedef NTSTATUS
+(*XENBUS_EVTCHN_WAIT)(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  PLARGE_INTEGER          Timeout OPTIONAL
+    );
+
 /*! \typedef XENBUS_EVTCHN_GET_PORT
     \brief Get the local port number bound to the channel
 
@@ -276,7 +290,25 @@ struct _XENBUS_EVTCHN_INTERFACE_V4 {
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
 
-typedef struct _XENBUS_EVTCHN_INTERFACE_V4 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
+/*! \struct _XENBUS_EVTCHN_INTERFACE_V5
+    \brief EVTCHN interface version 5
+    \ingroup interfaces
+*/
+struct _XENBUS_EVTCHN_INTERFACE_V5 {
+    INTERFACE               Interface;
+    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
+    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
+    XENBUS_EVTCHN_OPEN      EvtchnOpen;
+    XENBUS_EVTCHN_BIND      EvtchnBind;
+    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_SEND      EvtchnSend;
+    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
+    XENBUS_EVTCHN_WAIT      EvtchnWait;
+    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
+    XENBUS_EVTCHN_CLOSE     EvtchnClose;
+};
+
+typedef struct _XENBUS_EVTCHN_INTERFACE_V5 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
 
 /*! \def XENBUS_EVTCHN
     \brief Macro at assist in method invocation
@@ -287,7 +319,7 @@ typedef struct _XENBUS_EVTCHN_INTERFACE_V4 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVT
 #endif  // _WINDLL
 
 #define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 1
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 4
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 5
 
 #endif  // _XENBUS_EVTCHN_INTERFACE_H
 

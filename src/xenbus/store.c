@@ -131,6 +131,9 @@ struct _XENBUS_STORE_CONTEXT {
     LIST_ENTRY                          WatchList;
     LIST_ENTRY                          BufferList;
     KDPC                                Dpc;
+    ULONG                               Polls;
+    ULONG                               Dpcs;
+    ULONG                               Events;
     XENBUS_STORE_RESPONSE               Response;
     XENBUS_EVTCHN_INTERFACE             EvtchnInterface;
     PHYSICAL_ADDRESS                    Address;
@@ -828,6 +831,8 @@ StorePollLocked(
 
     ASSERT3U(KeGetCurrentIrql(), ==, DISPATCH_LEVEL);
 
+    Context->Polls++;
+
     do {
         Read = Written = 0;
 
@@ -877,6 +882,13 @@ StoreDpc(
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
+#define TIME_US(_us)        ((_us) * 10)
+#define TIME_MS(_ms)        (TIME_US((_ms) * 1000))
+#define TIME_S(_s)          (TIME_MS((_s) * 1000))
+#define TIME_RELATIVE(_t)   (-(_t))
+
+#define XENBUS_STORE_POLL_PERIOD 5
+
 static PXENBUS_STORE_RESPONSE
 StoreSubmitRequest(
     IN  PXENBUS_STORE_CONTEXT   Context,
@@ -885,6 +897,7 @@ StoreSubmitRequest(
 {
     PXENBUS_STORE_RESPONSE      Response;
     KIRQL                       Irql;
+    LARGE_INTEGER               Timeout;
 
     ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_PREPARED);
 
@@ -895,11 +908,25 @@ StoreSubmitRequest(
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
 
     InsertTailList(&Context->SubmittedList, &Request->ListEntry);
+
     Request->State = XENBUS_STORE_REQUEST_SUBMITTED;
+    StorePollLocked(Context);
+    KeMemoryBarrier();
+
+    Timeout.QuadPart = TIME_RELATIVE(TIME_S(XENBUS_STORE_POLL_PERIOD));
 
     while (Request->State != XENBUS_STORE_REQUEST_COMPLETED) {
+        NTSTATUS    status;
+
+        status = XENBUS_EVTCHN(Wait,
+                               &Context->EvtchnInterface,
+                               Context->Channel,
+                               &Timeout);
+        if (status == STATUS_TIMEOUT)
+            Warning("TIMED OUT\n");
+
         StorePollLocked(Context);
-        SchedYield();
+        KeMemoryBarrier();
     }
 
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
@@ -1778,13 +1805,14 @@ fail1:
 
 static VOID
 StorePoll(
-    IN  PINTERFACE  Interface
+    IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_STORE_CONTEXT  Context = Interface->Context;
+    PXENBUS_STORE_CONTEXT   Context = Interface->Context;
 
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-    StorePollLocked(Context);
+    if (Context->References != 0)
+        StorePollLocked(Context);
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
@@ -1804,7 +1832,10 @@ StoreEvtchnCallback(
 
     ASSERT(Context != NULL);
 
-    KeInsertQueueDpc(&Context->Dpc, NULL, NULL);
+    Context->Events++;
+
+    if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
+        Context->Dpcs++;
 
     return TRUE;
 }
@@ -1851,6 +1882,9 @@ StoreEnable(
                   &Context->EvtchnInterface,
                   Context->Channel,
                   FALSE);
+
+    // Trigger an initial poll
+    KeInsertQueueDpc(&Context->Dpc, NULL, NULL);
 }
 
 static PHYSICAL_ADDRESS
@@ -1972,6 +2006,13 @@ StoreDebugCallback(
                      Shared->rsp_cons,
                      Shared->rsp_prod);
     }
+
+    XENBUS_DEBUG(Printf,
+                 &Context->DebugInterface,
+                 "Events = %lu Dpcs = %lu Polls = %lu\n",
+                 Context->Events,
+                 Context->Dpcs,
+                 Context->Polls);
 
     if (!IsListEmpty(&Context->BufferList)) {
         PLIST_ENTRY ListEntry;
@@ -2254,6 +2295,7 @@ StoreRelease(
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
     StoreDisable(Context);
+    StorePollLocked(Context);
     RtlZeroMemory(&Context->Response, sizeof (XENBUS_STORE_RESPONSE));
 
     XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
@@ -2401,6 +2443,10 @@ StoreTeardown(
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
     KeFlushQueuedDpcs();
+
+    Context->Polls = 0;
+    Context->Dpcs = 0;
+    Context->Events = 0;
 
     Context->Fdo = NULL;
 
