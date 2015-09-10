@@ -249,8 +249,9 @@ HashTableRemove(
     
     HashTableBucketLock(Bucket, TRUE, &Irql);
 
-    ListEntry = Bucket->List.Flink;
-    while (ListEntry != &Bucket->List) {
+    for (ListEntry = Bucket->List.Flink;
+         ListEntry != &Bucket->List;
+         ListEntry = ListEntry->Flink) {
         Node = CONTAINING_RECORD(ListEntry, XENBUS_HASH_TABLE_NODE, ListEntry);
 
         if (Node->Key == Key)
@@ -294,8 +295,9 @@ HashTableLookup(
     
     HashTableBucketLock(Bucket, FALSE, &Irql);
 
-    ListEntry = Bucket->List.Flink;
-    while (ListEntry != &Bucket->List) {
+    for (ListEntry = Bucket->List.Flink;
+         ListEntry != &Bucket->List;
+         ListEntry = ListEntry->Flink) {
         Node = CONTAINING_RECORD(ListEntry, XENBUS_HASH_TABLE_NODE, ListEntry);
 
         if (Node->Key == Key)
