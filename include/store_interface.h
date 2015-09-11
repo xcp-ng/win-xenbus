@@ -50,6 +50,23 @@ typedef struct _XENBUS_STORE_TRANSACTION    XENBUS_STORE_TRANSACTION, *PXENBUS_S
 */
 typedef struct _XENBUS_STORE_WATCH          XENBUS_STORE_WATCH, *PXENBUS_STORE_WATCH;
 
+/*! \typedef XENBUS_STORE_PERMISSION_MASK
+    \brief Bitmask of XenStore key permissions
+*/
+typedef enum _XENBUS_STORE_PERMISSION_MASK {
+    XENBUS_STORE_PERM_NONE = 0,
+    XENBUS_STORE_PERM_READ = 1,
+    XENBUS_STORE_PERM_WRITE = 2,
+} XENBUS_STORE_PERMISSION_MASK;
+
+/*! \typedef XENBUS_STORE_PERMISSION
+    \brief XenStore key permissions entry for a single domain
+*/
+typedef struct _XENBUS_STORE_PERMISSION {
+    USHORT                          Domain;
+    XENBUS_STORE_PERMISSION_MASK    Mask;
+} XENBUS_STORE_PERMISSION, *PXENBUS_STORE_PERMISSION;
+
 /*! \typedef XENBUS_STORE_ACQUIRE
     \brief Acquire a reference to the STORE interface
 
@@ -247,10 +264,36 @@ typedef VOID
     IN  PINTERFACE  Interface
     );
 
+/*! \typedef XENBUS_STORE_PERMISSIONS_SET
+    \brief Set permissions for a XenStore key
+
+    \param Interface The interface header
+    \param Transaction The transaction handle (NULL if this is not
+    part of a transaction)
+    \param Prefix An optional prefix for the \a Node
+    \param Node The concatenation of the \a Prefix and this value specifies
+    the XenStore key to set permissions of
+    \param Permissions An array of permissions to set
+    \param NumberPermissions Number of elements in the \a Permissions array
+*/
+typedef NTSTATUS
+(*XENBUS_STORE_PERMISSIONS_SET)(
+    IN  PINTERFACE                  Interface,
+    IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
+    IN  PCHAR                       Prefix OPTIONAL,
+    IN  PCHAR                       Node,
+    IN  PXENBUS_STORE_PERMISSION    Permissions,
+    IN  ULONG                       NumberPermissions
+    );
+
 // {86824C3B-D34E-4753-B281-2F1E3AD214D7}
 DEFINE_GUID(GUID_XENBUS_STORE_INTERFACE, 
 0x86824c3b, 0xd34e, 0x4753, 0xb2, 0x81, 0x2f, 0x1e, 0x3a, 0xd2, 0x14, 0xd7);
 
+/*! \struct _XENBUS_STORE_INTERFACE_V1
+    \brief STORE interface version 1
+    \ingroup interfaces
+*/
 struct _XENBUS_STORE_INTERFACE_V1 {
     INTERFACE                       Interface;
     XENBUS_STORE_ACQUIRE            StoreAcquire;
@@ -267,11 +310,28 @@ struct _XENBUS_STORE_INTERFACE_V1 {
     XENBUS_STORE_POLL               StorePoll;
 };
 
-/*! \struct _XENBUS_STORE_INTERFACE_V1
-    \brief STORE interface version 1
+/*! \struct _XENBUS_STORE_INTERFACE_V2
+    \brief STORE interface version 2
     \ingroup interfaces
 */
-typedef struct _XENBUS_STORE_INTERFACE_V1 XENBUS_STORE_INTERFACE, *PXENBUS_STORE_INTERFACE;
+struct _XENBUS_STORE_INTERFACE_V2 {
+    INTERFACE                       Interface;
+    XENBUS_STORE_ACQUIRE            StoreAcquire;
+    XENBUS_STORE_RELEASE            StoreRelease;
+    XENBUS_STORE_FREE               StoreFree;
+    XENBUS_STORE_READ               StoreRead;
+    XENBUS_STORE_PRINTF             StorePrintf;
+    XENBUS_STORE_PERMISSIONS_SET    StorePermissionsSet;
+    XENBUS_STORE_REMOVE             StoreRemove;
+    XENBUS_STORE_DIRECTORY          StoreDirectory;
+    XENBUS_STORE_TRANSACTION_START  StoreTransactionStart;
+    XENBUS_STORE_TRANSACTION_END    StoreTransactionEnd;
+    XENBUS_STORE_WATCH_ADD          StoreWatchAdd;
+    XENBUS_STORE_WATCH_REMOVE       StoreWatchRemove;
+    XENBUS_STORE_POLL               StorePoll;
+};
+
+typedef struct _XENBUS_STORE_INTERFACE_V2 XENBUS_STORE_INTERFACE, *PXENBUS_STORE_INTERFACE;
 
 /*! \def XENBUS_STORE
     \brief Macro at assist in method invocation
@@ -282,7 +342,7 @@ typedef struct _XENBUS_STORE_INTERFACE_V1 XENBUS_STORE_INTERFACE, *PXENBUS_STORE
 #endif  // _WINDLL
 
 #define XENBUS_STORE_INTERFACE_VERSION_MIN  1
-#define XENBUS_STORE_INTERFACE_VERSION_MAX  1
+#define XENBUS_STORE_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENBUS_STORE_INTERFACE_H
 

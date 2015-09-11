@@ -442,7 +442,6 @@ StoreIgnoreHeaderType(
     case XS_RELEASE:
     case XS_GET_DOMAIN_PATH:
     case XS_MKDIR:
-    case XS_SET_PERMS:
     case XS_IS_DOMAIN_INTRODUCED:
     case XS_RESUME:
     case XS_SET_TARGET:
@@ -470,6 +469,7 @@ StoreVerifyHeader(
         Header->type != XS_TRANSACTION_END &&
         Header->type != XS_WRITE &&
         Header->type != XS_RM &&
+        Header->type != XS_SET_PERMS &&
         Header->type != XS_WATCH_EVENT &&
         Header->type != XS_ERROR &&
         !StoreIgnoreHeaderType(Header->type)) {
@@ -936,7 +936,7 @@ StoreSubmitRequest(
            Response->Header.type == XS_ERROR ||
            Response->Header.type == Request->Header.type);
 
-    RtlZeroMemory(Request, sizeof(XENBUS_STORE_REQUEST));
+    RtlZeroMemory(Request, sizeof (XENBUS_STORE_REQUEST));
 
     KeLowerIrql(Irql);
 
@@ -1816,6 +1816,178 @@ StorePoll(
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
+static NTSTATUS
+StorePermissionToString(
+    IN  PXENBUS_STORE_PERMISSION    Permission,
+    OUT PCHAR                       Buffer,
+    IN  ULONG                       BufferSize,
+    OUT PULONG                      UsedSize
+    )
+{
+    size_t                          Remaining;
+    NTSTATUS                        status;
+
+    ASSERT(BufferSize > 1);
+
+    switch (Permission->Mask) {
+    case XENBUS_STORE_PERM_NONE:
+        *Buffer = 'n';
+        break;
+
+    case XENBUS_STORE_PERM_READ:
+        *Buffer = 'r';
+        break;
+
+    case XENBUS_STORE_PERM_WRITE:
+        *Buffer = 'w';
+        break;
+
+    case XENBUS_STORE_PERM_READ | XENBUS_STORE_PERM_WRITE:
+        *Buffer = 'b';
+        break;
+
+    default:
+        status = STATUS_INVALID_PARAMETER;
+        goto fail1;
+    }
+
+    status = RtlStringCbPrintfExA(Buffer + 1,
+                                  BufferSize - 1,
+                                  NULL,
+                                  &Remaining,
+                                  0,
+                                  "%u",
+                                  Permission->Domain);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    *UsedSize = BufferSize - (ULONG)Remaining + 1;
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static NTSTATUS
+StorePermissionsSet(
+    IN  PINTERFACE                  Interface,
+    IN  PXENBUS_STORE_TRANSACTION   Transaction OPTIONAL,
+    IN  PCHAR                       Prefix OPTIONAL,
+    IN  PCHAR                       Node,
+    IN  PXENBUS_STORE_PERMISSION    Permissions,
+    IN  ULONG                       NumberPermissions
+    )
+{
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
+    NTSTATUS                        status;
+    ULONG                           Index;
+    ULONG                           Length;
+    ULONG                           Used;
+    PCHAR                           Path;
+    PCHAR                           PermissionString;
+    PCHAR                           Segment;
+
+    PermissionString = __StoreAllocate(XENSTORE_PAYLOAD_MAX);
+
+    status = STATUS_NO_MEMORY;
+    if (PermissionString == NULL)
+        goto fail1;
+
+    if (Prefix == NULL)
+        Length = (ULONG)strlen(Node) + sizeof (CHAR);
+    else
+        Length = (ULONG)strlen(Prefix) + 1 + (ULONG)strlen(Node) + sizeof (CHAR);
+
+    Path = __StoreAllocate(Length);
+
+    if (Path == NULL)
+        goto fail2;
+
+    status = (Prefix == NULL) ?
+             RtlStringCbPrintfA(Path, Length, "%s", Node) :
+             RtlStringCbPrintfA(Path, Length, "%s/%s", Prefix, Node);
+    ASSERT(NT_SUCCESS(status));
+
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
+
+    for (Index = 0, Segment = PermissionString, Length = XENSTORE_PAYLOAD_MAX;
+         Index < NumberPermissions;
+         Index++) {
+        status = StorePermissionToString(&Permissions[Index],
+                                         Segment,
+                                         Length,
+                                         &Used);
+        if (!NT_SUCCESS(status))
+            goto fail3;
+
+        Segment += Used;
+        Length -= Used;
+    }
+
+    status = StorePrepareRequest(Context,
+                                 &Request,
+                                 Transaction,
+                                 XS_SET_PERMS,
+                                 Path, strlen(Path),
+                                 "", 1,
+                                 PermissionString, XENSTORE_PAYLOAD_MAX - Length,
+                                 NULL, 0);
+    if (!NT_SUCCESS(status))
+        goto fail4;
+
+    Response = StoreSubmitRequest(Context, &Request);
+
+    status = STATUS_NO_MEMORY;
+    if (Response == NULL)
+        goto fail5;
+
+    status = StoreCheckResponse(Response);
+    if (!NT_SUCCESS(status))
+        goto fail6;
+
+    StoreFreeResponse(Response);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
+
+    __StoreFree(Path);
+    __StoreFree(PermissionString);
+
+    return STATUS_SUCCESS;
+
+fail6:
+    Error("fail6\n");
+    StoreFreeResponse(Response);
+
+fail5:
+    Error("fail5\n");
+
+fail4:
+    Error("fail4\n");
+
+fail3:
+    Error("fail3\n");
+
+    __StoreFree(Path);
+    ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
+
+fail2:
+    Error("fail2\n");
+
+    __StoreFree(PermissionString);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
 static
 _Function_class_(KSERVICE_ROUTINE)
 _IRQL_requires_(HIGH_LEVEL)
@@ -2327,6 +2499,23 @@ static struct _XENBUS_STORE_INTERFACE_V1 StoreInterfaceVersion1 = {
     StorePoll
 };
                      
+static struct _XENBUS_STORE_INTERFACE_V2 StoreInterfaceVersion2 = {
+    { sizeof (struct _XENBUS_STORE_INTERFACE_V2), 2, NULL, NULL, NULL },
+    StoreAcquire,
+    StoreRelease,
+    StoreFree,
+    StoreRead,
+    StorePrintf,
+    StorePermissionsSet,
+    StoreRemove,
+    StoreDirectory,
+    StoreTransactionStart,
+    StoreTransactionEnd,
+    StoreWatchAdd,
+    StoreWatchRemove,
+    StorePoll
+};
+
 NTSTATUS
 StoreInitialize(
     IN  PXENBUS_FDO             Fdo,
@@ -2421,6 +2610,23 @@ StoreGetInterface(
         *StoreInterface = StoreInterfaceVersion1;
 
         ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 2: {
+        struct _XENBUS_STORE_INTERFACE_V2  *StoreInterface;
+
+        StoreInterface = (struct _XENBUS_STORE_INTERFACE_V2 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_STORE_INTERFACE_V2))
+            break;
+
+        *StoreInterface = StoreInterfaceVersion2;
+
+        ASSERT3U(Interface->Version, == , Version);
         Interface->Context = Context;
 
         status = STATUS_SUCCESS;
