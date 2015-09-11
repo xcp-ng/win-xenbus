@@ -38,6 +38,38 @@
 #include "dbg_print.h"
 #include "assert.h"
 
+#pragma warning(push)
+#pragma warning(disable:4127)   // conditional expression is constant
+
+// Most of the GNTST_* values don't have meaningful NTSTATUS counterparts,
+// this macro translates those that do.
+#define GNTST_TO_STATUS(_gntst, _status)                    \
+        do {                                                \
+            switch (_gntst) {                               \
+            case GNTST_okay:                                \
+                _status = STATUS_SUCCESS;                   \
+                break;                                      \
+                                                            \
+            case GNTST_bad_handle:                          \
+                _status = STATUS_INVALID_HANDLE;            \
+                break;                                      \
+                                                            \
+            case GNTST_permission_denied:                   \
+                _status = STATUS_ACCESS_DENIED;             \
+                break;                                      \
+                                                            \
+            case GNTST_eagain:                              \
+                _status = STATUS_RETRY;                     \
+                break;                                      \
+                                                            \
+            default:                                        \
+                _status = STATUS_UNSUCCESSFUL;              \
+                break;                                      \
+            }                                               \
+        } while (FALSE)
+
+#pragma warning(pop)
+
 static LONG_PTR
 GrantTableOp(
     IN  ULONG   Command,
@@ -125,6 +157,105 @@ GrantTableCopy(
     }
 
     return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__checkReturn
+XEN_API
+NTSTATUS
+GrantTableMapForeignPage(
+    IN  USHORT                  Domain,
+    IN  ULONG                   GrantRef,
+    IN  PHYSICAL_ADDRESS        Address,
+    IN  BOOLEAN                 ReadOnly,
+    OUT ULONG                   *Handle
+    )
+{
+    struct gnttab_map_grant_ref op;
+    LONG_PTR                    rc;
+    NTSTATUS                    status;
+
+    RtlZeroMemory(&op, sizeof(op));
+    op.dom = Domain;
+    op.ref = GrantRef;
+    op.flags = GNTMAP_host_map;
+    if (ReadOnly)
+        op.flags |= GNTMAP_readonly;
+    op.host_addr = Address.QuadPart;
+
+    rc = GrantTableOp(GNTTABOP_map_grant_ref, &op, 1);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    if (op.status != GNTST_okay) {
+        Warning("%u:%u -> %u.%u failed (%d)\n",
+                op.dom,
+                op.ref,
+                Address.HighPart,
+                Address.LowPart,
+                op.status);
+
+        GNTST_TO_STATUS(op.status, status);
+        goto fail2;
+    }
+
+    *Handle = op.handle;
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__checkReturn
+XEN_API
+NTSTATUS
+GrantTableUnmapForeignPage(
+    IN  ULONG                     Handle,
+    IN  PHYSICAL_ADDRESS          Address
+    )
+{
+    struct gnttab_unmap_grant_ref op;
+    LONG_PTR                      rc;
+    NTSTATUS                      status;
+
+    RtlZeroMemory(&op, sizeof(op));
+    op.handle = Handle;
+    op.host_addr = Address.QuadPart;
+
+    rc = GrantTableOp(GNTTABOP_unmap_grant_ref, &op, 1);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    if (op.status != GNTST_okay) {
+        Warning("%u.%u failed (%d)\n",
+                Address.HighPart,
+                Address.LowPart,
+                op.status);
+
+        GNTST_TO_STATUS(op.status, status);
+        goto fail2;
+    }
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);

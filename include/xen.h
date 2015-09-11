@@ -258,6 +258,25 @@ GrantTableCopy(
     IN  ULONG               Count
     );
 
+__checkReturn
+XEN_API
+NTSTATUS
+GrantTableMapForeignPage(
+    IN  USHORT                  Domain,
+    IN  ULONG                   GrantRef,
+    IN  PHYSICAL_ADDRESS        Address,
+    IN  BOOLEAN                 ReadOnly,
+    OUT ULONG                   *Handle
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+GrantTableUnmapForeignPage(
+    IN  ULONG                   Handle,
+    IN  PHYSICAL_ADDRESS        Address
+    );
+
 // SCHED
 
 __checkReturn
