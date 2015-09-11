@@ -46,6 +46,7 @@
 //                    REVISION   S  SI   E   D  ST   R   C   G   U  EM
 #define DEFINE_REVISION_TABLE                                               \
     DEFINE_REVISION(0x08000009,  1,  2,  4,  1,  1,  1,  1,  1,  1,  1),    \
-    DEFINE_REVISION(0x0800000A,  1,  2,  5,  1,  1,  1,  1,  1,  1,  1)
+    DEFINE_REVISION(0x0800000A,  1,  2,  5,  1,  1,  1,  1,  1,  1,  1),    \
+    DEFINE_REVISION(0x0800000B,  1,  2,  5,  1,  2,  1,  1,  2,  1,  1)
 
 #endif  // _REVISION_H
