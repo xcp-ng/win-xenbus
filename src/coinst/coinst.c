@@ -185,6 +185,146 @@ __FunctionName(
 }
 
 static BOOLEAN
+AllowUpdate(
+    IN  PTCHAR      DriverName,
+    OUT PBOOLEAN    Allow
+    )
+{
+    TCHAR           ServiceKeyName[MAX_PATH];
+    HKEY            ServiceKey;
+    HRESULT         Result;
+    HRESULT         Error;
+    DWORD           ValueLength;
+    DWORD           Value;
+    DWORD           Type;
+
+    Log("====> (%s)", DriverName);
+
+    Result = StringCbPrintf(ServiceKeyName,
+                            MAX_PATH,
+                            SERVICES_KEY "\\%s",
+                            DriverName);
+    assert(SUCCEEDED(Result));
+
+    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         ServiceKeyName,
+                         0,
+                         KEY_READ,
+                         &ServiceKey);
+    if (Error != ERROR_SUCCESS) {
+        if (Error == ERROR_FILE_NOT_FOUND) {
+            Value = 1;
+            goto done;
+        }
+
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    ValueLength = sizeof (Value);
+
+    Error = RegQueryValueEx(ServiceKey,
+                            "AllowUpdate",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&Value,
+                            &ValueLength);
+    if (Error != ERROR_SUCCESS) {
+        if (Error == ERROR_FILE_NOT_FOUND) {
+            Type = REG_DWORD;
+            Value = 1;
+        } else {
+            SetLastError(Error);
+            goto fail2;
+        }
+    }
+
+    if (Type != REG_DWORD) {
+        SetLastError(ERROR_BAD_FORMAT);
+        goto fail3;
+    }
+
+done:
+    if (Value == 0) {
+        Log("DISALLOWED");
+        *Allow = FALSE;
+    }
+
+    RegCloseKey(ServiceKey);
+
+    Log("<====");
+
+    return TRUE;
+
+fail3:
+    Log("fail3");
+
+fail2:
+    Log("fail2");
+
+    RegCloseKey(ServiceKey);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+AllowInstall(
+    OUT PBOOLEAN    Allow
+    )
+{
+    BOOLEAN         Success;
+    HRESULT         Error;
+
+    Log("====>");
+
+    *Allow = TRUE;
+
+    Success = AllowUpdate("XEN", Allow);
+    if (!Success)
+        goto fail1;
+
+    Success = AllowUpdate("XENBUS", Allow);
+    if (!Success)
+        goto fail2;
+
+    Success = AllowUpdate("XENFILT", Allow);
+    if (!Success)
+        goto fail3;
+
+    Log("<====");
+
+    return TRUE;
+
+fail3:
+    Log("fail3");
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
 OpenEnumKey(
     OUT PHKEY   EnumKey
     )
@@ -1271,6 +1411,7 @@ DifInstallPreProcess(
 {
     BOOLEAN                         Success;
     HRESULT                         Error;
+    BOOLEAN                         Allow;
 
     UNREFERENCED_PARAMETER(DeviceInfoSet);
     UNREFERENCED_PARAMETER(DeviceInfoData);
@@ -1278,17 +1419,32 @@ DifInstallPreProcess(
 
     Log("====>");
 
-    Success = MatchExistingDriver();
+    Success = AllowInstall(&Allow);
     if (!Success)
         goto fail1;
 
+    if (!Allow) {
+        SetLastError(ERROR_ACCESS_DENIED);
+        goto fail2;
+    }
+
+    Success = MatchExistingDriver();
+    if (!Success)
+        goto fail3;
+
     Success = SupportChildDrivers();
     if (!Success)
-        goto fail2;
+        goto fail4;
 
     Log("<====");
     
     return NO_ERROR;
+
+fail4:
+    Log("fail4");
+
+fail3:
+    Log("fail3");
 
 fail2:
     Log("fail2");
