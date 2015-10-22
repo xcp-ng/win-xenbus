@@ -72,6 +72,7 @@ __PvdeviceFree(
 static const CHAR *PvdeviceLegacyPrefix[] = {
     "PCI\\VEN_5853&DEV_0001",
     "PCI\\VEN_5853&DEV_0002",
+    NULL
 };
 
 static BOOLEAN
@@ -84,7 +85,7 @@ PvdeviceIsLegacy(
 
     UNREFERENCED_PARAMETER(Context);
 
-    for (Index = 0; Index < ARRAYSIZE(PvdeviceLegacyPrefix); Index++) {
+    for (Index = 0; PvdeviceLegacyPrefix[Index] != NULL; Index++) {
         const CHAR  *Prefix = PvdeviceLegacyPrefix[Index];
 
         if (_strnicmp(DeviceID, Prefix, strlen(Prefix)) == 0)
@@ -95,7 +96,10 @@ PvdeviceIsLegacy(
 }
 
 static const CHAR *PvdeviceVendorDeviceID[] = {
-    "PCI\\VEN_5853&DEV_C000&SUBSYS_C0005853&REV_01", // XenServer
+#ifdef VENDOR_DEVICE_ID_STR
+    "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR "&SUBSYS_C0005853&REV_01",
+#endif
+    NULL
 };
 
 static BOOLEAN
@@ -105,7 +109,7 @@ PvdeviceIsVendorPresent(
 {
     ULONG                           Index;
 
-    for (Index = 0; Index < ARRAYSIZE(PvdeviceVendorDeviceID); Index++) {
+    for (Index = 0; PvdeviceVendorDeviceID[Index] != NULL; Index++) {
         const CHAR  *DeviceID = PvdeviceVendorDeviceID[Index];
 
         if (XENFILT_EMULATED(IsDevicePresent,
