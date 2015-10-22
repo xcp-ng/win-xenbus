@@ -84,7 +84,7 @@ __Log(
 
     LogToken = SetupGetThreadLogToken();
     Category = TXTLOG_VENDOR;
-    Flags = TXTLOG_DETAILS;
+    Flags = TXTLOG_WARNING;
 
     SetupWriteTextLog(LogToken, Category, Flags, Buffer);
     Length = __min(MAXIMUM_BUFFER_SIZE - 1, Length + 2);
