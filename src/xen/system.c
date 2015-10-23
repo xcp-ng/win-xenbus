@@ -329,6 +329,222 @@ SystemApicIDToProcessorID(
 
 #pragma warning(pop)
 
+static VOID
+SystemViridianInformation(
+    IN  ULONG   Count
+    )
+{
+    ULONG       EAX;
+    ULONG       EBX;
+    CHAR        Signature[5];
+    ULONG       Bit;
+
+    Info("====>\n");
+
+    if (Count < 1)
+        goto done;
+
+    RtlZeroMemory(Signature, sizeof (Signature));
+
+    __CpuId(0x40000001, &EAX, NULL, NULL, NULL);
+
+    *((PULONG)(Signature + 0)) = EAX;
+
+    Info("Interface Identifier: %s\n", Signature);
+
+    if (strcmp(Signature, "Hv#1") != 0)
+        goto done;
+
+    if (Count < 3)
+        goto done;
+
+    __CpuId(0x40000003, &EAX, NULL, NULL, NULL);
+
+    Info("Hypervisor Features:\n");
+
+    for (Bit = 0; Bit < sizeof (ULONG) * 8; Bit++) {
+        if (EAX == 0)
+            break;
+
+        if (EAX & 1) {
+            switch (Bit) {
+            case 0:
+                Info(" - VP Runtime\n");
+                break;
+
+            case 1:
+                Info(" - Partition Reference Counter\n");
+                break;
+
+            case 2:
+                Info(" - Basic SynIC MSRs\n");
+                break;
+
+            case 3:
+                Info(" - Synthetic Timer MSRs\n");
+                break;
+
+            case 4:
+                Info(" - APIC Access MSRs\n");
+                break;
+
+            case 5:
+                Info(" - Hypercall MSRs\n");
+                break;
+
+            case 6:
+                Info(" - Virtual Processor Index MSR\n");
+                break;
+
+            case 7:
+                Info(" - Virtual System Reset MSR\n");
+                break;
+
+            case 8:
+                Info(" - Statistics Pages MSRs\n");
+                break;
+
+            case 9:
+                Info(" - Partition Reference TSC MSR\n");
+                break;
+
+            case 10:
+                Info(" - Guest Idle State MSR\n");
+                break;
+
+            case 11:
+                Info(" - Timer Frequency MSR\n");
+                break;
+
+            case 12:
+                Info(" - Debug MSRs\n");
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        EAX >>= 1;
+    }
+
+    if (Count < 4)
+        goto done;
+
+    __CpuId(0x40000004, &EAX, &EBX, NULL, NULL);
+
+    Info("Recommendations:\n");
+
+    for (Bit = 0; Bit < sizeof (ULONG) * 8; Bit++) {
+        if (EAX == 0)
+            break;
+
+        if (EAX & 1) {
+            switch (Bit) {
+            case 0:
+                Info(" - Address space switch via hypercall\n");
+                break;
+
+            case 1:
+                Info(" - Local TLB flush via hypercall\n");
+                break;
+
+            case 2:
+                Info(" - Remote TLB flush via hypercall\n");
+                break;
+
+            case 3:
+                Info(" - EOI, ICR and TPR access via MSR\n");
+                break;
+
+            case 4:
+                Info(" - Reset via MSR\n");
+                break;
+
+            case 5:
+                Info(" - Use relaxed timing\n");
+                break;
+
+            case 6:
+                Info(" - Use DMA remapping\n");
+                break;
+
+            case 7:
+                Info(" - Use interrupt remapping\n");
+                break;
+
+            case 8:
+                Info(" - Use x2APIC MSRs\n");
+                break;
+
+            case 9:
+                Info(" - Deprecate AutoEOI\n");
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        EAX >>= 1;
+    }
+
+    if (EBX != 0xFFFFFFFF)
+        Info(" - Retry spinlocks %u times\n", EBX);
+
+    if (Count < 6)
+        goto done;
+
+    __CpuId(0x40000006, &EAX, NULL, NULL, NULL);
+
+    Info("Hardware Features:\n");
+
+    for (Bit = 0; Bit < sizeof (ULONG) * 8; Bit++) {
+        if (EAX == 0)
+            break;
+
+        if (EAX & 1) {
+            switch (Bit) {
+            case 0:
+                Info(" - APIC overlay assist\n");
+                break;
+
+            case 1:
+                Info(" - MSR bitmaps\n");
+                break;
+
+            case 2:
+                Info(" - Architectural performance counters\n");
+                break;
+
+            case 3:
+                Info(" - Second Level Address Translation (SLAT)\n");
+                break;
+
+            case 4:
+                Info(" - DMA remapping\n");
+                break;
+
+            case 5:
+                Info(" - Interrupt remapping\n");
+                break;
+
+            case 6:
+                Info(" - Memory Patrol Scrubber\n");
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        EAX >>= 1;
+    }
+
+done:
+    Info("<====\n");
+}
+
 static
 _Function_class_(KDEFERRED_ROUTINE)
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -348,6 +564,7 @@ SystemProcessorInformation(
     ULONG               Index;
     PROCESSOR_NUMBER    ProcNumber;
     PSYSTEM_PROCESSOR   Processor;
+    ULONG               EAX;
     ULONG               EBX;
     ULONG               ECX;
     ULONG               EDX;
@@ -360,6 +577,20 @@ SystemProcessorInformation(
     ASSERT3U(Index, <, Context->ProcessorCount);
 
     Processor = &Context->Processor[Index];
+
+    if (Index == 0) {
+        CHAR    Signature[13];
+
+        RtlZeroMemory(Signature, sizeof (Signature));
+
+        __CpuId(0x40000000, &EAX, &EBX, &ECX, &EDX);
+        *((PULONG)(Signature + 0)) = EBX;
+        *((PULONG)(Signature + 4)) = ECX;
+        *((PULONG)(Signature + 8)) = EDX;
+
+        if (strcmp(Signature, "Microsoft Hv") == 0)
+            SystemViridianInformation(EAX - 0x40000000);
+    }
 
     Info("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
 

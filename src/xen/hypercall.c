@@ -107,6 +107,10 @@ HypercallInitialize(
             goto fail1;
     }
 
+    LogPrintf(LOG_LEVEL_INFO,
+              "XEN: BASE CPUID LEAF @ %08x\n",
+              XenBaseLeaf);
+
     if ((ULONG_PTR)__Section & (PAGE_SIZE - 1))
         Hypercall = (PVOID)(((ULONG_PTR)__Section + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1));
     else
