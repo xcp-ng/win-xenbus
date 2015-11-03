@@ -37,6 +37,7 @@
 
 #include "store.h"
 #include "evtchn.h"
+#include "thread.h"
 #include "fdo.h"
 #include "dbg_print.h"
 #include "assert.h"
@@ -143,6 +144,8 @@ struct _XENBUS_STORE_CONTEXT {
     PXENBUS_SUSPEND_CALLBACK            SuspendCallbackEarly;
     PXENBUS_SUSPEND_CALLBACK            SuspendCallbackLate;
     PXENBUS_DEBUG_CALLBACK              DebugCallback;
+    PXENBUS_THREAD                      WatchdogThread;
+    BOOLEAN                             Enabled;
 };
 
 C_ASSERT(sizeof (struct xenstore_domain_interface) <= PAGE_SIZE);
@@ -1816,6 +1819,93 @@ StorePoll(
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
+#define TIME_US(_us)        ((_us) * 10)
+#define TIME_MS(_ms)        (TIME_US((_ms) * 1000))
+#define TIME_S(_s)          (TIME_MS((_s) * 1000))
+#define TIME_RELATIVE(_t)   (-(_t))
+
+#define XENBUS_STORE_WATCHDOG_PERIOD 15
+
+static NTSTATUS
+StoreWatchdog(
+    IN  PXENBUS_THREAD                  Self,
+    IN  PVOID                           _Context
+    )
+{
+    PXENBUS_STORE_CONTEXT               Context = _Context;
+    LARGE_INTEGER                       Timeout;
+    XENSTORE_RING_IDX                   req_prod;
+    XENSTORE_RING_IDX                   req_cons;
+    XENSTORE_RING_IDX                   rsp_prod;
+    XENSTORE_RING_IDX                   rsp_cons;
+
+    Trace("====>\n");
+
+    Timeout.QuadPart = TIME_RELATIVE(TIME_S(XENBUS_STORE_WATCHDOG_PERIOD));
+
+    req_prod = 0;
+    req_cons = 0;
+    rsp_prod = 0;
+    rsp_cons = 0;
+
+    for (;;) {
+        PKEVENT Event;
+        KIRQL   Irql;
+
+        Event = ThreadGetEvent(Self);
+
+        (VOID) KeWaitForSingleObject(Event,
+                                     Executive,
+                                     KernelMode,
+                                     FALSE,
+                                     &Timeout);
+        KeClearEvent(Event);
+
+        if (ThreadIsAlerted(Self))
+            break;
+
+        KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+        KeAcquireSpinLockAtDpcLevel(&Context->Lock);
+
+        if (Context->Enabled) {
+            struct xenstore_domain_interface    *Shared;
+
+            Shared = Context->Shared;
+
+            KeMemoryBarrier();
+
+            if ((Shared->rsp_prod != rsp_prod &&
+                 Shared->rsp_cons == rsp_cons) ||
+                (Shared->req_prod != req_prod &&
+                 Shared->req_cons == req_cons)) {
+                XENBUS_DEBUG(Trigger,
+                             &Context->DebugInterface,
+                             Context->DebugCallback);
+
+                // Try to move things along
+                (VOID) XENBUS_EVTCHN(Send,
+                                     &Context->EvtchnInterface,
+                                     Context->Channel);
+                StorePollLocked(Context);
+            }
+
+            KeMemoryBarrier();
+
+            req_prod = Shared->req_prod;
+            req_cons = Shared->req_cons;
+            rsp_prod = Shared->rsp_prod;
+            rsp_cons = Shared->rsp_cons;
+        }
+
+        KeReleaseSpinLockFromDpcLevel(&Context->Lock);
+        KeLowerIrql(Irql);
+    }
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS
 StorePermissionToString(
     IN  PXENBUS_STORE_PERMISSION    Permission,
@@ -2017,6 +2107,8 @@ StoreDisable(
     IN PXENBUS_STORE_CONTEXT    Context
     )
 {
+    Context->Enabled = FALSE;
+
     XENBUS_EVTCHN(Close,
                   &Context->EvtchnInterface,
                   Context->Channel);
@@ -2054,6 +2146,8 @@ StoreEnable(
                   &Context->EvtchnInterface,
                   Context->Channel,
                   FALSE);
+
+    Context->Enabled = TRUE;
 
     // Trigger an initial poll
     KeInsertQueueDpc(&Context->Dpc, NULL, NULL);
@@ -2573,11 +2667,47 @@ StoreInitialize(
 
     KeInitializeDpc(&(*Context)->Dpc, StoreDpc, *Context);
 
+    status = ThreadCreate(StoreWatchdog,
+                          *Context,
+                          &(*Context)->WatchdogThread);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
     (*Context)->Fdo = Fdo;
 
     Trace("<====\n");
 
     return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    RtlZeroMemory(&(*Context)->Dpc, sizeof (KDPC));
+
+    RtlZeroMemory(&(*Context)->BufferList, sizeof (LIST_ENTRY));
+
+    RtlZeroMemory(&(*Context)->WatchList, sizeof (LIST_ENTRY));
+    (*Context)->WatchId = 0;
+
+    RtlZeroMemory(&(*Context)->TransactionList, sizeof (LIST_ENTRY));
+
+    RtlZeroMemory(&(*Context)->PendingList, sizeof (LIST_ENTRY));
+    RtlZeroMemory(&(*Context)->SubmittedList, sizeof (LIST_ENTRY));
+    (*Context)->RequestId = 0;
+
+    RtlZeroMemory(&(*Context)->Lock, sizeof (KSPIN_LOCK));
+
+    RtlZeroMemory(&(*Context)->DebugInterface,
+                  sizeof (XENBUS_DEBUG_INTERFACE));
+
+    RtlZeroMemory(&(*Context)->SuspendInterface,
+                  sizeof (XENBUS_SUSPEND_INTERFACE));
+
+    RtlZeroMemory(&(*Context)->EvtchnInterface,
+                  sizeof (XENBUS_EVTCHN_INTERFACE));
+
+    ASSERT(IsZeroMemory(*Context, sizeof (XENBUS_STORE_CONTEXT)));
+    __StoreFree(*Context);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -2646,6 +2776,10 @@ StoreTeardown(
     )
 {
     Trace("====>\n");
+
+    ThreadAlert(Context->WatchdogThread);
+    ThreadJoin(Context->WatchdogThread);
+    Context->WatchdogThread = NULL;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
     KeFlushQueuedDpcs();
