@@ -52,6 +52,12 @@ DriverReleaseMutex(
     VOID
      );
 
+extern NTSTATUS
+DriverGetActive(
+    OUT PCHAR   DeviceID,
+    OUT PCHAR   InstanceID
+    );
+
 typedef enum _XENFILT_FILTER_STATE {
     XENFILT_FILTER_ENABLED = 0,
     XENFILT_FILTER_PENDING,
@@ -72,13 +78,6 @@ DriverGetFilterState(
 
 PXENFILT_EMULATED_CONTEXT
 DriverGetEmulatedContext(
-    VOID
-    );
-
-#include "pvdevice.h"
-
-PXENFILT_PVDEVICE_CONTEXT
-DriverGetPvdeviceContext(
     VOID
     );
 

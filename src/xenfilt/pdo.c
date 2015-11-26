@@ -37,7 +37,6 @@
 #include <stdlib.h>
 
 #include "emulated.h"
-#include "pvdevice.h"
 #include "names.h"
 #include "fdo.h"
 #include "pdo.h"
@@ -68,8 +67,6 @@ struct _XENFILT_PDO {
 
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     PXENFILT_EMULATED_OBJECT        EmulatedObject;
-
-    XENFILT_PVDEVICE_INTERFACE      PvdeviceInterface;
 };
 
 static FORCEINLINE PVOID
@@ -253,7 +250,7 @@ __PdoGetFdo(
     return Pdo->Fdo;
 }
 
-static NTSTATUS
+static VOID
 PdoSetDeviceInstance(
     IN  PXENFILT_PDO    Pdo,
     IN  PCHAR           DeviceID,
@@ -265,14 +262,8 @@ PdoSetDeviceInstance(
     CHAR                ActiveInstanceID[MAX_DEVICE_ID_LEN];
     NTSTATUS            status;
 
-    status = XENFILT_PVDEVICE(Acquire, &Pdo->PvdeviceInterface);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = XENFILT_PVDEVICE(GetActive,
-                              &Pdo->PvdeviceInterface,
-                              ActiveDeviceID,
-                              ActiveInstanceID);
+    status = DriverGetActive(ActiveDeviceID,
+                             ActiveInstanceID);
     if (!NT_SUCCESS(status))
         goto done;
 
@@ -288,8 +279,6 @@ PdoSetDeviceInstance(
     }
 
 done:
-    XENFILT_PVDEVICE(Release, &Pdo->PvdeviceInterface);
-
     status = RtlStringCbPrintfA(Dx->DeviceID,
                                 MAX_DEVICE_ID_LEN,
                                 "%s",
@@ -301,13 +290,6 @@ done:
                                 "%s",
                                 InstanceID);
     ASSERT(NT_SUCCESS(status));
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
 }
 
 static FORCEINLINE PCHAR
@@ -920,7 +902,6 @@ done:                                                               \
 }                                                                   \
 
 DEFINE_PDO_QUERY_INTERFACE(Emulated)
-DEFINE_PDO_QUERY_INTERFACE(Pvdevice)
 
 struct _INTERFACE_ENTRY {
     const GUID  *Guid;
@@ -933,7 +914,6 @@ struct _INTERFACE_ENTRY {
 
 struct _INTERFACE_ENTRY PdoInterfaceTable[] = {
     DEFINE_INTERFACE_ENTRY(EMULATED_INTERFACE, Emulated),
-    DEFINE_INTERFACE_ENTRY(PVDEVICE_INTERFACE, Pvdevice),
     { NULL, NULL, NULL }
 };
 
@@ -2015,15 +1995,7 @@ PdoCreate(
     if (!NT_SUCCESS(status))
         goto fail6;
 
-    status = PvdeviceGetInterface(DriverGetPvdeviceContext(),
-                                  XENFILT_PVDEVICE_INTERFACE_VERSION_MAX,
-                                  (PINTERFACE)&Pdo->PvdeviceInterface,
-                                  sizeof (Pdo->PvdeviceInterface));
-    ASSERT(NT_SUCCESS(status));
-
-    status = PdoSetDeviceInstance(Pdo, DeviceID, InstanceID);
-    if (!NT_SUCCESS(status))
-        goto fail7;
+    PdoSetDeviceInstance(Pdo, DeviceID, InstanceID);
 
     __PdoSetName(Pdo);
 
@@ -2043,12 +2015,6 @@ PdoCreate(
     FdoAddPhysicalDeviceObject(Fdo, Pdo);
 
     return STATUS_SUCCESS;
-
-fail7:
-    Error("fail7\n");
-
-    RtlZeroMemory(&Pdo->PvdeviceInterface,
-                  sizeof (XENFILT_PVDEVICE_INTERFACE));
 
 fail6:
     Error("fail6\n");
@@ -2118,9 +2084,6 @@ PdoDestroy(
     Pdo->Reason = NULL;
 
     RtlZeroMemory(Pdo->Name, sizeof (Pdo->Name));
-
-    RtlZeroMemory(&Pdo->PvdeviceInterface,
-                  sizeof (XENFILT_PVDEVICE_INTERFACE));
 
     EmulatedRemoveObject(DriverGetEmulatedContext(),
                          Pdo->EmulatedObject);
