@@ -372,6 +372,8 @@ RegistryDeleteSubKey(
 
     ZwClose(SubKey);
 
+    (VOID) ZwFlushKey(Key);
+
     RtlFreeUnicodeString(&Unicode);
 
     return STATUS_SUCCESS;
@@ -610,6 +612,8 @@ RegistryDeleteValue(
 
     RtlFreeUnicodeString(&Unicode);
 
+    (VOID) ZwFlushKey(Key);
+
     return STATUS_SUCCESS;
 
 fail2:
@@ -729,6 +733,8 @@ RegistryUpdateDwordValue(
         goto fail3;
 
     __RegistryFree(Partial);
+
+    (VOID) ZwFlushKey(Key);
 
     RtlFreeUnicodeString(&Unicode);
 
@@ -1060,6 +1066,8 @@ RegistryUpdateBinaryValue(
 
     __RegistryFree(Partial);
 
+    (VOID) ZwFlushKey(Key);
+
     RtlFreeUnicodeString(&Unicode);
 
     return STATUS_SUCCESS;
@@ -1349,6 +1357,8 @@ RegistryUpdateSzValue(
         goto fail3;
 
     __RegistryFree(Partial);
+
+    (VOID) ZwFlushKey(Key);
 
     RtlFreeUnicodeString(&Unicode);
 
