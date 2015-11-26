@@ -39,7 +39,6 @@
 #include "pdo.h"
 #include "driver.h"
 #include "emulated.h"
-#include "pvdevice.h"
 #include "mutex.h"
 #include "dbg_print.h"
 #include "assert.h"
@@ -60,9 +59,6 @@ typedef struct _XENFILT_DRIVER {
 
     PXENFILT_EMULATED_CONTEXT   EmulatedContext;
     XENFILT_EMULATED_INTERFACE  EmulatedInterface;
-
-    PXENFILT_PVDEVICE_CONTEXT   PvdeviceContext;
-    XENFILT_PVDEVICE_INTERFACE  PvdeviceInterface;
 } XENFILT_DRIVER, *PXENFILT_DRIVER;
 
 static XENFILT_DRIVER   Driver;
@@ -158,30 +154,6 @@ DriverGetEmulatedContext(
 }
 
 static FORCEINLINE VOID
-__DriverSetPvdeviceContext(
-    IN  PXENFILT_PVDEVICE_CONTEXT   Context
-    )
-{
-    Driver.PvdeviceContext = Context;
-}
-
-static FORCEINLINE PXENFILT_PVDEVICE_CONTEXT
-__DriverGetPvdeviceContext(
-    VOID
-    )
-{
-    return Driver.PvdeviceContext;
-}
-
-PXENFILT_PVDEVICE_CONTEXT
-DriverGetPvdeviceContext(
-    VOID
-    )
-{
-    return __DriverGetPvdeviceContext();
-}
-
-static FORCEINLINE VOID
 __DriverAcquireMutex(
     VOID
     )
@@ -246,6 +218,74 @@ DriverRemoveFunctionDeviceObject(
     --Driver.References;
 }
 
+static FORCEINLINE NTSTATUS
+__DriverGetActive(
+    OUT PCHAR       DeviceID,
+    OUT PCHAR       InstanceID
+    )
+{
+    HANDLE          ParametersKey;
+    PANSI_STRING    Ansi;
+    NTSTATUS        status;
+
+    Trace("====>\n");
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    ParametersKey = __DriverGetParametersKey();
+
+    status = RegistryQuerySzValue(ParametersKey,
+                                  "ActiveDeviceID",
+                                  NULL,
+                                  &Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = RtlStringCbPrintfA(DeviceID,
+                                MAX_DEVICE_ID_LEN,
+                                "%Z",
+                                &Ansi[0]);
+    ASSERT(NT_SUCCESS(status));
+
+    RegistryFreeSzValue(Ansi);
+
+    status = RegistryQuerySzValue(ParametersKey,
+                                  "ActiveInstanceID",
+                                  NULL,
+                                  &Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    status = RtlStringCbPrintfA(InstanceID,
+                                MAX_DEVICE_ID_LEN,
+                                "%Z",
+                                &Ansi[0]);
+    ASSERT(NT_SUCCESS(status));
+
+    RegistryFreeSzValue(Ansi);
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
+DriverGetActive(
+    OUT PCHAR       DeviceID,
+    OUT PCHAR       InstanceID
+    )
+{
+    return __DriverGetActive(DeviceID, InstanceID);
+}
+
 static BOOLEAN
 DriverIsActivePresent(
     VOID
@@ -256,20 +296,14 @@ DriverIsActivePresent(
     BOOLEAN     Present;
     NTSTATUS    status;
 
-    status = XENFILT_PVDEVICE(Acquire, &Driver.PvdeviceInterface);
+    status = XENFILT_EMULATED(Acquire, &Driver.EmulatedInterface);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = XENFILT_EMULATED(Acquire, &Driver.EmulatedInterface);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
     Present = FALSE;
 
-    status = XENFILT_PVDEVICE(GetActive,
-                              &Driver.PvdeviceInterface,
-                              ActiveDeviceID,
-                              ActiveInstanceID);
+    status = __DriverGetActive(ActiveDeviceID,
+                               ActiveInstanceID);
     if (!NT_SUCCESS(status))
         goto done;
 
@@ -280,12 +314,8 @@ DriverIsActivePresent(
 
 done:
     XENFILT_EMULATED(Release, &Driver.EmulatedInterface);
-    XENFILT_PVDEVICE(Release, &Driver.PvdeviceInterface);
 
     return Present;
-
-fail2:
-    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -385,14 +415,8 @@ DriverUnload(
     RtlZeroMemory(&Driver.List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&Driver.Mutex, sizeof (MUTEX));
 
-    RtlZeroMemory(&Driver.PvdeviceInterface,
-                  sizeof (XENFILT_PVDEVICE_INTERFACE));
-
     RtlZeroMemory(&Driver.EmulatedInterface,
                   sizeof (XENFILT_EMULATED_INTERFACE));
-
-    PvdeviceTeardown(Driver.PvdeviceContext);
-    Driver.PvdeviceContext = NULL;
 
     EmulatedTeardown(Driver.EmulatedContext);
     Driver.EmulatedContext = NULL;
@@ -654,7 +678,6 @@ DriverEntry(
     HANDLE                      ServiceKey;
     HANDLE                      ParametersKey;
     PXENFILT_EMULATED_CONTEXT   EmulatedContext;
-    PXENFILT_PVDEVICE_CONTEXT   PvdeviceContext;
     ULONG                       Index;
     NTSTATUS                    status;
 
@@ -711,22 +734,10 @@ DriverEntry(
 
     __DriverSetEmulatedContext(EmulatedContext);
 
-    status = PvdeviceInitialize(&PvdeviceContext);
-    if (!NT_SUCCESS(status))
-        goto fail5;
-
-    __DriverSetPvdeviceContext(PvdeviceContext);
-
     status = EmulatedGetInterface(__DriverGetEmulatedContext(),
                                   XENFILT_EMULATED_INTERFACE_VERSION_MAX,
                                   (PINTERFACE)&Driver.EmulatedInterface,
                                   sizeof (Driver.EmulatedInterface));
-    ASSERT(NT_SUCCESS(status));
-
-    status = PvdeviceGetInterface(__DriverGetPvdeviceContext(),
-                                  XENFILT_PVDEVICE_INTERFACE_VERSION_MAX,
-                                  (PINTERFACE)&Driver.PvdeviceInterface,
-                                  sizeof (Driver.PvdeviceInterface));
     ASSERT(NT_SUCCESS(status));
 
     RegistryCloseKey(ServiceKey);
@@ -746,12 +757,6 @@ DriverEntry(
 done:
     Trace("<====\n");
     return STATUS_SUCCESS;
-
-fail5:
-    Error("fail5\n");
-
-    EmulatedTeardown(Driver.EmulatedContext);
-    Driver.EmulatedContext = NULL;
 
 fail4:
     Error("fail4\n");

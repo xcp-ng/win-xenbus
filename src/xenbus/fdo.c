@@ -38,7 +38,6 @@
 #include <stdlib.h>
 #include <xen.h>
 
-#include <pvdevice_interface.h>
 #include <version.h>
 
 #include "names.h"
