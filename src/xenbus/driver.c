@@ -228,6 +228,276 @@ DriverRemoveFunctionDeviceObject(
         FiltersUninstall();
 }
 
+//
+// The canonical location for active device information is the XENFILT
+// Parameters key.
+//
+#define ACTIVE_PATH "\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\XENFILT\\Parameters"
+
+NTSTATUS
+DriverGetActive(
+    OUT PCHAR       DeviceID,
+    OUT PCHAR       InstanceID
+    )
+{
+    HANDLE          ActiveKey;
+    PANSI_STRING    Ansi;
+    NTSTATUS        status;
+
+    Trace("====>\n");
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    status = RegistryOpenSubKey(NULL,
+                                ACTIVE_PATH,
+                                KEY_READ,
+                                &ActiveKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = RegistryQuerySzValue(ActiveKey,
+                                  "ActiveDeviceID",
+                                  NULL,
+                                  &Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    status = RtlStringCbPrintfA(DeviceID,
+                                MAX_DEVICE_ID_LEN,
+                                "%Z",
+                                &Ansi[0]);
+    ASSERT(NT_SUCCESS(status));
+
+    RegistryFreeSzValue(Ansi);
+
+    status = RegistryQuerySzValue(ActiveKey,
+                                  "ActiveInstanceID",
+                                  NULL,
+                                  &Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    status = RtlStringCbPrintfA(InstanceID,
+                                MAX_DEVICE_ID_LEN,
+                                "%Z",
+                                &Ansi[0]);
+    ASSERT(NT_SUCCESS(status));
+
+    RegistryFreeSzValue(Ansi);
+
+    RegistryCloseKey(ActiveKey);
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(ActiveKey);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static const CHAR *DriverLegacyDevicePrefix[] = {
+    "PCI\\VEN_5853&DEV_0001",
+    "PCI\\VEN_5853&DEV_0002"
+};
+
+static FORCEINLINE BOOLEAN
+__DriverIsDeviceLegacy(
+    IN  PCHAR   DeviceID
+    )
+{
+    ULONG       Index;
+
+    for (Index = 0; Index < ARRAYSIZE(DriverLegacyDevicePrefix); Index++) {
+        const CHAR  *Prefix = DriverLegacyDevicePrefix[Index];
+
+        if (_strnicmp(DeviceID, Prefix, strlen(Prefix)) == 0)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static const CHAR *DriverVendorDeviceID =
+#ifdef VENDOR_DEVICE_ID_STR
+    "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR "&SUBSYS_C0005853&REV_01";
+#else
+    NULL;
+#endif
+
+#define ENUM_PATH "\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Enum"
+
+static FORCEINLINE BOOLEAN
+__DriverIsVendorDevicePresent(
+    VOID
+    )
+{
+    HANDLE      EnumKey;
+    HANDLE      DeviceKey;
+    BOOLEAN     Found;
+    NTSTATUS    status;
+
+    status = RegistryOpenSubKey(NULL,
+                                ENUM_PATH,
+                                KEY_READ,
+                                &EnumKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    Found = FALSE;
+
+    status = RegistryOpenSubKey(EnumKey,
+                                (PCHAR)DriverVendorDeviceID,
+                                KEY_READ,
+                                &DeviceKey);
+    if (!NT_SUCCESS(status))
+        goto done;
+
+    RegistryCloseKey(DeviceKey);
+    Found = TRUE;
+
+done:
+    RegistryCloseKey(EnumKey);
+
+    return Found;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return FALSE;
+}
+
+NTSTATUS
+DriverSetActive(
+    IN  PCHAR   DeviceID,
+    IN  PCHAR   InstanceID
+    )
+{
+    HANDLE      ActiveKey;
+    ANSI_STRING Ansi[2];
+    NTSTATUS    status;
+
+    Trace("====>\n");
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    status = RegistryOpenSubKey(NULL,
+                                ACTIVE_PATH,
+                                KEY_ALL_ACCESS,
+                                &ActiveKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = STATUS_UNSUCCESSFUL;
+    if (__DriverIsDeviceLegacy(DeviceID) &&
+        __DriverIsVendorDevicePresent())
+        goto fail2;
+
+    RtlZeroMemory(Ansi, sizeof (ANSI_STRING) * 2);
+
+    RtlInitAnsiString(&Ansi[0], DeviceID);
+
+    status = RegistryUpdateSzValue(ActiveKey,
+                                   "ActiveDeviceID",
+                                   REG_SZ,
+                                   Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    RtlInitAnsiString(&Ansi[0], InstanceID);
+
+    status = RegistryUpdateSzValue(ActiveKey,
+                                   "ActiveInstanceID",
+                                   REG_SZ,
+                                   Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail4;
+
+    Info("%s\\%s\n", DeviceID, InstanceID);
+
+    RegistryCloseKey(ActiveKey);
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(ActiveKey);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
+DriverClearActive(
+    VOID
+    )
+{
+    HANDLE      ActiveKey;
+    NTSTATUS    status;
+
+    Trace("====>\n");
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    status = RegistryOpenSubKey(NULL,
+                                ACTIVE_PATH,
+                                KEY_ALL_ACCESS,
+                                &ActiveKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = RegistryDeleteValue(ActiveKey,
+                                 "ActiveDeviceID");
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    status = RegistryDeleteValue(ActiveKey,
+                                 "ActiveInstanceID");
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    Info("DONE\n");
+
+    RegistryCloseKey(ActiveKey);
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(ActiveKey);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
 DRIVER_UNLOAD       DriverUnload;
 
 VOID
