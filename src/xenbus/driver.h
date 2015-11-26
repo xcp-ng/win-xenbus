@@ -57,6 +57,23 @@ DriverReleaseMutex(
     VOID
      );
 
+extern NTSTATUS
+DriverGetActive(
+    OUT PCHAR   DeviceID,
+    OUT PCHAR   InstanceID
+    );
+
+NTSTATUS
+DriverSetActive(
+    IN  PCHAR   DeviceID,
+    IN  PCHAR   InstanceID
+    );
+
+NTSTATUS
+DriverClearActive(
+    VOID
+    );
+
 typedef struct _XENBUS_FDO      XENBUS_FDO, *PXENBUS_FDO;
 typedef struct _XENBUS_PDO      XENBUS_PDO, *PXENBUS_PDO;
 

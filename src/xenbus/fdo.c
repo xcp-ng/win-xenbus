@@ -116,7 +116,6 @@ struct _XENBUS_FDO {
     PCM_PARTIAL_RESOURCE_LIST       RawResourceList;
     PCM_PARTIAL_RESOURCE_LIST       TranslatedResourceList;
 
-    XENFILT_PVDEVICE_INTERFACE      PvdeviceInterface;
     BOOLEAN                         Active;
 
     PXENBUS_SUSPEND_CONTEXT         SuspendContext;
@@ -634,22 +633,14 @@ FdoSetActive(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = XENFILT_PVDEVICE(Acquire, &Fdo->PvdeviceInterface);
-    if (!NT_SUCCESS(status))
-        goto fail3;
-
-    status = XENFILT_PVDEVICE(GetActive,
-                              &Fdo->PvdeviceInterface,
-                              ActiveDeviceID,
-                              ActiveInstanceID);
+    status = DriverGetActive(ActiveDeviceID,
+                             ActiveInstanceID);
     if (NT_SUCCESS(status)) {
         if (_stricmp(DeviceID, ActiveDeviceID) != 0)
             goto done;
     } else {
-        status = XENFILT_PVDEVICE(SetActive,
-                                  &Fdo->PvdeviceInterface,
-                                  DeviceID,
-                                  InstanceID);
+        status = DriverSetActive(DeviceID,
+                                 InstanceID);
         if (!NT_SUCCESS(status))
             goto done;
     }
@@ -657,12 +648,7 @@ FdoSetActive(
     Fdo->Active = TRUE;
 
 done:
-    XENFILT_PVDEVICE(Release, &Fdo->PvdeviceInterface);
-
     return STATUS_SUCCESS;
-
-fail3:
-    Error("fail3\n");
 
 fail2:
     Error("fail2\n");
@@ -673,30 +659,14 @@ fail1:
     return status;
 }
 
-static NTSTATUS
+static VOID
 FdoClearActive(
     IN  PXENBUS_FDO Fdo
     )
 {
-    NTSTATUS        status;
-
-    status = XENFILT_PVDEVICE(Acquire, &Fdo->PvdeviceInterface);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    (VOID) XENFILT_PVDEVICE(ClearActive,
-                            &Fdo->PvdeviceInterface);
+    (VOID) DriverClearActive();
 
     Fdo->Active = FALSE;
-
-    XENFILT_PVDEVICE(Release, &Fdo->PvdeviceInterface);
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
 }
 
 static FORCEINLINE BOOLEAN
@@ -5056,67 +5026,53 @@ FdoCreate(
 
     __FdoSetName(Fdo);
 
-    status = FDO_QUERY_INTERFACE(Fdo,
-                                 XENFILT,
-                                 PVDEVICE,
-                                 (PINTERFACE)&Fdo->PvdeviceInterface,
-                                 sizeof (Fdo->PvdeviceInterface),
-                                 TRUE);
-    if (!NT_SUCCESS(status))
-        goto fail8;
-
-    if (Fdo->PvdeviceInterface.Interface.Context == NULL) {
-        DriverRequestReboot();
-        goto done;
-    }
-
     status = FdoSetActive(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail8;
 
     if (!__FdoIsActive(Fdo))
         goto done;
 
     status = DebugInitialize(Fdo, &Fdo->DebugContext);
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail9;
 
     status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail10;
 
     status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
     if (!NT_SUCCESS(status))
-        goto fail12;
+        goto fail11;
 
     status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
     if (!NT_SUCCESS(status))
-        goto fail13;
+        goto fail12;
 
     status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
-        goto fail14;
+        goto fail13;
 
     status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
-        goto fail15;
+        goto fail14;
 
     status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
-        goto fail16;
+        goto fail15;
 
     status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
-        goto fail17;
+        goto fail16;
 
     status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
     if (!NT_SUCCESS(status))
-        goto fail18;
+        goto fail17;
 
     if (FdoIsBalloonEnabled(Fdo)) {
         status = BalloonInitialize(Fdo, &Fdo->BalloonContext);
         if (!NT_SUCCESS(status))
-            goto fail19;
+            goto fail18;
     }
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
@@ -5179,70 +5135,68 @@ done:
 
     return STATUS_SUCCESS;
 
-fail19:
-    Error("fail19\n");
+fail18:
+    Error("fail18\n");
 
     UnplugTeardown(Fdo->UnplugContext);
     Fdo->UnplugContext = NULL;
 
-fail18:
-    Error("fail18\n");
+fail17:
+    Error("fail17\n");
 
     GnttabTeardown(Fdo->GnttabContext);
     Fdo->GnttabContext = NULL;
 
-fail17:
-    Error("fail17\n");
+fail16:
+    Error("fail16\n");
 
     CacheTeardown(Fdo->CacheContext);
     Fdo->CacheContext = NULL;
 
-fail16:
-    Error("fail16\n");
+fail15:
+    Error("fail15\n");
 
     RangeSetTeardown(Fdo->RangeSetContext);
     Fdo->RangeSetContext = NULL;
 
-fail15:
-    Error("fail15\n");
+fail14:
+    Error("fail14\n");
 
     StoreTeardown(Fdo->StoreContext);
     Fdo->StoreContext = NULL;
 
-fail14:
-    Error("fail14\n");
+fail13:
+    Error("fail13\n");
 
     EvtchnTeardown(Fdo->EvtchnContext);
     Fdo->EvtchnContext = NULL;
 
-fail13:
-    Error("fail13\n");
+fail12:
+    Error("fail12\n");
 
     SharedInfoTeardown(Fdo->SharedInfoContext);
     Fdo->SharedInfoContext = NULL;
 
-fail12:
-    Error("fail12\n");
+fail11:
+    Error("fail11\n");
 
     SuspendTeardown(Fdo->SuspendContext);
     Fdo->SuspendContext = NULL;
 
-fail11:
-    Error("fail11\n");
+fail10:
+    Error("fail10\n");
 
     DebugTeardown(Fdo->DebugContext);
     Fdo->DebugContext = NULL;
 
-fail10:
-    Error("fail10\n");
-
-    Fdo->Active = FALSE;
-
 fail9:
     Error("fail9\n");
 
-    RtlZeroMemory(&Fdo->PvdeviceInterface,
-                  sizeof (XENFILT_PVDEVICE_INTERFACE));
+    //
+    // We don't want to call DriverClearActive() so just
+    // clear the FDO flag.
+    //
+    Fdo->Active = FALSE;
 
 fail8:
     Error("fail8\n");
@@ -5371,13 +5325,8 @@ FdoDestroy(
         DebugTeardown(Fdo->DebugContext);
         Fdo->DebugContext = NULL;
 
-        Fdo->Active = FALSE;
-
         FdoClearActive(Fdo);
     }
-
-    RtlZeroMemory(&Fdo->PvdeviceInterface,
-                  sizeof (XENFILT_PVDEVICE_INTERFACE));
 
     RtlZeroMemory(Fdo->VendorName, MAXNAMELEN);
 
