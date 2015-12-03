@@ -292,15 +292,18 @@ DriverGetActive(
     return STATUS_SUCCESS;
 
 fail3:
-    Error("fail3\n");
+    if (status != STATUS_OBJECT_NAME_NOT_FOUND)
+        Error("fail3\n");
 
 fail2:
-    Error("fail2\n");
+    if (status != STATUS_OBJECT_NAME_NOT_FOUND)
+        Error("fail2\n");
 
     RegistryCloseKey(ActiveKey);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
+    if (status != STATUS_OBJECT_NAME_NOT_FOUND)
+        Error("fail1 (%08x)\n", status);
 
     return status;
 }
@@ -345,6 +348,9 @@ __DriverIsVendorDevicePresent(
     HANDLE      DeviceKey;
     BOOLEAN     Found;
     NTSTATUS    status;
+
+    if (DriverVendorDeviceID == NULL)
+        return FALSE;
 
     status = RegistryOpenSubKey(NULL,
                                 ENUM_PATH,
