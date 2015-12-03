@@ -54,6 +54,11 @@ GnttabGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+GnttabGetReferences(
+    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    );
+
 extern VOID
 GnttabTeardown(
     IN  PXENBUS_GNTTAB_CONTEXT  Context

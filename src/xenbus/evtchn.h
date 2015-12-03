@@ -54,6 +54,11 @@ EvtchnGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+EvtchnGetReferences(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    );
+
 extern VOID
 EvtchnTeardown(
     IN  PXENBUS_EVTCHN_CONTEXT  Context

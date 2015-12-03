@@ -54,6 +54,11 @@ RangeSetGetInterface(
     IN      ULONG                       Size
     );
 
+extern ULONG
+RangeSetGetReferences(
+    IN  PXENBUS_RANGE_SET_CONTEXT   Context
+    );
+
 extern VOID
 RangeSetTeardown(
     IN  PXENBUS_RANGE_SET_CONTEXT   Context

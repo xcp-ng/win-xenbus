@@ -54,6 +54,11 @@ SharedInfoGetInterface(
     IN      ULONG                       Size
     );
 
+extern ULONG
+SharedInfoGetReferences(
+    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    );
+
 extern VOID
 SharedInfoTeardown(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context

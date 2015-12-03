@@ -1934,6 +1934,9 @@ StoreDisable(
     IN PXENBUS_STORE_CONTEXT    Context
     )
 {
+    LogPrintf(LOG_LEVEL_INFO,
+              "STORE: DISABLE\n");
+
     Context->Enabled = FALSE;
 
     XENBUS_EVTCHN(Close,
@@ -1956,10 +1959,6 @@ StoreEnable(
 
     Port = (ULONG)Value;
 
-    LogPrintf(LOG_LEVEL_INFO,
-              "STORE: EVTCHN %u\n",
-              Port);
-
     Context->Channel = XENBUS_EVTCHN(Open,
                                      &Context->EvtchnInterface,
                                      XENBUS_EVTCHN_TYPE_FIXED,
@@ -1975,6 +1974,10 @@ StoreEnable(
                   FALSE);
 
     Context->Enabled = TRUE;
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "STORE: ENABLE (%u)\n",
+              Port);
 
     // Trigger an initial poll
     KeInsertQueueDpc(&Context->Dpc, NULL, NULL);
@@ -2562,6 +2565,14 @@ StoreGetInterface(
 
     return status;
 }   
+
+ULONG
+StoreGetReferences(
+    IN  PXENBUS_STORE_CONTEXT   Context
+    )
+{
+    return Context->References;
+}
 
 VOID
 StoreTeardown(

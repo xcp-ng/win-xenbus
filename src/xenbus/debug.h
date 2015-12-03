@@ -54,6 +54,11 @@ DebugGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+DebugGetReferences(
+    IN  PXENBUS_DEBUG_CONTEXT   Context
+    );
+
 extern VOID
 DebugTeardown(
     IN  PXENBUS_DEBUG_CONTEXT   Context

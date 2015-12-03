@@ -427,6 +427,14 @@ DebugGetInterface(
     return status;
 }   
 
+ULONG
+DebugGetReferences(
+    IN  PXENBUS_DEBUG_CONTEXT   Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 DebugTeardown(
     IN  PXENBUS_DEBUG_CONTEXT   Context
@@ -444,4 +452,3 @@ DebugTeardown(
 
     Trace("<====\n");
 }
-

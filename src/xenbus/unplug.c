@@ -224,6 +224,14 @@ UnplugGetInterface(
     return status;
 }
 
+ULONG
+UnplugGetReferences(
+    IN  PXENBUS_UNPLUG_CONTEXT  Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 UnplugTeardown(
     IN  PXENBUS_UNPLUG_CONTEXT  Context

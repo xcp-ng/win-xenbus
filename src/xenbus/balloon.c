@@ -987,6 +987,14 @@ BalloonGetInterface(
     return status;
 }   
 
+ULONG
+BalloonGetReferences(
+    IN  PXENBUS_BALLOON_CONTEXT Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 BalloonTeardown(
     IN  PXENBUS_BALLOON_CONTEXT Context

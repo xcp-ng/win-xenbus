@@ -54,6 +54,11 @@ BalloonGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+BalloonGetReferences(
+    IN  PXENBUS_BALLOON_CONTEXT Context
+    );
+
 extern VOID
 BalloonTeardown(
     IN  PXENBUS_BALLOON_CONTEXT Context

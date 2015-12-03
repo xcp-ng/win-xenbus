@@ -468,6 +468,14 @@ SuspendGetInterface(
     return status;
 }   
 
+ULONG
+SuspendGetReferences(
+    IN  PXENBUS_SUSPEND_CONTEXT Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 SuspendTeardown(
     IN  PXENBUS_SUSPEND_CONTEXT Context

@@ -869,6 +869,14 @@ RangeSetGetInterface(
     return status;
 }   
 
+ULONG
+RangeSetGetReferences(
+    IN  PXENBUS_RANGE_SET_CONTEXT   Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 RangeSetTeardown(
     IN  PXENBUS_RANGE_SET_CONTEXT   Context
@@ -889,5 +897,3 @@ RangeSetTeardown(
 
     Trace("<====\n");
 }
-
-

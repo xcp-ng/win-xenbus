@@ -54,6 +54,11 @@ UnplugGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+UnplugGetReferences(
+    IN  PXENBUS_UNPLUG_CONTEXT   Context
+    );
+
 extern VOID
 UnplugTeardown(
     IN  PXENBUS_UNPLUG_CONTEXT   Context

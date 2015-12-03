@@ -1014,6 +1014,14 @@ CacheGetInterface(
     return status;
 }   
 
+ULONG
+CacheGetReferences(
+    IN  PXENBUS_CACHE_CONTEXT   Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 CacheTeardown(
     IN  PXENBUS_CACHE_CONTEXT   Context

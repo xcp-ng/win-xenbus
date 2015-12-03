@@ -54,6 +54,11 @@ SuspendGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+SuspendGetReferences(
+    IN  PXENBUS_SUSPEND_CONTEXT Context
+    );
+
 extern VOID
 SuspendTeardown(
     IN  PXENBUS_SUSPEND_CONTEXT Context
