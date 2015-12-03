@@ -794,6 +794,14 @@ SharedInfoGetInterface(
     return status;
 }   
 
+ULONG
+SharedInfoGetReferences(
+    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 SharedInfoTeardown(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
@@ -816,4 +824,3 @@ SharedInfoTeardown(
 
     Trace("<====\n");
 }
-

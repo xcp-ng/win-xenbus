@@ -1880,6 +1880,14 @@ EvtchnGetInterface(
     return status;
 }   
 
+ULONG
+EvtchnGetReferences(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 EvtchnTeardown(
     IN  PXENBUS_EVTCHN_CONTEXT  Context

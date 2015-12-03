@@ -54,6 +54,11 @@ StoreGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+StoreGetReferences(
+    IN  PXENBUS_STORE_CONTEXT   Context
+    );
+
 extern VOID
 StoreTeardown(
     IN  PXENBUS_STORE_CONTEXT   Context

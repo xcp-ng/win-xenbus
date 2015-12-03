@@ -54,6 +54,11 @@ CacheGetInterface(
     IN      ULONG                   Size
     );
 
+extern ULONG
+CacheGetReferences(
+    IN  PXENBUS_CACHE_CONTEXT   Context
+    );
+
 extern VOID
 CacheTeardown(
     IN  PXENBUS_CACHE_CONTEXT   Context

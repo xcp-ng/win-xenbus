@@ -1058,6 +1058,14 @@ GnttabGetInterface(
     return status;
 }   
 
+ULONG
+GnttabGetReferences(
+    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    )
+{
+    return Context->References;
+}
+
 VOID
 GnttabTeardown(
     IN  PXENBUS_GNTTAB_CONTEXT  Context
