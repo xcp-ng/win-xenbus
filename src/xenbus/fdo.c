@@ -3206,6 +3206,9 @@ FdoS3ToS4(
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
     ASSERT3U(__FdoGetSystemPowerState(Fdo), ==, PowerSystemSleeping3);
 
+    if (!__FdoIsActive(Fdo))
+        goto not_active;
+
     BUG_ON(SuspendGetReferences(Fdo->SuspendContext) != 0);
     BUG_ON(SharedInfoGetReferences(Fdo->SharedInfoContext) != 0);
     BUG_ON(EvtchnGetReferences(Fdo->EvtchnContext) != 0);
@@ -3217,6 +3220,7 @@ FdoS3ToS4(
     BUG_ON(UnplugGetReferences(Fdo->UnplugContext) != 0);
     BUG_ON(BalloonGetReferences(Fdo->BalloonContext) != 0);
 
+not_active:
     __FdoSetSystemPowerState(Fdo, PowerSystemHibernate);
 
     Trace("<====\n");
