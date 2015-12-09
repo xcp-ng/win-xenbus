@@ -699,7 +699,9 @@ EvtchnBind(
         goto done;
 
     LocalPort = Channel->LocalPort;
-    vcpu_id = SystemVirtualCpuIndex(Index);
+
+    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    ASSERT(NT_SUCCESS(status));
 
     status = EventChannelBindVirtualCpu(LocalPort, vcpu_id);
     if (!NT_SUCCESS(status))
@@ -1155,7 +1157,9 @@ EvtchnInterruptEnable(
         if (Processor->Interrupt == NULL)
             continue;
 
-        vcpu_id = SystemVirtualCpuIndex(Index);
+        status = SystemVirtualCpuIndex(Index, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
+
         Vector = FdoGetInterruptVector(Context->Fdo, Processor->Interrupt);
 
         status = HvmSetEvtchnUpcallVector(vcpu_id, Vector);
@@ -1211,7 +1215,8 @@ EvtchnInterruptDisable(
         if (!Processor->UpcallEnabled)
             continue;
 
-        vcpu_id = SystemVirtualCpuIndex(Index);
+        status = SystemVirtualCpuIndex(Index, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
 
         (VOID) HvmSetEvtchnUpcallVector(vcpu_id, 0);
         Processor->UpcallEnabled = FALSE;
@@ -1434,7 +1439,7 @@ EvtchnAcquire(
     if (Context->Interrupt == NULL)
         goto fail8;
 
-    Context->ProcessorCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    Context->ProcessorCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
     Context->Processor = __EvtchnAllocate(sizeof (XENBUS_EVTCHN_PROCESSOR) * Context->ProcessorCount);
 
     status = STATUS_NO_MEMORY;
@@ -1460,7 +1465,9 @@ EvtchnAcquire(
                                                     ProcNumber.Number,
                                                     EvtchnInterruptCallback,
                                                     Context);
-        ASSERT(Processor->Interrupt != NULL);
+
+        if (Processor->Interrupt == NULL)
+            continue;
 
         InitializeListHead(&Processor->PendingList);
 

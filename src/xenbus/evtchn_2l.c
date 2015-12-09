@@ -67,13 +67,23 @@ __EvtchnTwoLevelFree(
 
 static BOOLEAN
 EvtchnTwoLevelIsProcessorEnabled(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context,
-    IN  ULONG                           Index
+    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
+    IN  ULONG                       Index
     )
 {
+    unsigned int                    vcpu_id;
+    NTSTATUS                        status;
+
     UNREFERENCED_PARAMETER(_Context);
 
-    return (SystemVirtualCpuIndex(Index) == 0) ? TRUE : FALSE;
+    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    if (!NT_SUCCESS(status))
+        return FALSE;
+
+    if (vcpu_id != 0)
+        return FALSE;
+
+    return TRUE;
 }
 
 static BOOLEAN

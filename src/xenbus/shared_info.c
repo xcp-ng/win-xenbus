@@ -161,8 +161,13 @@ SharedInfoUpcallPending(
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
     shared_info_t               *Shared = Context->Shared;
-    int                         vcpu_id = SystemVirtualCpuIndex(Index);
+    unsigned int                vcpu_id;
     UCHAR                       Pending;
+    NTSTATUS                    status;
+
+    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    if (!NT_SUCCESS(status))
+        return FALSE;
 
     KeMemoryBarrier();
 
@@ -181,12 +186,17 @@ SharedInfoEvtchnPoll(
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
     shared_info_t                   *Shared = Context->Shared;
-    int                             vcpu_id = SystemVirtualCpuIndex(Index);
+    unsigned int                    vcpu_id;
     ULONG                           Port;
     ULONG_PTR                       SelectorMask;
     BOOLEAN                         DoneSomething;
+    NTSTATUS                        status;
 
     DoneSomething = FALSE;
+
+    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    if (!NT_SUCCESS(status))
+        goto done;
 
     KeMemoryBarrier();
 
@@ -233,6 +243,7 @@ SharedInfoEvtchnPoll(
 
     Context->Port = Port;
 
+done:
     return DoneSomething;
 }
 
@@ -469,13 +480,15 @@ SharedInfoDebugCallback(
              Index < KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
              Index++) {
             PROCESSOR_NUMBER    ProcNumber;
-            int                 vcpu_id;
+            unsigned int        vcpu_id;
             NTSTATUS            status;
+
+            status = SystemVirtualCpuIndex(Index, &vcpu_id);
+            if (!NT_SUCCESS(status))
+                continue;
 
             status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
             ASSERT(NT_SUCCESS(status));
-
-            vcpu_id = SystemVirtualCpuIndex(Index);
 
             XENBUS_DEBUG(Printf,
                          &Context->DebugInterface,

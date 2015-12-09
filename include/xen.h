@@ -382,8 +382,15 @@ LogPrintf(
 
 XEN_API
 ULONG
+SystemProcessorCount(
+    VOID
+    );
+
+XEN_API
+NTSTATUS
 SystemVirtualCpuIndex(
-    IN  ULONG   Index
+    IN  ULONG           Index,
+    OUT unsigned int    *vcpu_id
     );
 
 #endif  // _XEN_H

@@ -285,7 +285,12 @@ EvtchnFifoIsProcessorEnabled(
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
-    unsigned int                    vcpu_id = SystemVirtualCpuIndex(Index);
+    unsigned int                    vcpu_id;
+    NTSTATUS                        status;
+    
+    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    if (!NT_SUCCESS(status))
+        return FALSE;
 
     return (Context->ControlBlockMdl[vcpu_id] != NULL) ? TRUE : FALSE;
 }
@@ -348,16 +353,21 @@ EvtchnFifoPoll(
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
-    unsigned int                    vcpu_id = SystemVirtualCpuIndex(Index);
+    unsigned int                    vcpu_id;
     PMDL                            Mdl;
     evtchn_fifo_control_block_t     *ControlBlock;
     ULONG                           Ready;
     ULONG                           Priority;
     BOOLEAN                         DoneSomething;
-
-    Mdl = Context->ControlBlockMdl[vcpu_id];
+    NTSTATUS                        status;
 
     DoneSomething = FALSE;
+
+    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    if (!NT_SUCCESS(status))
+        goto done;
+
+    Mdl = Context->ControlBlockMdl[vcpu_id];
     if (Mdl == NULL)
         goto done;
 
@@ -488,7 +498,7 @@ EvtchnFifoAcquire(
     Trace("====>\n");
 
     Index = 0;
-    while (Index < (LONG)KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS)) {
+    while (Index < (LONG)SystemProcessorCount()) {
         unsigned int        vcpu_id;
         PFN_NUMBER          Pfn;
         PHYSICAL_ADDRESS    Address;
@@ -499,7 +509,9 @@ EvtchnFifoAcquire(
         if (Mdl == NULL)
             goto fail1;
 
-        vcpu_id = SystemVirtualCpuIndex(Index);
+        status = SystemVirtualCpuIndex(Index, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
+
         Pfn = MmGetMdlPfnArray(Mdl)[0];
 
         status = EventChannelInitControl(Pfn, vcpu_id);
@@ -537,7 +549,8 @@ fail1:
     while (--Index >= 0) {
         unsigned int    vcpu_id;
 
-        vcpu_id = SystemVirtualCpuIndex(Index);
+        status = SystemVirtualCpuIndex(Index, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
 
         Mdl = Context->ControlBlockMdl[vcpu_id];
         Context->ControlBlockMdl[vcpu_id] = NULL;
