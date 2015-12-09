@@ -666,6 +666,8 @@ SystemProcessorChangeCallback(
         }
 
         Context->Processor = Processor;
+        KeMemoryBarrier();
+
         Context->ProcessorCount = ProcessorCount;
         break;
     }
@@ -972,18 +974,47 @@ fail1:
     return status;
 }
 
+static FORCEINLINE ULONG
+__SystemProcessorCount(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+
+    KeMemoryBarrier();
+
+    return Context->ProcessorCount;
+}
+
 XEN_API
 ULONG
+SystemProcessorCount(
+    VOID
+    )
+{
+    return __SystemProcessorCount();
+}
+
+XEN_API
+NTSTATUS
 SystemVirtualCpuIndex(
-    IN  ULONG           Index
+    IN  ULONG           Index,
+    OUT unsigned int    *vcpu_id
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
     PSYSTEM_PROCESSOR   Processor = &Context->Processor[Index];
+    NTSTATUS            status;
 
-    ASSERT3U(Index, <, Context->ProcessorCount);
+    status = STATUS_UNSUCCESSFUL;
+    if (Index >= __SystemProcessorCount())
+        goto fail1;
 
-    return Processor->ProcessorID;
+    *vcpu_id = Processor->ProcessorID;
+    return STATUS_SUCCESS;
+
+fail1:
+    return status;
 }
 
 VOID
