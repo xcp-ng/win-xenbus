@@ -461,6 +461,9 @@ SystemProcessorChangeCallback(
                                      NULL);
         break;
     }
+    case KeProcessorAddFailureNotify:
+        break;
+
     default:
         ASSERT(FALSE);
         break;
