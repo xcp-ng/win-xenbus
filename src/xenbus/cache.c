@@ -617,7 +617,7 @@ CacheCreate(
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    (*Cache)->MagazineCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    (*Cache)->MagazineCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
     (*Cache)->Magazine = __CacheAllocate(sizeof (XENBUS_CACHE_MAGAZINE) * (*Cache)->MagazineCount);
 
     status = STATUS_NO_MEMORY;
