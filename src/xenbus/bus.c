@@ -64,7 +64,7 @@ __BusFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, BUS_TAG);
+    __FreePoolWithTag(Buffer, BUS_TAG);
 }
 
 static VOID

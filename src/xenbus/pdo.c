@@ -88,7 +88,7 @@ __PdoFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, PDO_TAG);
+    __FreePoolWithTag(Buffer, PDO_TAG);
 }
 
 static FORCEINLINE VOID

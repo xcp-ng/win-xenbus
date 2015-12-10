@@ -73,7 +73,7 @@ __SuspendFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_SUSPEND_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_SUSPEND_TAG);
 }
 
 static NTSTATUS

@@ -155,7 +155,7 @@ __FdoFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_FDO_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_FDO_TAG);
 }
 
 static FORCEINLINE VOID

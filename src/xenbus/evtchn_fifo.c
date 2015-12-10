@@ -68,7 +68,7 @@ __EvtchnFifoFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_EVTCHN_FIFO_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_EVTCHN_FIFO_TAG);
 }
 
 static event_word_t *

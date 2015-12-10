@@ -62,7 +62,7 @@ __EvtchnTwoLevelFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_EVTCHN_TWO_LEVEL_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_EVTCHN_TWO_LEVEL_TAG);
 }
 
 static BOOLEAN

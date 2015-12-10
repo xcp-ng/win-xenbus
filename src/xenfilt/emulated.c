@@ -86,7 +86,7 @@ __EmulatedFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENFILT_EMULATED_TAG);
+    __FreePoolWithTag(Buffer, XENFILT_EMULATED_TAG);
 }
 
 static NTSTATUS

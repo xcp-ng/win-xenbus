@@ -158,6 +158,15 @@ __AllocatePoolWithTag(
     return Buffer;
 }
 
+static FORCEINLINE VOID
+__FreePoolWithTag(
+    IN  PVOID   Buffer,
+    IN  ULONG   Tag
+    )
+{
+    ExFreePoolWithTag(Buffer, Tag);
+}
+
 static FORCEINLINE PMDL
 __AllocatePage(
     VOID

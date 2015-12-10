@@ -79,7 +79,7 @@ __SystemFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XEN_SYSTEM_TAG);
+    __FreePoolWithTag(Buffer, XEN_SYSTEM_TAG);
 }
 
 static FORCEINLINE const CHAR *

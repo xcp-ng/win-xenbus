@@ -77,7 +77,7 @@ __DebugFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_DEBUG_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_DEBUG_TAG);
 }
 
 extern USHORT

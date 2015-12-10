@@ -52,7 +52,7 @@ __RegistryFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, REGISTRY_TAG);
+    __FreePoolWithTag(Buffer, REGISTRY_TAG);
 }
 
 NTSTATUS

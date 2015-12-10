@@ -107,7 +107,7 @@ __GnttabFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_GNTTAB_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_GNTTAB_TAG);
 }
 
 static NTSTATUS
