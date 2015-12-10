@@ -155,7 +155,7 @@ ModuleAdd(
         if (Name[Index] == '\0')
             break;
 
-        New->Name[Index] = (CHAR)tolower(Name[Index]);
+        New->Name[Index] = __tolower(Name[Index]);
     }
 
     New->Start = Start;

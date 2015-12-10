@@ -278,4 +278,26 @@ __strtok_r(
     return Token;
 }
 
+static FORCEINLINE CHAR
+__toupper(
+    IN  CHAR    Character
+    )
+{
+    if (Character < 'a' || Character > 'z')
+        return Character;
+
+    return 'A' + Character - 'a';
+}
+
+static FORCEINLINE CHAR
+__tolower(
+    IN  CHAR    Character
+    )
+{
+    if (Character < 'A' || Character > 'Z')
+        return Character;
+
+    return 'a' + Character - 'A';
+}
+
 #endif  // _COMMON_UTIL_H
