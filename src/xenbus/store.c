@@ -165,7 +165,7 @@ __StoreFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_STORE_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_STORE_TAG);
 }
 
 static NTSTATUS

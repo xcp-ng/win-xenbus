@@ -74,7 +74,7 @@ __DriverFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_DRIVER_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_DRIVER_TAG);
 }
 
 static FORCEINLINE VOID

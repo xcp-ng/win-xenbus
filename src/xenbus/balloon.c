@@ -80,7 +80,7 @@ __BalloonFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_BALLOON_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_BALLOON_TAG);
 }
 
 #define SWAP_NODES(_PfnArray, _X, _Y)       \

@@ -114,7 +114,7 @@ __CacheFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, CACHE_TAG);
+    __FreePoolWithTag(Buffer, CACHE_TAG);
 }
 
 static VOID

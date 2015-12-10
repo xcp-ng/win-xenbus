@@ -56,7 +56,7 @@ __AcpiFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_ACPI_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_ACPI_TAG);
 }
 
 static BOOLEAN

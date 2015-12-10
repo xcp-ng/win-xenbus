@@ -71,7 +71,7 @@ __HashTableFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_HASH_TABLE_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_HASH_TABLE_TAG);
 }
 
 static ULONG

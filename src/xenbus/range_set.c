@@ -81,7 +81,7 @@ __RangeSetFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, RANGE_SET_TAG);
+    __FreePoolWithTag(Buffer, RANGE_SET_TAG);
 }
 
 static FORCEINLINE BOOLEAN

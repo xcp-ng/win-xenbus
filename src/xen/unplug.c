@@ -71,7 +71,7 @@ __UnplugFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, UNPLUG_TAG);
+    __FreePoolWithTag(Buffer, UNPLUG_TAG);
 }
 
 static VOID

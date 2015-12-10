@@ -70,7 +70,7 @@ __SharedInfoFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_SHARED_INFO_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_SHARED_INFO_TAG);
 }
 
 static BOOLEAN

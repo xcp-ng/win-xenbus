@@ -63,7 +63,7 @@ __UnplugFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_UNPLUG_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_UNPLUG_TAG);
 }
 
 static VOID

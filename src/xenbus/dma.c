@@ -208,7 +208,7 @@ __DmaFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, DMA_TAG);
+    __FreePoolWithTag(Buffer, DMA_TAG);
 }
 
 static VOID

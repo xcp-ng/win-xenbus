@@ -60,7 +60,7 @@ __ThreadFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, THREAD_TAG);
+    __FreePoolWithTag(Buffer, THREAD_TAG);
 }
 
 static FORCEINLINE VOID

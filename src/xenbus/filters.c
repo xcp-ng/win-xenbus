@@ -57,7 +57,7 @@ __FiltersFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_FILTERS_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_FILTERS_TAG);
 }
 
 #define CLASS_PATH "\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\Class"

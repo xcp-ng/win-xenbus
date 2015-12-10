@@ -72,7 +72,7 @@ __ModuleFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, MODULE_TAG);
+    __FreePoolWithTag(Buffer, MODULE_TAG);
 }
 
 static VOID

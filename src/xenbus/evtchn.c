@@ -133,7 +133,7 @@ __EvtchnFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, XENBUS_EVTCHN_TAG);
+    __FreePoolWithTag(Buffer, XENBUS_EVTCHN_TAG);
 }
 
 static NTSTATUS

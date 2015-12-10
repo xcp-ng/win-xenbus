@@ -86,7 +86,7 @@ __FdoFree(
     IN  PVOID   Buffer
     )
 {
-    ExFreePoolWithTag(Buffer, FDO_TAG);
+    __FreePoolWithTag(Buffer, FDO_TAG);
 }
 
 static FORCEINLINE VOID
