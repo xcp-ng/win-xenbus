@@ -1532,9 +1532,9 @@ loop:
     return STATUS_SUCCESS;
 }
 
-#define TIME_US(_us)            ((_us) * 10)
-#define TIME_MS(_ms)            (TIME_US((_ms) * 1000))
-#define TIME_S(_s)              (TIME_MS((_s) * 1000))
+#define TIME_US(_us)            ((_us) * 10ll)
+#define TIME_MS(_ms)            (TIME_US((_ms) * 1000ll))
+#define TIME_S(_s)              (TIME_MS((_s) * 1000ll))
 #define TIME_RELATIVE(_t)       (-(_t))
 
 static FORCEINLINE NTSTATUS
@@ -3251,7 +3251,8 @@ FdoFilterCmPartialResourceList(
     }
 }
 
-#define BALLOON_PAUSE   60
+#define BALLOON_WARN_TIMEOUT        10
+#define BALLOON_BUGCHECK_TIMEOUT    1200
 
 static NTSTATUS
 FdoStartDevice(
@@ -3356,29 +3357,38 @@ not_active:
         goto fail8;
 
     if (Fdo->BalloonInterface.Interface.Context != NULL) {
-        BOOLEAN Warned;
+        LARGE_INTEGER   Timeout;
 
         ASSERT(__FdoIsActive(Fdo));
 
-        Warned = FALSE;
+        //
+        // Balloon inflation should complete within a reasonable
+        // time (otherwise the target is probably unreasonable).
+        //
+        Timeout.QuadPart = TIME_RELATIVE(TIME_S(BALLOON_WARN_TIMEOUT));
 
-        for (;;) {
-            LARGE_INTEGER   Timeout;
+        status = KeWaitForSingleObject(&Fdo->BalloonEvent,
+                                        Executive,
+                                        KernelMode,
+                                        FALSE,
+                                        &Timeout);
+        if (status == STATUS_TIMEOUT) {
+            Warning("waiting for balloon\n");
 
-            Timeout.QuadPart = TIME_RELATIVE(TIME_S(BALLOON_PAUSE));
+            //
+            // If inflation does not complete after a lengthy timeout
+            // then it is unlikely that it ever will. In this case we
+            // cause a bugcheck.
+            //
+            Timeout.QuadPart = TIME_RELATIVE(TIME_S((BALLOON_BUGCHECK_TIMEOUT - BALLOON_WARN_TIMEOUT)));
 
             status = KeWaitForSingleObject(&Fdo->BalloonEvent,
-                                           Executive,
-                                           KernelMode,
-                                           FALSE,
-                                           &Timeout);
-            if (status != STATUS_TIMEOUT)
-                break;
-
-            if (!Warned) {
-                Warning("waiting for balloon\n");
-                Warned = TRUE;
-            }
+                                            Executive,
+                                            KernelMode,
+                                            FALSE,
+                                            &Timeout);
+            if (status == STATUS_TIMEOUT)
+                BUG("BALLOON INFLATION TIMEOUT\n");
         }
     }
 
