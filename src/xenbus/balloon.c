@@ -572,6 +572,25 @@ done:
 }
 
 static BOOLEAN
+BalloonLowMemory(
+    IN  PXENBUS_BALLOON_CONTEXT Context
+    )
+{
+    LARGE_INTEGER               Timeout;
+    NTSTATUS                    status;
+
+    Timeout.QuadPart = 0;
+
+    status = KeWaitForSingleObject(Context->LowMemoryEvent,
+                                   Executive,
+                                   KernelMode,
+                                   FALSE,
+                                   &Timeout);
+
+    return (status == STATUS_SUCCESS) ? TRUE : FALSE;
+}
+
+static BOOLEAN
 BalloonDeflate(
     IN  PXENBUS_BALLOON_CONTEXT Context,
     IN  ULONGLONG               Requested
@@ -582,6 +601,9 @@ BalloonDeflate(
     BOOLEAN                     Abort;
     ULONGLONG                   Count;
     ULONGLONG                   TimeDelta;
+
+    if (Context->FIST.Deflation)
+        return TRUE;
 
     Info("====> %llu page(s)\n", Requested);
 
@@ -627,6 +649,12 @@ BalloonInflate(
     ULONGLONG                   Count;
     ULONGLONG                   TimeDelta;
 
+    if (Context->FIST.Inflation)
+        return TRUE;
+
+    if (BalloonLowMemory(Context))
+        return TRUE;
+
     Info("====> %llu page(s)\n", Requested);
 
     KeQuerySystemTime(&Start);
@@ -671,25 +699,6 @@ BalloonInflate(
     Context->Size += Count;
 
     return Abort;
-}
-
-static BOOLEAN
-BalloonLowMemory(
-    IN  PXENBUS_BALLOON_CONTEXT Context
-    )
-{
-    LARGE_INTEGER               Timeout;
-    NTSTATUS                    status;
-
-    Timeout.QuadPart = 0;
-
-    status = KeWaitForSingleObject(Context->LowMemoryEvent,
-                                   Executive,
-                                   KernelMode,
-                                   FALSE,
-                                   &Timeout);
-
-    return (status == STATUS_SUCCESS) ? TRUE : FALSE;
 }
 
 static VOID
@@ -758,12 +767,9 @@ BalloonAdjust(
 
     while (Context->Size != Size && !Abort) {
         if (Size > Context->Size)
-            Abort = Context->FIST.Inflation ||
-                    BalloonLowMemory(Context) ||
-                    BalloonInflate(Context, Size - Context->Size);
+            Abort = BalloonInflate(Context, Size - Context->Size);
         else if (Size < Context->Size)
-            Abort = Context->FIST.Deflation ||
-                    BalloonDeflate(Context, Context->Size - Size);
+            Abort = BalloonDeflate(Context, Context->Size - Size);
     }
 
     Info("<==== (%llu page(s))%s\n",
