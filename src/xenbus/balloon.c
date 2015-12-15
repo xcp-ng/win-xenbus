@@ -590,7 +590,7 @@ BalloonLowMemory(
     return (status == STATUS_SUCCESS) ? TRUE : FALSE;
 }
 
-static BOOLEAN
+static NTSTATUS
 BalloonDeflate(
     IN  PXENBUS_BALLOON_CONTEXT Context,
     IN  ULONGLONG               Requested
@@ -598,28 +598,29 @@ BalloonDeflate(
 {
     LARGE_INTEGER               Start;
     LARGE_INTEGER               End;
-    BOOLEAN                     Abort;
     ULONGLONG                   Count;
     ULONGLONG                   TimeDelta;
+    NTSTATUS                    status;
 
+    status = STATUS_UNSUCCESSFUL;
     if (Context->FIST.Deflation)
-        return TRUE;
+        goto done;
 
     Info("====> %llu page(s)\n", Requested);
 
     KeQuerySystemTime(&Start);
 
     Count = 0;
-    Abort = FALSE;
+    status = STATUS_SUCCESS;
 
-    while (Count < Requested && !Abort) {
+    while (Count < Requested && NT_SUCCESS(status)) {
         ULONG   ThisTime = (ULONG)__min(Requested - Count, XENBUS_BALLOON_PFN_ARRAY_SIZE);
         ULONG   Populated;
         ULONG   Freed;
 
         Populated = BalloonPopulatePfnArray(Context, ThisTime);
         if (Populated < ThisTime)
-            Abort = TRUE;
+            status = STATUS_RETRY;
 
         Freed = BalloonFreePfnArray(Context, Populated, TRUE);
         ASSERT(Freed == Populated);
@@ -634,10 +635,11 @@ BalloonDeflate(
     Info("<==== %llu page(s) in %llums\n", Count, TimeDelta);
     Context->Size -= Count;
 
-    return Abort;
+done:
+    return status;
 }
 
-static BOOLEAN
+static NTSTATUS
 BalloonInflate(
     IN  PXENBUS_BALLOON_CONTEXT Context,
     IN  ULONGLONG               Requested
@@ -645,24 +647,26 @@ BalloonInflate(
 {
     LARGE_INTEGER               Start;
     LARGE_INTEGER               End;
-    BOOLEAN                     Abort;
     ULONGLONG                   Count;
     ULONGLONG                   TimeDelta;
+    NTSTATUS                    status;
 
+    status = STATUS_UNSUCCESSFUL;
     if (Context->FIST.Inflation)
-        return TRUE;
+        goto done;
 
+    status = STATUS_NO_MEMORY;
     if (BalloonLowMemory(Context))
-        return TRUE;
+        goto done;
 
     Info("====> %llu page(s)\n", Requested);
 
     KeQuerySystemTime(&Start);
 
     Count = 0;
-    Abort = FALSE;
+    status = STATUS_SUCCESS;
 
-    while (Count < Requested && !Abort) {
+    while (Count < Requested && NT_SUCCESS(status)) {
         ULONG   ThisTime = (ULONG)__min(Requested - Count, XENBUS_BALLOON_PFN_ARRAY_SIZE);
         ULONG   Allocated;
         BOOLEAN Slow;
@@ -670,7 +674,7 @@ BalloonInflate(
 
         Allocated = BalloonAllocatePfnArray(Context, ThisTime, &Slow);
         if (Allocated < ThisTime || Slow)
-            Abort = TRUE;
+            status = STATUS_RETRY;
 
         Released = BalloonReleasePfnArray(Context, Allocated);
 
@@ -686,7 +690,7 @@ BalloonInflate(
         }
 
         if (Released == 0)
-            Abort = TRUE;
+            status = STATUS_RETRY;
 
         Count += Released;
     }
@@ -698,7 +702,8 @@ BalloonInflate(
     Info("<==== %llu page(s) in %llums\n", Count, TimeDelta);
     Context->Size += Count;
 
-    return Abort;
+done:
+    return status;
 }
 
 static VOID
@@ -748,6 +753,27 @@ BalloonGetFISTEntries(
         Warning("deflation disallowed\n");
 }
 
+static FORCEINLINE PCHAR
+__BalloonStatus(
+    IN  NTSTATUS    status
+    )
+{
+    switch (status) {
+    case STATUS_SUCCESS:
+        return "";
+    case STATUS_UNSUCCESSFUL:
+        return " [FIST]";
+    case STATUS_RETRY:
+        return " [RETRY]";
+    case STATUS_NO_MEMORY:
+        return " [LOW_MEM]";
+    default:
+        break;
+    }
+
+    return " [UNKNOWN]";
+}
+
 NTSTATUS
 BalloonAdjust(
     IN  PINTERFACE          Interface,
@@ -755,28 +781,28 @@ BalloonAdjust(
     )
 {
     PXENBUS_BALLOON_CONTEXT Context = Interface->Context;
-    BOOLEAN                 Abort;
+    NTSTATUS                status;
 
     ASSERT3U(KeGetCurrentIrql(), <, DISPATCH_LEVEL);
 
     Info("====> (%llu page(s))\n", Context->Size);
 
-    Abort = FALSE;
+    status = STATUS_SUCCESS;
 
     BalloonGetFISTEntries(Context);
 
-    while (Context->Size != Size && !Abort) {
+    while (Context->Size != Size && NT_SUCCESS(status)) {
         if (Size > Context->Size)
-            Abort = BalloonInflate(Context, Size - Context->Size);
+            status = BalloonInflate(Context, Size - Context->Size);
         else if (Size < Context->Size)
-            Abort = BalloonDeflate(Context, Context->Size - Size);
+            status = BalloonDeflate(Context, Context->Size - Size);
     }
 
     Info("<==== (%llu page(s))%s\n",
          Context->Size,
-         (Abort) ? " [ABORTED]" : "");
+         __BalloonStatus(status));
 
-    return (Abort) ? STATUS_RETRY : STATUS_SUCCESS;
+    return status;
 }
 
 ULONGLONG
