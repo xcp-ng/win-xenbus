@@ -49,8 +49,6 @@
 #include "assert.h"
 #include "version.h"
 
-extern PULONG   InitSafeBootMode;
-
 typedef struct _XEN_DRIVER {
     PLOG_DISPOSITION    TraceDisposition;
     PLOG_DISPOSITION    InfoDisposition;
@@ -59,6 +57,16 @@ typedef struct _XEN_DRIVER {
 } XEN_DRIVER, *PXEN_DRIVER;
 
 static XEN_DRIVER   Driver;
+
+extern PULONG   InitSafeBootMode;
+
+static FORCEINLINE BOOLEAN
+__DriverSafeMode(
+    VOID
+    )
+{
+    return (*InitSafeBootMode > 0) ? TRUE : FALSE;
+}
 
 static FORCEINLINE VOID
 __DriverSetUnplugKey(
@@ -202,9 +210,6 @@ DllInitialize(
 
     Trace("====>\n");
 
-    if (*InitSafeBootMode > 0)
-        goto done;
-
     status = LogInitialize();
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -233,6 +238,9 @@ DllInitialize(
          DAY,
          MONTH,
          YEAR);
+
+    if (__DriverSafeMode())
+        Info("SAFE MODE\n");
 
     status = RegistryInitialize(RegistryPath);
     if (!NT_SUCCESS(status))
@@ -290,7 +298,6 @@ DllInitialize(
 
     RegistryCloseKey(ServiceKey);
 
-done:
     Trace("<====\n");
 
     return STATUS_SUCCESS;
@@ -376,9 +383,6 @@ DllUnload(
 
     Trace("====>\n");
 
-    if (*InitSafeBootMode > 0)
-        goto done;
-
     UnplugTeardown();
 
     ProcessTeardown();
@@ -420,7 +424,6 @@ DllUnload(
 
     LogTeardown();
 
-done:
     ASSERT(IsZeroMemory(&Driver, sizeof (XEN_DRIVER)));
 
     Trace("<====\n");

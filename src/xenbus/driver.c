@@ -45,8 +45,6 @@
 #include "util.h"
 #include "version.h"
 
-extern PULONG       InitSafeBootMode;
-
 typedef struct _XENBUS_DRIVER {
     PDRIVER_OBJECT      DriverObject;
     HANDLE              ParametersKey;
@@ -518,9 +516,6 @@ DriverUnload(
 
     Trace("====>\n");
 
-    if (*InitSafeBootMode > 0)
-        goto done;
-
     ASSERT(IsListEmpty(&Driver.List));
     ASSERT3U(Driver.References, ==, 1);
     --Driver.References;
@@ -549,7 +544,6 @@ DriverUnload(
          MONTH,
          YEAR);
 
-done:
     __DriverSetDriverObject(NULL);
 
     ASSERT(IsZeroMemory(&Driver, sizeof (XENBUS_DRIVER)));
@@ -661,9 +655,6 @@ DriverEntry(
     __DriverSetDriverObject(DriverObject);
 
     Driver.DriverObject->DriverUnload = DriverUnload;
-
-    if (*InitSafeBootMode > 0)
-        goto done;
 
     Info("%d.%d.%d (%d) (%02d.%02d.%04d)\n",
          MAJOR_VERSION,

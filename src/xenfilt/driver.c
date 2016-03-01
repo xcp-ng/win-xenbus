@@ -45,8 +45,6 @@
 #include "util.h"
 #include "version.h"
 
-extern PULONG       InitSafeBootMode;
-
 typedef struct _XENFILT_DRIVER {
     PDRIVER_OBJECT              DriverObject;
     HANDLE                      ParametersKey;
@@ -79,6 +77,16 @@ __DriverFree(
     )
 {
     __FreePoolWithTag(Buffer, XENFILT_DRIVER_TAG);
+}
+
+extern PULONG   InitSafeBootMode;
+
+static FORCEINLINE BOOLEAN
+__DriverSafeMode(
+    VOID
+    )
+{
+    return (*InitSafeBootMode > 0) ? TRUE : FALSE;
 }
 
 static FORCEINLINE VOID
@@ -355,7 +363,8 @@ DriverSetFilterState(
         if (DriverIsActivePresent()) {
             Info("ACTIVE DEVICE %sPRESENT\n", (!Present) ? "NOT " : "");
 
-            UnplugDevices();
+            if (!__DriverSafeMode())
+                UnplugDevices();
         }
 
         Info("PENDING\n");
@@ -405,9 +414,6 @@ DriverUnload(
 
     Trace("====>\n");
 
-    if (*InitSafeBootMode > 0)
-        goto done;
-
     ASSERT(IsListEmpty(&Driver.List));
     ASSERT3U(Driver.References, ==, 1);
     --Driver.References;
@@ -436,7 +442,6 @@ DriverUnload(
          MONTH,
          YEAR);
 
-done:
     __DriverSetDriverObject(NULL);
 
     ASSERT(IsZeroMemory(&Driver, sizeof (XENFILT_DRIVER)));
@@ -693,9 +698,6 @@ DriverEntry(
     __DriverSetDriverObject(DriverObject);
 
     DriverObject->DriverUnload = DriverUnload;
-
-    if (*InitSafeBootMode > 0)
-        goto done;
 
     Info("%d.%d.%d (%d) (%02d.%02d.%04d)\n",
          MAJOR_VERSION,
