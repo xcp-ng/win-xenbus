@@ -54,6 +54,8 @@ typedef struct _XENBUS_HASH_TABLE_BUCKET {
 
 struct _XENBUS_HASH_TABLE {
     XENBUS_HASH_TABLE_BUCKET    Bucket[XENBUS_HASH_TABLE_NR_BUCKETS];
+    XENBUS_HASH_TABLE_BUCKET    Hidden;
+    KDPC                        Dpc;
 };
 
 #define XENBUS_HASH_TABLE_TAG   'HSAH'
@@ -240,12 +242,14 @@ HashTableRemove(
     )
 {
     PXENBUS_HASH_TABLE_BUCKET   Bucket;
+    PXENBUS_HASH_TABLE_BUCKET   Hidden;
     PLIST_ENTRY                 ListEntry;
     PXENBUS_HASH_TABLE_NODE     Node;
     KIRQL                       Irql;
     NTSTATUS                    status;
 
     Bucket = &Table->Bucket[HashTableHash(Key)];
+    Hidden = &Table->Hidden;
     
     HashTableBucketLock(Bucket, TRUE, &Irql);
 
@@ -268,7 +272,11 @@ found:
 
     HashTableBucketUnlock(Bucket, TRUE, Irql);
 
-    __HashTableFree(Node);
+    HashTableBucketLock(Hidden, TRUE, &Irql);
+    InsertTailList(&Hidden->List, &Node->ListEntry);
+    HashTableBucketUnlock(Hidden, TRUE, Irql);
+
+    KeInsertQueueDpc(&Table->Dpc, NULL, NULL);
 
     return STATUS_SUCCESS;
 
@@ -322,13 +330,64 @@ fail1:
     return status;
 }
 
-NTSTATUS
-HashTableCreate(
-    OUT PXENBUS_HASH_TABLE  *Table
+static
+_Function_class_(KDEFERRED_ROUTINE)
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_requires_min_(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
+_IRQL_requires_same_
+VOID
+HashTableDpc(
+    IN  PKDPC                   Dpc,
+    IN  PVOID                   Context,
+    IN  PVOID                   Argument1,
+    IN  PVOID                   Argument2
     )
 {
-    ULONG                   Index;
-    NTSTATUS                status;
+    PXENBUS_HASH_TABLE          Table = Context;
+    LIST_ENTRY                  List;
+    PXENBUS_HASH_TABLE_BUCKET   Hidden;
+    KIRQL                       Irql;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+
+    InitializeListHead(&List);
+
+    Hidden = &Table->Hidden;
+
+    HashTableBucketLock(Hidden, TRUE, &Irql);
+
+    while (!IsListEmpty(&Hidden->List)) {
+        PLIST_ENTRY ListEntry;
+
+        ListEntry = RemoveHeadList(&Hidden->List);
+
+        InsertTailList(&List, ListEntry);
+    }
+
+    HashTableBucketUnlock(Hidden, TRUE, Irql);
+
+    while (!IsListEmpty(&List)) {
+        PLIST_ENTRY             ListEntry;
+        PXENBUS_HASH_TABLE_NODE Node;
+
+        ListEntry = RemoveHeadList(&List);
+
+        Node = CONTAINING_RECORD(ListEntry, XENBUS_HASH_TABLE_NODE, ListEntry);
+        __HashTableFree(Node);
+    }
+}
+
+NTSTATUS
+HashTableCreate(
+    OUT PXENBUS_HASH_TABLE      *Table
+    )
+{
+    ULONG                       Index;
+    PXENBUS_HASH_TABLE_BUCKET   Hidden;
+    NTSTATUS                    status;
 
     *Table = __HashTableAllocate(sizeof (XENBUS_HASH_TABLE));
 
@@ -342,6 +401,12 @@ HashTableCreate(
         InitializeListHead(&Bucket->List);
     }
 
+    Hidden = &(*Table)->Hidden;
+
+    InitializeListHead(&Hidden->List);
+
+    KeInitializeDpc(&(*Table)->Dpc, HashTableDpc, *Table);
+
     return STATUS_SUCCESS;
 
 fail1:
@@ -352,10 +417,21 @@ fail1:
 
 VOID
 HashTableDestroy(
-    IN  PXENBUS_HASH_TABLE  Table
+    IN  PXENBUS_HASH_TABLE      Table
     )
 {
-    ULONG                   Index;
+    ULONG                       Index;
+    PXENBUS_HASH_TABLE_BUCKET   Hidden;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+    KeFlushQueuedDpcs();
+
+    RtlZeroMemory(&Table->Dpc, sizeof (KDPC));
+
+    Hidden = &Table->Hidden;
+
+    ASSERT(IsListEmpty(&Hidden->List));
+    RtlZeroMemory(&Hidden->List, sizeof (LIST_ENTRY));
 
     for (Index = 0; Index < XENBUS_HASH_TABLE_NR_BUCKETS; Index++) {
         PXENBUS_HASH_TABLE_BUCKET   Bucket = &Table->Bucket[Index];
