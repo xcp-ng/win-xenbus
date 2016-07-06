@@ -49,6 +49,12 @@ __user_code;
 
 #define SERVICES_KEY "SYSTEM\\CurrentControlSet\\Services"
 
+#define SERVICE_KEY(_Driver)    \
+        SERVICES_KEY ## "\\" ## #_Driver
+
+#define UNPLUG_KEY \
+        SERVICE_KEY(XEN) ## "\\Unplug"
+
 #define CONTROL_KEY "SYSTEM\\CurrentControlSet\\Control"
 
 #define CLASS_KEY   \
@@ -981,7 +987,8 @@ static DWORD    DeviceRevision[] = {
 
 static BOOLEAN
 SupportDeviceID(
-    IN  PTCHAR      DeviceID
+    IN  PTCHAR      DeviceID,
+    OUT PBOOLEAN    NewBinding
     )
 {
     unsigned int    Revision;
@@ -1010,6 +1017,11 @@ SupportDeviceID(
     goto fail2;
 
 found:
+    // If we don't match the latest revision then it means the driver
+    // binding will change.
+    if (Index < ARRAYSIZE(DeviceRevision) - 1)
+        *NewBinding = TRUE;
+
     Log("%x", Revision);
 
     return TRUE;
@@ -1116,21 +1128,21 @@ fail1:
 
 static BOOLEAN
 SupportChildDrivers(
-    VOID
+    OUT PBOOLEAN    NewBinding
     )
 {
-    BOOLEAN     Success;
-    HKEY        XenbusKey;
-    HRESULT     Error;
-    DWORD       SubKeys;
-    DWORD       MaxSubKeyLength;
-    DWORD       SubKeyLength;
-    PTCHAR      SubKeyName;
-    HKEY        DeviceKey;
-    PTCHAR      DriverKeyName;
-    HKEY        DriverKey;
-    PTCHAR      MatchingDeviceID;
-    DWORD       Index;
+    BOOLEAN         Success;
+    HKEY            XenbusKey;
+    HRESULT         Error;
+    DWORD           SubKeys;
+    DWORD           MaxSubKeyLength;
+    DWORD           SubKeyLength;
+    PTCHAR          SubKeyName;
+    HKEY            DeviceKey;
+    PTCHAR          DriverKeyName;
+    HKEY            DriverKey;
+    PTCHAR          MatchingDeviceID;
+    DWORD           Index;
 
     Log("====>");
 
@@ -1202,7 +1214,7 @@ SupportChildDrivers(
         if (!Success)
             goto fail8;
 
-        Success = SupportDeviceID(MatchingDeviceID);
+        Success = SupportDeviceID(MatchingDeviceID, NewBinding);
         if (!Success)
             goto fail9;
 
@@ -1402,6 +1414,57 @@ fail1:
     return FALSE;
 }
 
+static BOOLEAN
+ClearUnplugRequest(
+    IN  PTCHAR      ClassName
+    )
+{
+    HKEY            UnplugKey;
+    HRESULT         Error;
+
+    Log("====> (%s)", ClassName);
+
+    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         UNPLUG_KEY,
+                         0,
+                         KEY_ALL_ACCESS,
+                         &UnplugKey);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    Error = RegDeleteValue(UnplugKey, ClassName);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail2;
+    }
+
+    RegCloseKey(UnplugKey);
+
+    Log("<====");
+
+    return TRUE;
+
+fail2:
+    Log("fail2");
+
+    RegCloseKey(UnplugKey);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
 static HRESULT
 DifInstallPreProcess(
     IN  HDEVINFO                    DeviceInfoSet,
@@ -1412,6 +1475,7 @@ DifInstallPreProcess(
     BOOLEAN                         Success;
     HRESULT                         Error;
     BOOLEAN                         Allow;
+    BOOLEAN                         NewBinding;
 
     UNREFERENCED_PARAMETER(DeviceInfoSet);
     UNREFERENCED_PARAMETER(DeviceInfoData);
@@ -1432,9 +1496,16 @@ DifInstallPreProcess(
     if (!Success)
         goto fail3;
 
-    Success = SupportChildDrivers();
+    NewBinding = FALSE;
+
+    Success = SupportChildDrivers(&NewBinding);
     if (!Success)
         goto fail4;
+
+    if (NewBinding) {
+        (VOID) ClearUnplugRequest("DISKS");
+        (VOID) ClearUnplugRequest("NICS");
+    }
 
     Log("<====");
     
