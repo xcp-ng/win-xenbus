@@ -35,10 +35,12 @@ ClassGUID={4d36e97d-e325-11ce-bfc1-08002be10318}
 Provider=%Vendor% 
 CatalogFile=xenbus.cat
 DriverVer=01/01/1900,0.0.0.0
+DriverPackageDisplayName=%DiskDesc%
 
 [DestinationDirs] 
 DefaultDestDir=12 
 CoInst_CopyFiles=11
+Monitor_CopyFiles=11
 
 [SourceDisksNames]
 0=%DiskDesc%
@@ -48,14 +50,20 @@ xen.sys=0,,
 xenbus.sys=0,,
 xenfilt.sys=0,,
 xenbus_coinst.dll=0,,
+xenbus_monitor.exe=0,,
+xenbus_monitor.dll=0,,
 
-[XenBus_Copyfiles]
+[XenBus_CopyFiles]
 xen.sys
 xenbus.sys
 xenfilt.sys
 
 [CoInst_CopyFiles]
 xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll,xenbus_coinst.dll
+
+[Monitor_CopyFiles]
+xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.exe,xenbus_monitor.exe
+xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll,xenbus_monitor.dll
 
 [Manufacturer] 
 %Vendor%=Inst,NT$ARCH$
@@ -69,11 +77,13 @@ xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll
 %XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_0001
 
 [XenBus_Inst] 
-CopyFiles=XenBus_Copyfiles
+CopyFiles=XenBus_CopyFiles
+CopyFiles=Monitor_CopyFiles
 
 [XenBus_Inst.Services]
-AddService=xenbus,0x02,XenBus_Service
+AddService=xenbus,%SPSVCINST_ASSOCSERVICE%,XenBus_Service
 AddService=xenfilt,,XenFilt_Service,
+AddService=xenbus_monitor,%SPSVCSINST_STARTSERVICE%,Monitor_Service,Monitor_EventLog
 
 [XenBus_Service] 
 DisplayName=%XenBusDesc%
@@ -109,6 +119,24 @@ HKR,"Parameters",,0x00000010
 HKR,"Parameters","ACPI\PNP0A03",0x00000000,"DEVICE"
 HKR,"Parameters","PCIIDE\IDEChannel",0x00000000,"DISK"
 
+[Monitor_Service]
+DisplayName=%MonitorDesc%
+ServiceType=%SERVICE_WIN32_OWN_PROCESS%
+StartType=%SERVICE_AUTO_START%
+ErrorControl=%SERVICE_ERROR_NORMAL%
+ServiceBinary=%11%\xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.exe
+AddReg = Monitor_Request
+
+[Monitor_Request]
+HKR,"Request",,0x00000010
+
+[Monitor_EventLog]
+AddReg=Monitor_EventLog_AddReg
+
+[Monitor_EventLog_AddReg]
+HKR,,EventMessageFile,0x00020000,"%%SystemRoot%%\System32\xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll"
+HKR,,TypesSupported,0x00010001,7
+
 [XenBus_Inst.CoInstallers]
 CopyFiles=CoInst_CopyFiles
 AddReg=CoInst_AddReg
@@ -122,6 +150,7 @@ Vendor="@VENDOR_NAME@"
 DiskDesc="@PRODUCT_NAME@ PV Bus Package" 
 XenBusDesc="@PRODUCT_NAME@ PV Bus"
 XenFiltDesc="@PRODUCT_NAME@ Generic Bus Filter"
+MonitorDesc="@PRODUCT_NAME@ PV Driver Monitor"
 
 SERVICE_BOOT_START=0x0 
 SERVICE_SYSTEM_START=0x1 
@@ -129,8 +158,12 @@ SERVICE_AUTO_START=0x2
 SERVICE_DEMAND_START=0x3 
 SERVICE_DISABLED=0x4 
 
+SERVICE_WIN32_OWN_PROCESS=0x10
 SERVICE_KERNEL_DRIVER=0x1 
 SERVICE_ERROR_IGNORE=0x0 
 SERVICE_ERROR_NORMAL=0x1 
 SERVICE_ERROR_SEVERE=0x2 
 SERVICE_ERROR_CRITICAL=0x3 
+
+SPSVCINST_ASSOCSERVICE=0x00000002
+SPSVCSINST_STARTSERVICE=0x00000800

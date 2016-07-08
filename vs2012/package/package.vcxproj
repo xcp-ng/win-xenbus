@@ -49,6 +49,9 @@
     <ProjectReference Include="..\xen\xen.vcxproj">
       <Project>{9c6a5d48-a331-4b1f-a004-7bb67ba5be1c}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\xenbus_monitor\xenbus_monitor.vcxproj">
+      <Project>{2E61D2CC-865E-442C-8C83-B8DAFD7BBD3B}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <FilesToPackage Include="$(KIT)\Redist\DIFx\dpinst\EngMui\x86\dpinst.exe" Condition="'$(Platform)'=='Win32'" />
