@@ -46,11 +46,21 @@ typedef struct _MONITOR_CONTEXT {
     SERVICE_STATUS_HANDLE   Service;
     HANDLE                  EventLog;
     HANDLE                  StopEvent;
+    HANDLE                  RequestEvent;
+    HKEY                    RequestKey;
 } MONITOR_CONTEXT, *PMONITOR_CONTEXT;
 
 MONITOR_CONTEXT MonitorContext;
 
 #define MAXIMUM_BUFFER_SIZE 1024
+
+#define SERVICES_KEY "SYSTEM\\CurrentControlSet\\Services"
+
+#define SERVICE_KEY(_Service) \
+        SERVICES_KEY ## "\\" ## #_Service
+
+#define REQUEST_KEY \
+        SERVICE_KEY(XENBUS_MONITOR) ## "\\Request"
 
 static VOID
 #pragma prefast(suppress:6262) // Function uses '1036' bytes of stack: exceeds /analyze:stacksize'1024'
@@ -180,7 +190,8 @@ ReportStatus(
         Context->Status.dwControlsAccepted = 0;
     else
         Context->Status.dwControlsAccepted = SERVICE_ACCEPT_STOP |
-                                             SERVICE_ACCEPT_SHUTDOWN;
+                                             SERVICE_ACCEPT_SHUTDOWN |
+                                             SERVICE_ACCEPT_SESSIONCHANGE;
 
     if (CurrentState == SERVICE_RUNNING ||
         CurrentState == SERVICE_STOPPED )
@@ -229,6 +240,10 @@ MonitorCtrlHandlerEx(
         SetEvent(Context->StopEvent);
         return NO_ERROR;
 
+    case SERVICE_CONTROL_SESSIONCHANGE:
+        SetEvent(Context->RequestEvent);
+        return NO_ERROR;
+
     case SERVICE_CONTROL_INTERROGATE:
         ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
         return NO_ERROR;
@@ -241,6 +256,40 @@ MonitorCtrlHandlerEx(
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
+static VOID
+CheckRequestKey(
+    VOID
+    )
+{
+    PMONITOR_CONTEXT    Context = &MonitorContext;
+    HRESULT             Error;
+
+    Log("====>");
+
+    Error = RegNotifyChangeKeyValue(Context->RequestKey,
+                                    TRUE,
+                                    REG_NOTIFY_CHANGE_LAST_SET,
+                                    Context->RequestEvent,
+                                    TRUE);
+
+    if (Error != ERROR_SUCCESS)
+        goto fail1;
+
+    Log("<====");
+
+    return;
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+}
+
 VOID WINAPI
 MonitorMain(
     _In_    DWORD       argc,
@@ -248,6 +297,7 @@ MonitorMain(
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
+    BOOL                Success;
     HRESULT             Error;
 
     UNREFERENCED_PARAMETER(argc);
@@ -279,16 +329,59 @@ MonitorMain(
     if (Context->StopEvent == NULL)
         goto fail3;
 
+    Context->RequestEvent = CreateEvent(NULL,
+                                        TRUE,
+                                        FALSE,
+                                        NULL);
+
+    if (Context->RequestEvent == NULL)
+        goto fail4;
+
+    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         REQUEST_KEY,
+                         0,
+                         KEY_ALL_ACCESS,
+                         &Context->RequestKey);
+
+    if (Error != ERROR_SUCCESS)
+        goto fail5;
+
+    SetEvent(Context->RequestEvent);
+
     ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
 
     for (;;) {
-        Log("waiting...");
-        WaitForSingleObject(Context->StopEvent, INFINITE);
+        HANDLE  Events[2];
+        DWORD   Object;
+
+        Events[0] = Context->StopEvent;
+        Events[1] = Context->RequestEvent;
+
+        Log("waiting (%u)...", ARRAYSIZE(Events));
+        Object = WaitForMultipleObjects(ARRAYSIZE(Events),
+                                        Events,
+                                        FALSE,
+                                        INFINITE);
         Log("awake");
 
-        break;
+        switch (Object) {
+        case WAIT_OBJECT_0:
+            ResetEvent(Events[0]);
+            goto done;
+
+        case WAIT_OBJECT_0 + 1:
+            ResetEvent(Events[1]);
+            CheckRequestKey();
+            break;
+
+        default:
+            break;
+        }
     }
 
+done:
+    CloseHandle(Context->RequestKey);
+    CloseHandle(Context->RequestEvent);
     CloseHandle(Context->StopEvent);
 
     ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
@@ -299,10 +392,20 @@ MonitorMain(
 
     return;
 
-fail3:
-    Log("fail3");
+fail5:
+    Log("fail5");
 
     ReportStatus(SERVICE_STOPPED, GetLastError(), 0);
+
+    CloseHandle(Context->RequestEvent);
+
+fail4:
+    Log("fail4");
+
+    CloseHandle(Context->StopEvent);
+
+fail3:
+    Log("fail3");
 
     (VOID) DeregisterEventSource(Context->EventLog);
 
