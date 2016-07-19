@@ -1462,6 +1462,9 @@ FdoSuspend(
     Affinity.Mask = (KAFFINITY)1;
     KeSetSystemGroupAffinityThread(&Affinity, NULL);
 
+    (VOID) KeSetPriorityThread(KeGetCurrentThread(),
+                               LOW_PRIORITY);
+
     Event = ThreadGetEvent(Self);
 
     for (;;) {
@@ -1521,6 +1524,8 @@ FdoSuspend(
         (VOID) XENBUS_SUSPEND(Trigger, &Fdo->SuspendInterface);
 
         __FdoSuspendClearActive(Fdo);
+
+        KeFlushQueuedDpcs();
 
 loop:
         KeSetEvent(&Fdo->SuspendEvent, IO_NO_INCREMENT, FALSE);
