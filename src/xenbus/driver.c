@@ -48,7 +48,6 @@
 typedef struct _XENBUS_DRIVER {
     PDRIVER_OBJECT      DriverObject;
     HANDLE              ParametersKey;
-    HANDLE              StatusKey;
 
     MUTEX               Mutex;
     LIST_ENTRY          List;
@@ -123,34 +122,58 @@ DriverGetParametersKey(
     return __DriverGetParametersKey();
 }
 
+#define SERVICES_PATH "\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services"
+
+#define SERVICE_KEY(_Name) \
+        SERVICES_PATH ## "\\" ## #_Name
+
+#define REQUEST_KEY \
+        SERVICE_KEY(XENBUS_MONITOR) ## "\\Request"
+
 static FORCEINLINE VOID
-__DriverSetStatusKey(
-    IN  HANDLE  Key
-    )
-{
-    Driver.StatusKey = Key;
-}
-
-static FORCEINLINE HANDLE
-__DriverGetStatusKey(
+__DriverRequestReboot(
     VOID
     )
 {
-    return Driver.StatusKey;
-}
+    HANDLE      RequestKey;
+    ANSI_STRING Ansi[2];
+    NTSTATUS    status;
 
-VOID
-DriverRequestReboot(
-    VOID
-    )
-{
-    Info("<===>\n");
+    Info("====>\n");
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    (VOID) RegistryUpdateDwordValue(__DriverGetStatusKey(),
-                                    "NeedReboot",
-                                    1);
+    status = RegistryOpenSubKey(NULL,
+                                REQUEST_KEY,
+                                KEY_ALL_ACCESS,
+                                &RequestKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    RtlZeroMemory(Ansi, sizeof (Ansi));
+
+    RtlInitAnsiString(&Ansi[0], "XENBUS");
+
+    status = RegistryUpdateSzValue(RequestKey,
+                                   "Reboot",
+                                   REG_SZ,
+                                   Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    RegistryCloseKey(RequestKey);
+
+    Info("<====\n");
+
+    return;
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(RequestKey);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
 }
 
 static FORCEINLINE VOID
@@ -510,7 +533,6 @@ DriverUnload(
     )
 {
     HANDLE              ParametersKey;
-    HANDLE              StatusKey;
 
     ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
 
@@ -522,11 +544,6 @@ DriverUnload(
 
     RtlZeroMemory(&Driver.List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&Driver.Mutex, sizeof (MUTEX));
-
-    StatusKey = __DriverGetStatusKey();
-    __DriverSetStatusKey(NULL);
-
-    RegistryCloseKey(StatusKey);
 
     ParametersKey = __DriverGetParametersKey();
 
@@ -639,7 +656,6 @@ DriverEntry(
 {
     HANDLE              ServiceKey;
     HANDLE              ParametersKey;
-    HANDLE              StatusKey;
     ULONG               Index;
     NTSTATUS            status;
 
@@ -670,34 +686,27 @@ DriverEntry(
                       MINOR_VERSION,
                       MICRO_VERSION,
                       BUILD_NUMBER);
-    if (!NT_SUCCESS(status))
-        goto done;
+    if (!NT_SUCCESS(status)) {
+        __DriverRequestReboot();
+        goto fail1;
+    }
 
     status = RegistryInitialize(RegistryPath);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     status = RegistryOpenServiceKey(KEY_READ, &ServiceKey);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     status = RegistryOpenSubKey(ServiceKey,
                                 "Parameters",
                                 KEY_READ,
                                 &ParametersKey);
     if (!NT_SUCCESS(status))
-        goto fail3;
-
-    __DriverSetParametersKey(ParametersKey);
-
-    status = RegistryCreateSubKey(ServiceKey,
-                                  "Status",
-                                  REG_OPTION_VOLATILE,
-                                  &StatusKey);
-    if (!NT_SUCCESS(status))
         goto fail4;
 
-    __DriverSetStatusKey(StatusKey);
+    __DriverSetParametersKey(ParametersKey);
 
     RegistryCloseKey(ServiceKey);
 
@@ -713,7 +722,6 @@ DriverEntry(
     InitializeListHead(&Driver.List);
     Driver.References = 1;
 
-done:
     Trace("<====\n");
 
     return STATUS_SUCCESS;
@@ -721,19 +729,15 @@ done:
 fail4:
     Error("fail4\n");
 
-    __DriverSetParametersKey(NULL);
-
-    RegistryCloseKey(ParametersKey);
+    RegistryCloseKey(ServiceKey);
 
 fail3:
     Error("fail3\n");
 
-    RegistryCloseKey(ServiceKey);
+    RegistryTeardown();
 
 fail2:
     Error("fail2\n");
-
-    RegistryTeardown();
 
 fail1:
     Error("fail1 (%08x)\n", status);

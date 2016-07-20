@@ -81,9 +81,9 @@ CopyFiles=XenBus_CopyFiles
 CopyFiles=Monitor_CopyFiles
 
 [XenBus_Inst.Services]
+AddService=xenbus_monitor,%SPSVCSINST_STARTSERVICE%,Monitor_Service,Monitor_EventLog
 AddService=xenbus,%SPSVCINST_ASSOCSERVICE%,XenBus_Service
 AddService=xenfilt,,XenFilt_Service,
-AddService=xenbus_monitor,%SPSVCSINST_STARTSERVICE%,Monitor_Service,Monitor_EventLog
 
 [XenBus_Service] 
 DisplayName=%XenBusDesc%

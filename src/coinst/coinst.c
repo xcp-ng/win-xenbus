@@ -1290,133 +1290,6 @@ fail1:
 }
 
 static BOOLEAN
-CheckStatus(
-    IN  PTCHAR      DriverName,
-    OUT PBOOLEAN    NeedReboot
-    )
-{
-    TCHAR           StatusKeyName[MAX_PATH];
-    HKEY            StatusKey;
-    HRESULT         Result;
-    HRESULT         Error;
-    DWORD           ValueLength;
-    DWORD           Value;
-    DWORD           Type;
-
-    Result = StringCbPrintf(StatusKeyName,
-                            MAX_PATH,
-                            SERVICES_KEY "\\%s\\Status",
-                            DriverName);
-    assert(SUCCEEDED(Result));
-
-    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                         StatusKeyName,
-                         0,
-                         KEY_READ,
-                         &StatusKey);
-    if (Error != ERROR_SUCCESS) {
-        SetLastError(Error);
-        goto fail1;
-    }
-
-    ValueLength = sizeof (Value);
-
-    Error = RegQueryValueEx(StatusKey,
-                            "NeedReboot",
-                            NULL,
-                            &Type,
-                            (LPBYTE)&Value,
-                            &ValueLength);
-    if (Error != ERROR_SUCCESS) {
-        if (Error == ERROR_FILE_NOT_FOUND) {
-            Type = REG_DWORD;
-            Value = 0;
-        } else {
-            SetLastError(Error);
-            goto fail2;
-        }
-    }
-
-    if (Type != REG_DWORD) {
-        SetLastError(ERROR_BAD_FORMAT);
-        goto fail3;
-    }
-
-    *NeedReboot = (Value != 0) ? TRUE : FALSE;
-
-    if (*NeedReboot)
-        Log("NeedReboot");
-
-    RegCloseKey(StatusKey);
-
-    return TRUE;
-
-fail3:
-    Log("fail3");
-
-fail2:
-    Log("fail2");
-
-    RegCloseKey(StatusKey);
-
-fail1:
-    Error = GetLastError();
-
-    {
-        PTCHAR  Message;
-        Message = GetErrorMessage(Error);
-        Log("fail1 (%s)", Message);
-        LocalFree(Message);
-    }
-
-    return FALSE;
-}
-
-static BOOLEAN
-RequestReboot(
-    IN  HDEVINFO            DeviceInfoSet,
-    IN  PSP_DEVINFO_DATA    DeviceInfoData
-    )
-{
-    SP_DEVINSTALL_PARAMS    DeviceInstallParams;
-    HRESULT                 Error;
-
-    DeviceInstallParams.cbSize = sizeof (DeviceInstallParams);
-
-    if (!SetupDiGetDeviceInstallParams(DeviceInfoSet,
-                                       DeviceInfoData,
-                                       &DeviceInstallParams))
-        goto fail1;
-
-    DeviceInstallParams.Flags |= DI_NEEDREBOOT;
-
-    Log("Flags = %08x", DeviceInstallParams.Flags);
-
-    if (!SetupDiSetDeviceInstallParams(DeviceInfoSet,
-                                       DeviceInfoData,
-                                       &DeviceInstallParams))
-        goto fail2;
-
-    return TRUE;
-
-fail2:
-    Log("fail2");
-
-fail1:
-    Error = GetLastError();
-
-    {
-        PTCHAR  Message;
-
-        Message = GetErrorMessage(Error);
-        Log("fail1 (%s)", Message);
-        LocalFree(Message);
-    }
-
-    return FALSE;
-}
-
-static BOOLEAN
 ClearUnplugRequest(
     IN  PTCHAR      ClassName
     )
@@ -1615,22 +1488,11 @@ DifInstallPostProcess(
     IN  PCOINSTALLER_CONTEXT_DATA   Context
     )
 {
-    BOOLEAN                         NeedReboot;
-
+    UNREFERENCED_PARAMETER(DeviceInfoSet);
+    UNREFERENCED_PARAMETER(DeviceInfoData);
     UNREFERENCED_PARAMETER(Context);
 
-    Log("====>");
-
-    NeedReboot = FALSE;
-
-    (VOID) CheckStatus("XEN", &NeedReboot);
-    if (!NeedReboot)
-        (VOID) CheckStatus("XENBUS", &NeedReboot);
-
-    if (NeedReboot)
-        (VOID) RequestReboot(DeviceInfoSet, DeviceInfoData);
-
-    Log("<====");
+    Log("<===>");
 
     return NO_ERROR;
 }
