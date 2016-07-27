@@ -40,6 +40,7 @@
 #include <version.h>
 
 #include "messages.h"
+#include "strings.h"
 
 #define MONITOR_NAME        __MODULE__
 #define MONITOR_DISPLAYNAME MONITOR_NAME
@@ -316,9 +317,11 @@ PromptForReboot(
     DWORD               MaxValueLength;
     DWORD               DisplayNameLength;
     PTCHAR              DisplayName;
+    PTCHAR              Description;
     DWORD               Type;
     TCHAR               Title[] = TEXT(VENDOR_NAME_STR);
     TCHAR               Message[MAXIMUM_BUFFER_SIZE];
+    DWORD               Length;
     PWTS_SESSION_INFO   SessionInfo;
     DWORD               Count;
     DWORD               Index;
@@ -382,15 +385,26 @@ PromptForReboot(
         goto fail5;
     }
 
+    Description = _tcsrchr(DisplayName, ';');
+    if (Description == NULL)
+        Description = DisplayName;
+    else
+        Description++;
+
     Result = StringCbPrintf(Message,
                             MAXIMUM_BUFFER_SIZE,
-                            TEXT("%s needs to restart the system to "
-                                 "complete installation.\n"
-                                 "Press 'Yes' to restart the system "
-                                 "now or 'No' if you plan to restart "
-                                 "the system later.\n"),
-                            DisplayName);
+                            TEXT("%s "),
+                            Description);
     assert(SUCCEEDED(Result));
+
+    Length = (DWORD)_tcslen(Message);
+
+    Length = LoadString(GetModuleHandle(NULL),
+                        IDS_DIALOG,
+                        Message + Length,
+                        ARRAYSIZE(Message) - Length);
+    if (Length == 0)
+        goto fail6;
 
     Success = WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE,
                                    0,
@@ -399,7 +413,7 @@ PromptForReboot(
                                    &Count);
 
     if (!Success)
-        goto fail6;
+        goto fail7;
 
     for (Index = 0; Index < Count; Index++) {
         DWORD                   SessionId = SessionInfo[Index].SessionId;
@@ -427,7 +441,7 @@ PromptForReboot(
                                  TRUE);
 
         if (!Success)
-            goto fail7;
+            goto fail8;
 
         Context->RebootPending = TRUE;
 
@@ -447,10 +461,13 @@ PromptForReboot(
 
     return;
 
-fail7:
-    Log("fail7");
+fail8:
+    Log("fail8");
 
     WTSFreeMemory(SessionInfo);
+
+fail7:
+    Log("fail7");
 
 fail6:
     Log("fail6");

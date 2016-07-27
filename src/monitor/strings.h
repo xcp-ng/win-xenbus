@@ -29,29 +29,9 @@
  * SUCH DAMAGE.
  */
 
-#include <windows.h>
-#include <ntverp.h>
+#ifndef _MONITOR_STRINGS_H_
+#define _MONITOR_STRINGS_H_
 
-#undef VER_COMPANYNAME_STR
-#undef VER_PRODUCTNAME_STR
-#undef VER_PRODUCTVERSION
-#undef VER_PRODUCTVERSION_STR
+#define	IDS_DIALOG	1
 
-#include <version.h>
-
-#define VER_COMPANYNAME_STR         VENDOR_NAME_STR
-#define VER_LEGALCOPYRIGHT_STR      "Copyright (c) Citrix Systems Inc."
-
-#define VER_PRODUCTNAME_STR         "XENBUS"
-#define VER_PRODUCTVERSION          MAJOR_VERSION,MINOR_VERSION,MICRO_VERSION,BUILD_NUMBER
-#define VER_PRODUCTVERSION_STR      MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR
-
-#define VER_INTERNALNAME_STR 	    "XENBUS_MONITOR.EXE"
-#define VER_FILEDESCRIPTION_STR     "XENBUS_MONITOR"
-
-#define VER_FILETYPE		    VFT_APP
-#define VER_FILESUBTYPE		    VFT2_UNKNOWN
-
-#include "common.ver"
-#include "messages.rc"
-#include "strings.rc"
+#endif // _MONITOR_STRINGS_H_
