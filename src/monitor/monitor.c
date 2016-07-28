@@ -558,7 +558,8 @@ CheckRebootValue(
     if (!Context->RebootPending)
         PromptForReboot(Reboot);
 
-    (VOID) RegDeleteValue(Context->RequestKey, "Reboot");
+    if (Context->RebootPending)
+        (VOID) RegDeleteValue(Context->RequestKey, "Reboot");
 
 done:
     free(Reboot);
