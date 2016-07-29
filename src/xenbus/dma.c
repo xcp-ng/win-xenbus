@@ -216,21 +216,21 @@ DmaDumpDeviceDescription(
     IN  PDEVICE_DESCRIPTION DeviceDescription
     )
 {
-    Info("Version = %u\n", DeviceDescription->Version);
-    Info("Master = %s\n", (DeviceDescription->Master) ? "TRUE" : "FALSE");
-    Info("ScatterGather = %s\n", (DeviceDescription->ScatterGather) ? "TRUE" : "FALSE");
-    Info("DemandMode = %s\n", (DeviceDescription->DemandMode) ? "TRUE" : "FALSE");
-    Info("AutoInitialize = %s\n", (DeviceDescription->AutoInitialize) ? "TRUE" : "FALSE");
-    Info("Dma32BitAddresses = %s\n", (DeviceDescription->Dma32BitAddresses) ? "TRUE" : "FALSE");
-    Info("IgnoreCount = %s\n", (DeviceDescription->IgnoreCount) ? "TRUE" : "FALSE");
-    Info("Dma64BitAddresses = %s\n", (DeviceDescription->Dma64BitAddresses) ? "TRUE" : "FALSE");
-    Info("BusNumber = %08x\n", DeviceDescription->BusNumber);
-    Info("DmaChannel = %08x\n", DeviceDescription->DmaChannel);
-    Info("InterfaceType = %s\n", InterfaceTypeName(DeviceDescription->InterfaceType));
-    Info("DmaWidth = %s\n", DmaWidthName(DeviceDescription->DmaWidth));
-    Info("DmaSpeed = %s\n", DmaSpeedName(DeviceDescription->DmaSpeed));
-    Info("MaximumLength = %08x\n", DeviceDescription->MaximumLength);
-    Info("DmaPort = %08x\n", DeviceDescription->DmaPort);
+    Trace("Version = %u\n", DeviceDescription->Version);
+    Trace("Master = %s\n", (DeviceDescription->Master) ? "TRUE" : "FALSE");
+    Trace("ScatterGather = %s\n", (DeviceDescription->ScatterGather) ? "TRUE" : "FALSE");
+    Trace("DemandMode = %s\n", (DeviceDescription->DemandMode) ? "TRUE" : "FALSE");
+    Trace("AutoInitialize = %s\n", (DeviceDescription->AutoInitialize) ? "TRUE" : "FALSE");
+    Trace("Dma32BitAddresses = %s\n", (DeviceDescription->Dma32BitAddresses) ? "TRUE" : "FALSE");
+    Trace("IgnoreCount = %s\n", (DeviceDescription->IgnoreCount) ? "TRUE" : "FALSE");
+    Trace("Dma64BitAddresses = %s\n", (DeviceDescription->Dma64BitAddresses) ? "TRUE" : "FALSE");
+    Trace("BusNumber = %08x\n", DeviceDescription->BusNumber);
+    Trace("DmaChannel = %08x\n", DeviceDescription->DmaChannel);
+    Trace("InterfaceType = %s\n", InterfaceTypeName(DeviceDescription->InterfaceType));
+    Trace("DmaWidth = %s\n", DmaWidthName(DeviceDescription->DmaWidth));
+    Trace("DmaSpeed = %s\n", DmaSpeedName(DeviceDescription->DmaSpeed));
+    Trace("MaximumLength = %08x\n", DeviceDescription->MaximumLength);
+    Trace("DmaPort = %08x\n", DeviceDescription->DmaPort);
 }
 
 static PXENBUS_DMA_CONTEXT
