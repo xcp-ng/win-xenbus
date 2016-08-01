@@ -649,9 +649,25 @@ done:
     return Enable;
 }
 
+XEN_API
+VOID
+LogResume(
+    VOID
+    )
+{
+    PLOG_CONTEXT    Context = &LogContext;
+
+    if (!Context->Enabled)
+        return;
+
+    (VOID) DbgSetDebugPrintCallback(LogDebugPrint, FALSE);
+    (VOID) DbgSetDebugPrintCallback(LogDebugPrint, TRUE);
+}
+
 NTSTATUS
 LogInitialize(
-    VOID)
+    VOID
+    )
 {
     PLOG_CONTEXT    Context = &LogContext;
     ULONG           References;

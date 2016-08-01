@@ -3188,6 +3188,8 @@ FdoS4ToS3(
     if (!__FdoIsActive(Fdo))
         goto not_active;
 
+    LogResume();
+
     HypercallPopulate();
 
     UnplugDevices();

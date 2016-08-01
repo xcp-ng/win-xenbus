@@ -397,6 +397,12 @@ LogPrintf(
     ...
     );
 
+XEN_API
+VOID
+LogResume(
+    VOID
+    );
+
 // SYSTEM
 
 XEN_API
