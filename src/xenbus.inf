@@ -103,7 +103,7 @@ HKR,"Parameters","SyntheticClasses",0x00010000,"IFACE"
 HKR,"Interrupt Management",,0x00000010
 HKR,"Interrupt Management\MessageSignaledInterruptProperties",,0x00000010
 HKR,"Interrupt Management\MessageSignaledInterruptProperties","MSISupported",0x00010001,1
-HKR,"Interrupt Management\GroupPolicy",0x00010001,1
+HKR,"Interrupt Management\GroupPolicy",,0x00010001,1
 
 [XenFilt_Service] 
 DisplayName=%XenFiltDesc%
