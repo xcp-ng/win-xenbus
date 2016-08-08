@@ -72,9 +72,9 @@ xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dl
 ; DisplayName		Section		DeviceID
 ; -----------		-------		--------
 
-%XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_@VENDOR_DEVICE_ID@&SUBSYS_@VENDOR_DEVICE_ID@5853&REV_01
-%XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_0002
-%XenBusDesc%		=XenBus_Inst,	PCI\VEN_5853&DEV_0001
+%XenBusName%		=XenBus_Inst,	PCI\VEN_5853&DEV_@VENDOR_DEVICE_ID@&SUBSYS_@VENDOR_DEVICE_ID@5853&REV_01
+%XenBusName%		=XenBus_Inst,	PCI\VEN_5853&DEV_0002
+%XenBusName%		=XenBus_Inst,	PCI\VEN_5853&DEV_0001
 
 [XenBus_Inst] 
 CopyFiles=XenBus_CopyFiles
@@ -86,7 +86,7 @@ AddService=xenbus,%SPSVCINST_ASSOCSERVICE%,XenBus_Service
 AddService=xenfilt,,XenFilt_Service,
 
 [XenBus_Service] 
-DisplayName=%XenBusDesc%
+DisplayName=%XenBusName%
 ServiceType=%SERVICE_KERNEL_DRIVER% 
 StartType=%SERVICE_BOOT_START% 
 ErrorControl=%SERVICE_ERROR_NORMAL% 
@@ -98,6 +98,7 @@ AddReg = XenBus_Parameters, XenBus_Interrupts
 HKR,"Parameters",,0x00000010
 HKR,"Parameters","SupportedClasses",0x00010000,"VIF","VBD","IFACE"
 HKR,"Parameters","SyntheticClasses",0x00010000,"IFACE"
+HKR,"Parameters","RequestKey",0x00000000,%RequestKey%
 
 [XenBus_Interrupts]
 HKR,"Interrupt Management",,0x00000010
@@ -106,7 +107,7 @@ HKR,"Interrupt Management\MessageSignaledInterruptProperties","MSISupported",0x0
 HKR,"Interrupt Management\GroupPolicy",,0x00010001,1
 
 [XenFilt_Service] 
-DisplayName=%XenFiltDesc%
+DisplayName=%XenFiltName%
 ServiceType=%SERVICE_KERNEL_DRIVER% 
 StartType=%SERVICE_BOOT_START% 
 ErrorControl=%SERVICE_ERROR_NORMAL% 
@@ -120,15 +121,20 @@ HKR,"Parameters","ACPI\PNP0A03",0x00000000,"DEVICE"
 HKR,"Parameters","PCIIDE\IDEChannel",0x00000000,"DISK"
 
 [Monitor_Service]
-DisplayName=%MonitorDesc%
+DisplayName=%MonitorName%
+Description=%MonitorDesc%
 ServiceType=%SERVICE_WIN32_OWN_PROCESS%
 StartType=%SERVICE_AUTO_START%
 ErrorControl=%SERVICE_ERROR_NORMAL%
 ServiceBinary=%11%\xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.exe
-AddReg = Monitor_Request
+AddReg = Monitor_Parameters, Monitor_Request
+
+[Monitor_Parameters]
+HKR,"Parameters",,0x00000010
+HKR,"Parameters","RequestKey",0x00000000,%RequestKey%
 
 [Monitor_Request]
-HKR,"Request",,0x00000010
+HKLM,%RequestKey% ,,0x00000010
 
 [Monitor_EventLog]
 AddReg=Monitor_EventLog_AddReg
@@ -148,9 +154,11 @@ HKR,,CoInstallers32,0x00010000,"xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@M
 
 Vendor="@VENDOR_NAME@" 
 DiskDesc="@PRODUCT_NAME@ PV Bus Package" 
-XenBusDesc="@PRODUCT_NAME@ PV Bus"
-XenFiltDesc="@PRODUCT_NAME@ Generic Bus Filter"
-MonitorDesc="@PRODUCT_NAME@ PV Driver Monitor"
+XenBusName="@PRODUCT_NAME@ PV Bus"
+XenFiltName="@PRODUCT_NAME@ Generic Bus Filter"
+MonitorName="@PRODUCT_NAME@ PV Driver Monitor"
+MonitorDesc="Provides support for @PRODUCT_NAME@ PV drivers"
+RequestKey="SOFTWARE\@VENDOR_NAME@\@PRODUCT_NAME@\PV Driver Monitor\Request"
 
 SERVICE_BOOT_START=0x0 
 SERVICE_SYSTEM_START=0x1 

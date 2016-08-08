@@ -48,6 +48,7 @@
 typedef struct _MONITOR_CONTEXT {
     SERVICE_STATUS          Status;
     SERVICE_STATUS_HANDLE   Service;
+    HKEY                    ParametersKey;
     HANDLE                  EventLog;
     HANDLE                  StopEvent;
     HANDLE                  RequestEvent;
@@ -62,10 +63,10 @@ MONITOR_CONTEXT MonitorContext;
 #define SERVICES_KEY "SYSTEM\\CurrentControlSet\\Services"
 
 #define SERVICE_KEY(_Service) \
-        SERVICES_KEY ## "\\" ## #_Service
+        SERVICES_KEY ## "\\" ## _Service
 
-#define REQUEST_KEY \
-        SERVICE_KEY(XENBUS_MONITOR) ## "\\Request"
+#define PARAMETERS_KEY(_Service) \
+        SERVICE_KEY(_Service) ## "\\Parameters"
 
 static VOID
 #pragma prefast(suppress:6262) // Function uses '1036' bytes of stack: exceeds /analyze:stacksize'1024'
@@ -305,6 +306,34 @@ DoReboot(
                                     SHTDN_REASON_FLAG_PLANNED);
 }
 
+static DWORD
+GetPromptTimeout(
+    VOID
+    )
+{
+    PMONITOR_CONTEXT    Context = &MonitorContext;
+    DWORD               Type;
+    DWORD               Value;
+    DWORD               ValueLength;
+    HRESULT             Error;
+
+    ValueLength = sizeof (Value);
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "PromptTimeout",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&Value,
+                            &ValueLength);
+    if (Error != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+        Value = 0;
+
+    Log("%u", Value);
+
+    return Value;
+}
+
 static VOID
 PromptForReboot(
     IN PTCHAR           DriverName
@@ -419,6 +448,7 @@ PromptForReboot(
         DWORD                   SessionId = SessionInfo[Index].SessionId;
         PTCHAR                  Name = SessionInfo[Index].pWinStationName;
         WTS_CONNECTSTATE_CLASS  State = SessionInfo[Index].State;
+        DWORD                   Timeout;
         DWORD                   Response;
 
         Log("[%u]: %s [%s]",
@@ -429,6 +459,8 @@ PromptForReboot(
         if (State != WTSActive)
             continue;
 
+        Timeout = GetPromptTimeout();
+
         Success = WTSSendMessage(WTS_CURRENT_SERVER_HANDLE,
                                  SessionId,
                                  Title,
@@ -436,7 +468,7 @@ PromptForReboot(
                                  Message,
                                  sizeof (Message),
                                  MB_YESNO | MB_ICONEXCLAMATION,
-                                 0,
+                                 Timeout,
                                  &Response,
                                  TRUE);
 
@@ -445,7 +477,7 @@ PromptForReboot(
 
         Context->RebootPending = TRUE;
 
-        if (Response == IDYES)
+        if (Response == IDYES || Response == IDTIMEOUT)
             DoReboot();
 
         break;
@@ -500,16 +532,18 @@ fail1:
 }
 
 static VOID
-CheckRebootValue(
+CheckRequestSubKeys(
     VOID
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
+    DWORD               SubKeys;
+    DWORD               MaxSubKeyLength;
+    DWORD               SubKeyLength;
+    PTCHAR              SubKeyName;
+    DWORD               Index;
+    HKEY                SubKey;
     HRESULT             Error;
-    DWORD               MaxValueLength;
-    DWORD               RebootLength;
-    PTCHAR              Reboot;
-    DWORD               Type;
 
     Log("====>");
 
@@ -517,12 +551,12 @@ CheckRebootValue(
                             NULL,
                             NULL,
                             NULL,
+                            &SubKeys,
+                            &MaxSubKeyLength,
                             NULL,
                             NULL,
                             NULL,
                             NULL,
-                            NULL,
-                            &MaxValueLength,
                             NULL,
                             NULL);
     if (Error != ERROR_SUCCESS) {
@@ -530,51 +564,80 @@ CheckRebootValue(
         goto fail1;
     }
 
-    RebootLength = MaxValueLength + sizeof (TCHAR);
+    SubKeyLength = MaxSubKeyLength + sizeof (TCHAR);
 
-    Reboot = calloc(1, RebootLength);
-    if (Reboot == NULL)
+    SubKeyName = calloc(1, SubKeyLength);
+    if (SubKeyName == NULL)
         goto fail2;
 
-    Error = RegQueryValueEx(Context->RequestKey,
-                            "Reboot",
-                            NULL,
-                            &Type,
-                            (LPBYTE)Reboot,
-                            &RebootLength);
-    if (Error != ERROR_SUCCESS) {
-        if (Error == ERROR_FILE_NOT_FOUND)
-            goto done;
+    for (Index = 0; Index < SubKeys; Index++) {
+        DWORD   Length;
+        DWORD   Type;
+        DWORD   Reboot;
 
-        SetLastError(Error);
-        goto fail3;
+        SubKeyLength = MaxSubKeyLength + sizeof (TCHAR);
+        memset(SubKeyName, 0, SubKeyLength);
+
+        Error = RegEnumKeyEx(Context->RequestKey,
+                             Index,
+                             (LPTSTR)SubKeyName,
+                             &SubKeyLength,
+                             NULL,
+                             NULL,
+                             NULL,
+                             NULL);
+        if (Error != ERROR_SUCCESS) {
+            SetLastError(Error);
+            goto fail3;
+        }
+
+        Log("%s", SubKeyName);
+
+        Error = RegOpenKeyEx(Context->RequestKey,
+                             SubKeyName,
+                             0,
+                             KEY_READ,
+                             &SubKey);
+        if (Error != ERROR_SUCCESS)
+            continue;
+
+        Length = sizeof (DWORD);
+        Error = RegQueryValueEx(SubKey,
+                                "Reboot",
+                                NULL,
+                                &Type,
+                                (LPBYTE)&Reboot,
+                                &Length);
+        if (Error != ERROR_SUCCESS ||
+            Type != REG_DWORD)
+            goto loop;
+
+        if (Reboot != 0)
+            goto found;
+
+loop:
+        RegCloseKey(SubKey);
     }
 
-    if (Type != REG_SZ) {
-        SetLastError(ERROR_BAD_FORMAT);
-        goto fail4;
-    }
+    goto done;
+
+found:
+    RegCloseKey(SubKey);
 
     if (!Context->RebootPending)
-        PromptForReboot(Reboot);
-
-    if (Context->RebootPending)
-        (VOID) RegDeleteValue(Context->RequestKey, "Reboot");
+        PromptForReboot(SubKeyName);
 
 done:
-    free(Reboot);
+    free(SubKeyName);
 
     Log("<====");
 
     return;
 
-fail4:
-    Log("fail4");
-
 fail3:
     Log("fail3");
 
-    free(Reboot);
+    free(SubKeyName);
 
 fail2:
     Log("fail2");
@@ -600,7 +663,7 @@ CheckRequestKey(
 
     Log("====>");
 
-    CheckRebootValue();
+    CheckRequestSubKeys();
 
     Error = RegNotifyChangeKeyValue(Context->RequestKey,
                                     TRUE,
@@ -693,6 +756,84 @@ fail1:
     return FALSE;
 }
 
+static BOOL
+GetRequestKeyName(
+    OUT PTCHAR          *RequestKeyName
+    )
+{
+    PMONITOR_CONTEXT    Context = &MonitorContext;
+    DWORD               MaxValueLength;
+    DWORD               RequestKeyNameLength;
+    DWORD               Type;
+    HRESULT             Error;
+
+    Error = RegQueryInfoKey(Context->ParametersKey,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            &MaxValueLength,
+                            NULL,
+                            NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    RequestKeyNameLength = MaxValueLength + sizeof (TCHAR);
+
+    *RequestKeyName = calloc(1, RequestKeyNameLength);
+    if (RequestKeyName == NULL)
+        goto fail2;
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "RequestKey",
+                            NULL,
+                            &Type,
+                            (LPBYTE)(*RequestKeyName),
+                            &RequestKeyNameLength);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail3;
+    }
+
+    if (Type != REG_SZ) {
+        SetLastError(ERROR_BAD_FORMAT);
+        goto fail4;
+    }
+
+    Log("%s", *RequestKeyName);
+
+    return TRUE;
+
+fail4:
+    Log("fail4");
+
+fail3:
+    Log("fail3");
+
+    free(*RequestKeyName);
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
 VOID WINAPI
 MonitorMain(
     _In_    DWORD       argc,
@@ -700,6 +841,7 @@ MonitorMain(
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
+    PTCHAR              RequestKeyName;
     BOOL                Success;
     HRESULT             Error;
 
@@ -708,21 +850,28 @@ MonitorMain(
 
     Log("====>");
 
-    Success = AcquireShutdownPrivilege();
-
-    if (!Success)
+    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         PARAMETERS_KEY(__MODULE__),
+                         0,
+                         KEY_READ,
+                         &Context->ParametersKey);
+    if (Error != ERROR_SUCCESS)
         goto fail1;
+
+    Success = AcquireShutdownPrivilege();
+    if (!Success)
+        goto fail2;
 
     Context->Service = RegisterServiceCtrlHandlerEx(MONITOR_NAME,
                                                     MonitorCtrlHandlerEx,
                                                     NULL);
     if (Context->Service == NULL)
-        goto fail2;
+        goto fail3;
 
     Context->EventLog = RegisterEventSource(NULL,
                                             MONITOR_NAME);
     if (Context->EventLog == NULL)
-        goto fail3;
+        goto fail4;
 
     Context->Status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
     Context->Status.dwServiceSpecificExitCode = 0;
@@ -735,24 +884,26 @@ MonitorMain(
                                      NULL);
 
     if (Context->StopEvent == NULL)
-        goto fail4;
+        goto fail5;
 
     Context->RequestEvent = CreateEvent(NULL,
                                         TRUE,
                                         FALSE,
                                         NULL);
-
     if (Context->RequestEvent == NULL)
-        goto fail5;
+        goto fail6;
+
+    Success = GetRequestKeyName(&RequestKeyName);
+    if (!Success)
+        goto fail7;
 
     Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                         REQUEST_KEY,
+                         RequestKeyName,
                          0,
                          KEY_ALL_ACCESS,
                          &Context->RequestKey);
-
     if (Error != ERROR_SUCCESS)
-        goto fail6;
+        goto fail8;
 
     SetEvent(Context->RequestEvent);
 
@@ -788,6 +939,8 @@ MonitorMain(
     }
 
 done:
+    (VOID) RegDeleteTree(Context->RequestKey, NULL);
+
     CloseHandle(Context->RequestKey);
     CloseHandle(Context->RequestEvent);
     CloseHandle(Context->StopEvent);
@@ -796,32 +949,44 @@ done:
 
     (VOID) DeregisterEventSource(Context->EventLog);
 
+    CloseHandle(Context->ParametersKey);
+
     Log("<====");
 
     return;
 
+fail8:
+    Log("fail8");
+
+    free(RequestKeyName);
+
+fail7:
+    Log("fail7");
+
+    CloseHandle(Context->RequestEvent);
+
 fail6:
     Log("fail6");
 
-    ReportStatus(SERVICE_STOPPED, GetLastError(), 0);
-
-    CloseHandle(Context->RequestEvent);
+    CloseHandle(Context->StopEvent);
 
 fail5:
     Log("fail5");
 
-    CloseHandle(Context->StopEvent);
+    ReportStatus(SERVICE_STOPPED, GetLastError(), 0);
+
+    (VOID) DeregisterEventSource(Context->EventLog);
 
 fail4:
     Log("fail4");
-
-    (VOID) DeregisterEventSource(Context->EventLog);
 
 fail3:
     Log("fail3");
 
 fail2:
     Log("fail2");
+
+    CloseHandle(Context->ParametersKey);
 
 fail1:
     Error = GetLastError();

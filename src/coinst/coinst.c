@@ -1371,7 +1371,8 @@ MonitorDelete(
                              SERVICE_CONTROL_STOP,
                              &Status);
 
-    if (!Success)
+    if (!Success &&
+        GetLastError() != ERROR_SERVICE_NOT_ACTIVE)
         goto fail3;
 
     Success = DeleteService(Service);
