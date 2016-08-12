@@ -34,13 +34,13 @@
 #include <stdlib.h>
 #include <strsafe.h>
 #include <wtsapi32.h>
+#include <cfgmgr32.h>
 #include <malloc.h>
 #include <assert.h>
 
 #include <version.h>
 
 #include "messages.h"
-#include "strings.h"
 
 #define MONITOR_NAME        __MODULE__
 #define MONITOR_DISPLAYNAME MONITOR_NAME
@@ -53,6 +53,8 @@ typedef struct _MONITOR_CONTEXT {
     HANDLE                  StopEvent;
     HANDLE                  RequestEvent;
     HKEY                    RequestKey;
+    PTCHAR                  Title;
+    PTCHAR                  Message;
     BOOL                    RebootPending;
 } MONITOR_CONTEXT, *PMONITOR_CONTEXT;
 
@@ -296,6 +298,12 @@ DoReboot(
     VOID
     )
 {
+    Log("waiting for pending install events...");
+
+    (VOID) CM_WaitNoPendingInstallEvents(INFINITE);
+
+    Log("initiating shutdown...");
+
     (VOID) InitiateSystemShutdownEx(NULL,
                                     NULL,
                                     0,
@@ -340,17 +348,18 @@ PromptForReboot(
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
+    PTCHAR              Title;
+    DWORD               TitleLength;
     HRESULT             Result;
     TCHAR               ServiceKeyName[MAX_PATH];
     HKEY                ServiceKey;
     DWORD               MaxValueLength;
     DWORD               DisplayNameLength;
     PTCHAR              DisplayName;
-    PTCHAR              Description;
     DWORD               Type;
-    TCHAR               Title[] = TEXT(VENDOR_NAME_STR);
-    TCHAR               Message[MAXIMUM_BUFFER_SIZE];
-    DWORD               Length;
+    PTCHAR              Description;
+    PTCHAR              Message;
+    DWORD               MessageLength;
     PWTS_SESSION_INFO   SessionInfo;
     DWORD               Count;
     DWORD               Index;
@@ -358,6 +367,10 @@ PromptForReboot(
     HRESULT             Error;
 
     Log("====> (%s)", DriverName);
+
+    Title = Context->Title;
+    TitleLength = (DWORD)((_tcslen(Context->Title) +
+                           1) * sizeof (TCHAR));
 
     Result = StringCbPrintf(ServiceKeyName,
                             MAX_PATH,
@@ -420,27 +433,27 @@ PromptForReboot(
     else
         Description++;
 
-    Result = StringCbPrintf(Message,
-                            MAXIMUM_BUFFER_SIZE,
-                            TEXT("%s "),
-                            Description);
-    assert(SUCCEEDED(Result));
+    MessageLength = (DWORD)((_tcslen(Description) +
+                             1 + // ' '
+                             _tcslen(Context->Message) +
+                             1) * sizeof (TCHAR));
 
-    Length = (DWORD)_tcslen(Message);
-
-    Length = LoadString(GetModuleHandle(NULL),
-                        IDS_DIALOG,
-                        Message + Length,
-                        ARRAYSIZE(Message) - Length);
-    if (Length == 0)
+    Message = calloc(1, MessageLength);
+    if (Message == NULL)
         goto fail6;
+
+    Result = StringCbPrintf(Message,
+                            MessageLength,
+                            TEXT("%s %s"),
+                            Description,
+                            Context->Message);
+    assert(SUCCEEDED(Result));
 
     Success = WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE,
                                    0,
                                    1,
                                    &SessionInfo,
                                    &Count);
-
     if (!Success)
         goto fail7;
 
@@ -464,9 +477,9 @@ PromptForReboot(
         Success = WTSSendMessage(WTS_CURRENT_SERVER_HANDLE,
                                  SessionId,
                                  Title,
-                                 sizeof (Title),
+                                 TitleLength,
                                  Message,
-                                 sizeof (Message),
+                                 MessageLength,
                                  MB_YESNO | MB_ICONEXCLAMATION,
                                  Timeout,
                                  &Response,
@@ -834,6 +847,118 @@ fail1:
     return FALSE;
 }
 
+static BOOL
+GetDialogParameters(
+    VOID
+    )
+{
+    PMONITOR_CONTEXT    Context = &MonitorContext;
+    DWORD               MaxValueLength;
+    DWORD               TitleLength;
+    DWORD               MessageLength;
+    DWORD               Type;
+    HRESULT             Error;
+
+    Error = RegQueryInfoKey(Context->ParametersKey,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            &MaxValueLength,
+                            NULL,
+                            NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    TitleLength = MaxValueLength + sizeof (TCHAR);
+
+    Context->Title = calloc(1, TitleLength);
+    if (Context == NULL)
+        goto fail2;
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "DialogTitle",
+                            NULL,
+                            &Type,
+                            (LPBYTE)Context->Title,
+                            &TitleLength);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail3;
+    }
+
+    if (Type != REG_SZ) {
+        SetLastError(ERROR_BAD_FORMAT);
+        goto fail4;
+    }
+
+    MessageLength = MaxValueLength + sizeof (TCHAR);
+
+    Context->Message = calloc(1, MessageLength);
+    if (Context == NULL)
+        goto fail5;
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "DialogMessage",
+                            NULL,
+                            &Type,
+                            (LPBYTE)Context->Message,
+                            &MessageLength);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail6;
+    }
+
+    if (Type != REG_SZ) {
+        SetLastError(ERROR_BAD_FORMAT);
+        goto fail7;
+    }
+
+    return TRUE;
+
+fail7:
+    Log("fail7");
+
+fail6:
+    Log("fail6");
+
+    free(Context->Message);
+
+fail5:
+    Log("fail5");
+
+fail4:
+    Log("fail4");
+
+fail3:
+    Log("fail3");
+
+    free(Context->Title);
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+
+
 VOID WINAPI
 MonitorMain(
     _In_    DWORD       argc,
@@ -905,6 +1030,10 @@ MonitorMain(
     if (Error != ERROR_SUCCESS)
         goto fail8;
 
+    Success = GetDialogParameters();
+    if (!Success)
+        goto fail9;
+
     SetEvent(Context->RequestEvent);
 
     ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
@@ -941,7 +1070,10 @@ MonitorMain(
 done:
     (VOID) RegDeleteTree(Context->RequestKey, NULL);
 
+    free(Context->Message);
+    free(Context->Title);
     CloseHandle(Context->RequestKey);
+    free(RequestKeyName);
     CloseHandle(Context->RequestEvent);
     CloseHandle(Context->StopEvent);
 
@@ -954,6 +1086,11 @@ done:
     Log("<====");
 
     return;
+
+fail9:
+    Log("fail9");
+
+    CloseHandle(Context->RequestKey);
 
 fail8:
     Log("fail8");

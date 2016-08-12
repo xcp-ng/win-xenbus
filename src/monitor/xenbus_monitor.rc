@@ -54,4 +54,3 @@
 
 #include "common.ver"
 #include "messages.rc"
-#include "strings.rc"

@@ -132,6 +132,8 @@ AddReg = Monitor_Parameters, Monitor_Request
 [Monitor_Parameters]
 HKR,"Parameters",,0x00000010
 HKR,"Parameters","RequestKey",0x00000000,%RequestKey%
+HKR,"Parameters","DialogTitle",0x00000000,%DialogTitle%
+HKR,"Parameters","DialogMessage",0x00000000,%DialogMessage%
 
 [Monitor_Request]
 HKLM,%RequestKey% ,,0x00000010
@@ -159,6 +161,8 @@ XenFiltName="@PRODUCT_NAME@ Generic Bus Filter"
 MonitorName="@PRODUCT_NAME@ PV Driver Monitor"
 MonitorDesc="Provides support for @PRODUCT_NAME@ PV drivers"
 RequestKey="SOFTWARE\@VENDOR_NAME@\@PRODUCT_NAME@\PV Driver Monitor\Request"
+DialogTitle="@PRODUCT_NAME@"
+DialogMessage="needs to restart the system to complete installation. Press 'Yes' to restart the system now or 'No' if you plan to restart the system later."
 
 SERVICE_BOOT_START=0x0 
 SERVICE_SYSTEM_START=0x1 
