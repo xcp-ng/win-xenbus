@@ -127,16 +127,13 @@ ServiceType=%SERVICE_WIN32_OWN_PROCESS%
 StartType=%SERVICE_AUTO_START%
 ErrorControl=%SERVICE_ERROR_NORMAL%
 ServiceBinary=%11%\xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.exe
-AddReg = Monitor_Parameters, Monitor_Request
+AddReg = Monitor_Parameters
 
 [Monitor_Parameters]
 HKR,"Parameters",,0x00000010
 HKR,"Parameters","RequestKey",0x00000000,%RequestKey%
 HKR,"Parameters","DialogTitle",0x00000000,%DialogTitle%
 HKR,"Parameters","DialogMessage",0x00000000,%DialogMessage%
-
-[Monitor_Request]
-HKLM,%RequestKey% ,,0x00000010
 
 [Monitor_EventLog]
 AddReg=Monitor_EventLog_AddReg

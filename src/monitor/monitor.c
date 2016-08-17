@@ -1022,11 +1022,15 @@ MonitorMain(
     if (!Success)
         goto fail7;
 
-    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                         RequestKeyName,
-                         0,
-                         KEY_ALL_ACCESS,
-                         &Context->RequestKey);
+    Error = RegCreateKeyEx(HKEY_LOCAL_MACHINE,
+                           RequestKeyName,
+                           0,
+                           NULL,
+                           REG_OPTION_NON_VOLATILE,
+                           KEY_ALL_ACCESS,
+                           NULL,
+                           &Context->RequestKey,
+                           NULL);
     if (Error != ERROR_SUCCESS)
         goto fail8;
 

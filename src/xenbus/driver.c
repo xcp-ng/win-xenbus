@@ -152,10 +152,10 @@ __DriverRequestReboot(
                                 &Ansi[0]);
     ASSERT(NT_SUCCESS(status));
 
-    status = RegistryOpenSubKey(NULL,
-                                RequestKeyName,
-                                KEY_ALL_ACCESS,
-                                &RequestKey);
+    status = RegistryCreateSubKey(NULL,
+                                  RequestKeyName,
+                                  REG_OPTION_NON_VOLATILE,
+                                  &RequestKey);
     if (!NT_SUCCESS(status))
         goto fail2;
 
