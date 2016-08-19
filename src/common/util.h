@@ -267,8 +267,46 @@ __strtok_r(
     if (Token == NULL)
         return NULL;
 
-    while (*Token != L'\0' &&
+    while (*Token != '\0' &&
            strchr(Delimiter, *Token) != NULL)
+        Token++;
+
+    if (*Token == '\0')
+        return NULL;
+
+    End = Token + 1;
+    while (*End != '\0' &&
+           strchr(Delimiter, *End) == NULL)
+        End++;
+
+    if (*End != '\0')
+        *End++ = '\0';
+
+    *Context = End;
+
+    return Token;
+}
+
+static FORCEINLINE PWCHAR
+__wcstok_r(
+    IN      PWCHAR  Buffer,
+    IN      PWCHAR  Delimiter,
+    IN OUT  PWCHAR  *Context
+    )
+{
+    PWCHAR          Token;
+    PWCHAR          End;
+
+    if (Buffer != NULL)
+        *Context = Buffer;
+
+    Token = *Context;
+
+    if (Token == NULL)
+        return NULL;
+
+    while (*Token != L'\0' &&
+           wcschr(Delimiter, *Token) != NULL)
         Token++;
 
     if (*Token == L'\0')
@@ -276,7 +314,7 @@ __strtok_r(
 
     End = Token + 1;
     while (*End != L'\0' &&
-           strchr(Delimiter, *End) == NULL)
+           wcschr(Delimiter, *End) == NULL)
         End++;
 
     if (*End != L'\0')
