@@ -150,14 +150,14 @@ fail1:
 
 NTSTATUS
 RegistryCreateKey(
-    IN  HANDLE          Root,
+    IN  HANDLE          Parent,
     IN  PUNICODE_STRING Path,
     IN  ULONG           Options,
     OUT PHANDLE         Key
     )
 {
     PWCHAR              Buffer;
-    HANDLE              Parent;
+    HANDLE              Root;
     PWCHAR              ChildPath;
     PWCHAR              ChildName;
     PWCHAR              Context;
@@ -177,8 +177,9 @@ RegistryCreateKey(
 
     RtlCopyMemory(Buffer, Path->Buffer, Path->Length);
 
-    if (Root != NULL) {
-        Parent = Root;
+    Root = Parent;
+
+    if (Parent != NULL) {
         ChildPath = Buffer;
     } else {
         status = RegistryOpenRoot(Buffer, &Parent, &ChildPath);
