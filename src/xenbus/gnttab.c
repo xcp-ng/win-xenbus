@@ -42,7 +42,6 @@
 #include "util.h"
 #include "hash_table.h"
 
-#define XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT  32
 #define XENBUS_GNTTAB_ENTRY_PER_FRAME      (PAGE_SIZE / sizeof (grant_entry_v1_t))
 
 // Xen requires that we avoid the first 8 entries of the table and
@@ -78,6 +77,7 @@ struct _XENBUS_GNTTAB_CONTEXT {
     PXENBUS_FDO                 Fdo;
     KSPIN_LOCK                  Lock;
     LONG                        References;
+    ULONG                       MaximumFrameCount;
     PHYSICAL_ADDRESS            Address;
     LONG                        FrameIndex;
     grant_entry_v1_t            *Table;
@@ -124,8 +124,8 @@ GnttabExpand(
     Index = InterlockedIncrement(&Context->FrameIndex);
 
     status = STATUS_INSUFFICIENT_RESOURCES;
-    ASSERT3U(Index, <=, XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT);
-    if (Index == XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT)
+    ASSERT3U(Index, <=, Context->MaximumFrameCount);
+    if (Index == Context->MaximumFrameCount)
         goto fail1;
 
     Address = Context->Address;
@@ -134,7 +134,8 @@ GnttabExpand(
     status = MemoryAddToPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT),
                                 XENMAPSPACE_grant_table,
                                 Index);
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail2;
 
     LogPrintf(LOG_LEVEL_INFO,
               "GNTTAB: MAP XENMAPSPACE_grant_table[%d] @ %08x.%08x\n",
@@ -152,16 +153,19 @@ GnttabExpand(
                               Start,
                               End + 1 - Start);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     Info("added references [%08llx - %08llx]\n", Start, End);
 
     return STATUS_SUCCESS;
 
-fail2:
-    Error("fail2\n");
+fail3:
+    Error("fail3\n");
 
     // Not clear what to do here
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -719,41 +723,49 @@ GnttabAcquire(
 
     Trace("====>\n");
 
-    Size = XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE;
+    status = GrantTableQuerySize(NULL, &Context->MaximumFrameCount);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "GNTTAB: MAX FRAMES = %u\n",
+              Context->MaximumFrameCount);
+
+    Size = Context->MaximumFrameCount * PAGE_SIZE;
 
     status = FdoAllocateIoSpace(Fdo,
                                 Size,
                                 &Context->Address);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     Context->Table = (grant_entry_v1_t *)MmMapIoSpace(Context->Address,
                                                       Size,
                                                       MmCached);
     status = STATUS_UNSUCCESSFUL;
     if (Context->Table == NULL)
-        goto fail2;
+        goto fail3;
 
     Context->FrameIndex = -1;
 
     status = XENBUS_RANGE_SET(Acquire, &Context->RangeSetInterface);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     status = XENBUS_RANGE_SET(Create,
                               &Context->RangeSetInterface,
                               "gnttab",
                               &Context->RangeSet);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail5;
 
     status = XENBUS_CACHE(Acquire, &Context->CacheInterface);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
     
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail7;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -762,11 +774,11 @@ GnttabAcquire(
                             Context,
                             &Context->SuspendCallbackEarly);
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail8;
 
     status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail9;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -775,7 +787,7 @@ GnttabAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail10;
 
     Trace("<====\n");
 
@@ -784,31 +796,31 @@ done:
 
     return STATUS_SUCCESS;
 
-fail9:
-    Error("fail9\n");
+fail10:
+    Error("fail10\n");
 
     XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-fail8:
-    Error("fail8\n");
+fail9:
+    Error("fail9\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
-fail7:
-    Error("fail7\n");
+fail8:
+    Error("fail8\n");
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-fail6:
-    Error("fail6\n");
+fail7:
+    Error("fail7\n");
 
     XENBUS_CACHE(Release, &Context->CacheInterface);
 
-fail5:
-    Error("fail5\n");
+fail6:
+    Error("fail6\n");
 
     GnttabContract(Context);
     ASSERT3S(Context->FrameIndex, ==, -1);
@@ -820,24 +832,29 @@ fail5:
 
     Context->FrameIndex = 0;
 
-fail4:
-    Error("fail4\n");
+fail5:
+    Error("fail5\n");
 
     XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
 
-fail3:
-    Error("fail3\n");
+fail4:
+    Error("fail4\n");
 
     MmUnmapIoSpace(Context->Table, Size);
     Context->Table = NULL;
 
-fail2:
-    Error("fail2\n");
+fail3:
+    Error("fail3\n");
 
     FdoFreeIoSpace(Fdo,
                    Context->Address,
                    Size);
     Context->Address.QuadPart = 0;
+
+fail2:
+    Error("fail2\n");
+
+    Context->MaximumFrameCount = 0;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -897,7 +914,7 @@ GnttabRelease(
 
     XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
 
-    Size = XENBUS_GNTTAB_MAXIMUM_FRAME_COUNT * PAGE_SIZE;
+    Size = Context->MaximumFrameCount * PAGE_SIZE;
 
     MmUnmapIoSpace(Context->Table, Size);
     Context->Table = NULL;
@@ -906,6 +923,8 @@ GnttabRelease(
                    Context->Address,
                    Size);
     Context->Address.QuadPart = 0;
+
+    Context->MaximumFrameCount = 0;
 
     Trace("<====\n");
 

@@ -262,3 +262,45 @@ fail1:
 
     return status;
 }
+
+__checkReturn
+XEN_API
+NTSTATUS
+GrantTableQuerySize(
+    OUT uint32_t                *Current OPTIONAL,
+    OUT uint32_t                *Maximum OPTIONAL
+    )
+{
+    struct gnttab_query_size    op;
+    LONG_PTR                    rc;
+    NTSTATUS                    status;
+
+    op.dom = DOMID_SELF;
+
+    rc = GrantTableOp(GNTTABOP_query_size, &op, 1);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    status = STATUS_UNSUCCESSFUL;
+    if (op.status != GNTST_okay)
+        goto fail2;
+
+    if (Current != NULL)
+        *Current = op.nr_frames;
+
+    if (Maximum != NULL)
+        *Maximum = op.max_nr_frames;
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}

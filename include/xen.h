@@ -277,6 +277,14 @@ GrantTableUnmapForeignPage(
     IN  PHYSICAL_ADDRESS        Address
     );
 
+__checkReturn
+XEN_API
+NTSTATUS
+GrantTableQuerySize(
+    OUT uint32_t                *Current OPTIONAL,
+    OUT uint32_t                *Maximum OPTIONAL
+    );
+
 // SCHED
 
 __checkReturn
