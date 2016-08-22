@@ -157,7 +157,7 @@ XenBusName="@PRODUCT_NAME@ PV Bus"
 XenFiltName="@PRODUCT_NAME@ Generic Bus Filter"
 MonitorName="@PRODUCT_NAME@ PV Driver Monitor"
 MonitorDesc="Provides support for @PRODUCT_NAME@ PV drivers"
-RequestKey="SOFTWARE\@VENDOR_NAME@\@PRODUCT_NAME@\PV Driver Monitor\Request"
+RequestKey="SYSTEM\CurrentControlSet\Services\xenbus_monitor\Request"
 DialogTitle="@PRODUCT_NAME@"
 DialogMessage="needs to restart the system to complete installation. Press 'Yes' to restart the system now or 'No' if you plan to restart the system later."
 
