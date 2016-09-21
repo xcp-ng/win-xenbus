@@ -221,7 +221,7 @@ UnplugSetRequest(
 
     (VOID) RegistryDeleteValue(UnplugKey, ValueName);
 
-    Info("%s\n", ValueName);
+    Info("%s (%u)\n", ValueName, Value);
 
     AcquireHighLock(&Context->Lock, &Irql);
     Context->Request[Type] = (Value != 0) ? TRUE : FALSE;
