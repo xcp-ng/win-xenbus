@@ -232,6 +232,8 @@ RegistryCreateKey(
 
     *Key = Child;
 
+    __RegistryFree(Buffer);
+
     return STATUS_SUCCESS;
 
 fail4:

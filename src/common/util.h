@@ -190,11 +190,14 @@ __AllocatePage(
                                   SkipBytes,
                                   TotalBytes,
                                   MmCached,
-                                  0);
+                                  MM_DONT_ZERO_ALLOCATION);
 
     status = STATUS_NO_MEMORY;
     if (Mdl == NULL)
         goto fail1;
+
+    if (Mdl->ByteCount < PAGE_SIZE)
+        goto fail2;
 
     ASSERT((Mdl->MdlFlags & (MDL_MAPPED_TO_SYSTEM_VA |
                              MDL_PARTIAL_HAS_BEEN_MAPPED |
@@ -212,13 +215,16 @@ __AllocatePage(
 
     status = STATUS_UNSUCCESSFUL;
     if (MdlMappedSystemVa == NULL)
-        goto fail2;
+        goto fail3;
 
     ASSERT3P(MdlMappedSystemVa, ==, Mdl->MappedSystemVa);
 
     RtlZeroMemory(MdlMappedSystemVa, PAGE_SIZE);
 
     return Mdl;
+
+fail3:
+    Error("fail3\n");
 
 fail2:
     Error("fail2\n");
