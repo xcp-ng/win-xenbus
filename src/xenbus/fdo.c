@@ -3219,12 +3219,8 @@ FdoS3ToS4(
     BUG_ON(SuspendGetReferences(Fdo->SuspendContext) != 0);
     BUG_ON(SharedInfoGetReferences(Fdo->SharedInfoContext) != 0);
     BUG_ON(EvtchnGetReferences(Fdo->EvtchnContext) != 0);
-    BUG_ON(DebugGetReferences(Fdo->DebugContext) != 0);
     BUG_ON(StoreGetReferences(Fdo->StoreContext) != 0);
-    BUG_ON(RangeSetGetReferences(Fdo->RangeSetContext) != 0);
-    BUG_ON(CacheGetReferences(Fdo->CacheContext) != 0);
     BUG_ON(GnttabGetReferences(Fdo->GnttabContext) != 0);
-    BUG_ON(UnplugGetReferences(Fdo->UnplugContext) != 0);
     BUG_ON(BalloonGetReferences(Fdo->BalloonContext) != 0);
 
 not_active:
