@@ -117,15 +117,16 @@ GetErrorMessage(
     PTCHAR      Message;
     ULONG       Index;
 
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-                  FORMAT_MESSAGE_FROM_SYSTEM |
-                  FORMAT_MESSAGE_IGNORE_INSERTS,
-                  NULL,
-                  Error,
-                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                  (LPTSTR)&Message,
-                  0,
-                  NULL);
+    if (!FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                       FORMAT_MESSAGE_FROM_SYSTEM |
+                       FORMAT_MESSAGE_IGNORE_INSERTS,
+                       NULL,
+                       Error,
+                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       (LPTSTR)&Message,
+                       0,
+                       NULL))
+        return NULL;
 
     for (Index = 0; Message[Index] != '\0'; Index++) {
         if (Message[Index] == '\r' || Message[Index] == '\n') {
@@ -252,13 +253,13 @@ AllowUpdate(
         goto fail3;
     }
 
+    RegCloseKey(ServiceKey);
+
 done:
     if (Value == 0) {
         Log("DISALLOWED");
         *Allow = FALSE;
     }
-
-    RegCloseKey(ServiceKey);
 
     Log("<====");
 
@@ -631,8 +632,10 @@ GetDriverKeyName(
                              0,
                              KEY_READ,
                              &SubKey);
-        if (Error != ERROR_SUCCESS)
+        if (Error != ERROR_SUCCESS) {
+            SubKey = NULL;
             continue;
+        }
 
         Error = RegQueryInfoKey(SubKey,
                                 NULL,
