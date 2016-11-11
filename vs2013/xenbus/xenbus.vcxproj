@@ -37,7 +37,7 @@
     </ResourceCompile>
     <Link>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>$(ProjectDir)..\$(ConfigurationName)\$(Platform)\xen.lib;$(DDK_LIB_PATH)/libcntpr.lib;$(DDK_LIB_PATH)/procgrp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectDir)..\$(ConfigurationName)\$(Platform)\xen.lib;$(DDK_LIB_PATH)/libcntpr.lib;$(DDK_LIB_PATH)/procgrp.lib;$(DDK_LIB_PATH)/rtlver.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EnableCOMDATFolding>false</EnableCOMDATFolding>
     </Link>
     <Inf>
