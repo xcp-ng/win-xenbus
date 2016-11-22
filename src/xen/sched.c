@@ -89,11 +89,19 @@ SchedShutdown(
     op.reason = Reason;
 
     rc = SchedOp(SCHEDOP_shutdown, &op);
-    
+
     if (rc < 0) {
         ERRNO_TO_STATUS(-rc, status);
         goto fail1;
     }
+
+    /*
+     * When a SCHEDOP_shutdown hypercall is issued with SHUTDOWN_suspend
+     * reason code, a return value of 1 indicates that the operation was
+     * cancelled
+     */
+    if(Reason == SHUTDOWN_suspend && rc == 1)
+        return STATUS_CANCELLED;
 
     return STATUS_SUCCESS;
 
