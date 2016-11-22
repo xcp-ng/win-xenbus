@@ -100,7 +100,7 @@ SchedShutdown(
      * reason code, a return value of 1 indicates that the operation was
      * cancelled
      */
-    if(Reason == SHUTDOWN_suspend && rc == 1)
+    if (Reason == SHUTDOWN_suspend && rc == 1)
         return STATUS_CANCELLED;
 
     return STATUS_SUCCESS;
