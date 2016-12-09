@@ -138,6 +138,7 @@ __InterlockedSubtract(
     return New;
 }
 
+__checkReturn
 static FORCEINLINE PVOID
 __AllocatePoolWithTag(
     IN  POOL_TYPE   PoolType,
@@ -150,6 +151,7 @@ __AllocatePoolWithTag(
     __analysis_assume(PoolType == NonPagedPool ||
                       PoolType == PagedPool);
 
+#pragma warning(suppress:28160) // annotation error
     Buffer = ExAllocatePoolWithTag(PoolType, NumberOfBytes, Tag);
     if (Buffer == NULL)
         return NULL;

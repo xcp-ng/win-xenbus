@@ -66,6 +66,7 @@ __UnplugFree(
     __FreePoolWithTag(Buffer, XENBUS_UNPLUG_TAG);
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static VOID
 UnplugRequest(
     IN  PINTERFACE                  Interface,

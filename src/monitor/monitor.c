@@ -54,7 +54,7 @@ typedef struct _MONITOR_CONTEXT {
     HANDLE                  RequestEvent;
     HKEY                    RequestKey;
     PTCHAR                  Title;
-    PTCHAR                  Message;
+    PTCHAR                  Text;
     BOOL                    RebootPending;
 } MONITOR_CONTEXT, *PMONITOR_CONTEXT;
 
@@ -360,8 +360,8 @@ PromptForReboot(
     PTCHAR              DisplayName;
     DWORD               Type;
     PTCHAR              Description;
-    PTCHAR              Message;
-    DWORD               MessageLength;
+    PTCHAR              Text;
+    DWORD               TextLength;
     PWTS_SESSION_INFO   SessionInfo;
     DWORD               Count;
     DWORD               Index;
@@ -435,20 +435,20 @@ PromptForReboot(
     else
         Description++;
 
-    MessageLength = (DWORD)((_tcslen(Description) +
-                             1 + // ' '
-                             _tcslen(Context->Message) +
-                             1) * sizeof (TCHAR));
+    TextLength = (DWORD)((_tcslen(Description) +
+                          1 + // ' '
+                          _tcslen(Context->Text) +
+                          1) * sizeof (TCHAR));
 
-    Message = calloc(1, MessageLength);
-    if (Message == NULL)
+    Text = calloc(1, TextLength);
+    if (Text == NULL)
         goto fail6;
 
-    Result = StringCbPrintf(Message,
-                            MessageLength,
+    Result = StringCbPrintf(Text,
+                            TextLength,
                             TEXT("%s %s"),
                             Description,
-                            Context->Message);
+                            Context->Text);
     assert(SUCCEEDED(Result));
 
     Success = WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE,
@@ -480,8 +480,8 @@ PromptForReboot(
                                  SessionId,
                                  Title,
                                  TitleLength,
-                                 Message,
-                                 MessageLength,
+                                 Text,
+                                 TextLength,
                                  MB_YESNO | MB_ICONEXCLAMATION,
                                  Timeout,
                                  &Response,
@@ -857,7 +857,7 @@ GetDialogParameters(
     PMONITOR_CONTEXT    Context = &MonitorContext;
     DWORD               MaxValueLength;
     DWORD               TitleLength;
-    DWORD               MessageLength;
+    DWORD               TextLength;
     DWORD               Type;
     HRESULT             Error;
 
@@ -900,18 +900,18 @@ GetDialogParameters(
         goto fail4;
     }
 
-    MessageLength = MaxValueLength + sizeof (TCHAR);
+    TextLength = MaxValueLength + sizeof (TCHAR);
 
-    Context->Message = calloc(1, MessageLength);
+    Context->Text = calloc(1, TextLength);
     if (Context == NULL)
         goto fail5;
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "DialogMessage",
+                            "DialogText",
                             NULL,
                             &Type,
-                            (LPBYTE)Context->Message,
-                            &MessageLength);
+                            (LPBYTE)Context->Text,
+                            &TextLength);
     if (Error != ERROR_SUCCESS) {
         SetLastError(Error);
         goto fail6;
@@ -930,7 +930,7 @@ fail7:
 fail6:
     Log("fail6");
 
-    free(Context->Message);
+    free(Context->Text);
 
 fail5:
     Log("fail5");
@@ -1076,7 +1076,7 @@ MonitorMain(
 done:
     (VOID) RegDeleteTree(Context->RequestKey, NULL);
 
-    free(Context->Message);
+    free(Context->Text);
     free(Context->Title);
     CloseHandle(Context->RequestKey);
     free(RequestKeyName);

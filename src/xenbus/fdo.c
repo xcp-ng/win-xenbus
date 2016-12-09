@@ -281,6 +281,7 @@ FdoGetPhysicalDeviceObject(
     return __FdoGetPhysicalDeviceObject(Fdo);
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static NTSTATUS
 FdoAcquireLowerBusInterface(
     IN  PXENBUS_FDO         Fdo
@@ -540,6 +541,7 @@ FdoGetName(
     return __FdoGetName(Fdo);
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static NTSTATUS
 FdoQueryId(
     IN  PXENBUS_FDO         Fdo,
@@ -3259,6 +3261,7 @@ FdoFilterCmPartialResourceList(
 #define BALLOON_WARN_TIMEOUT        10
 #define BALLOON_BUGCHECK_TIMEOUT    1200
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static NTSTATUS
 FdoStartDevice(
     IN  PXENBUS_FDO                 Fdo,
@@ -3658,6 +3661,7 @@ FdoSurpriseRemoval(
     return status;
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static NTSTATUS
 FdoRemoveDevice(
     IN  PXENBUS_FDO                     Fdo,
@@ -3775,6 +3779,7 @@ done:
 
 #define SCAN_PAUSE  10
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static NTSTATUS
 FdoQueryDeviceRelations(
     IN  PXENBUS_FDO     Fdo,
@@ -4257,6 +4262,7 @@ FdoRequestSetDevicePowerCompletion(
     KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static VOID
 FdoRequestSetDevicePower(
     IN  PXENBUS_FDO         Fdo,
@@ -4516,6 +4522,7 @@ FdoRequestQueryDevicePowerCompletion(
     KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static VOID
 FdoRequestQueryDevicePower(
     IN  PXENBUS_FDO         Fdo,
@@ -4870,6 +4877,7 @@ FdoDispatch(
     return status;
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static NTSTATUS
 FdoQueryInterface(
     IN  PXENBUS_FDO     Fdo,

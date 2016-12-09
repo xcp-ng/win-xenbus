@@ -906,7 +906,7 @@ DEFINE_PDO_QUERY_INTERFACE(Emulated)
 struct _INTERFACE_ENTRY {
     const GUID  *Guid;
     const CHAR  *Name;
-    NTSTATUS    (*Query)(PXENBUS_PDO, PIRP);
+    NTSTATUS    (*Query)(PXENFILT_PDO, PIRP);
 };
 
 #define DEFINE_INTERFACE_ENTRY(_Guid, _Interface)   \

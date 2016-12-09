@@ -258,6 +258,7 @@ fail1:
 #undef  INSERT_BEFORE
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static VOID
 ModuleLoad(
     IN  PUNICODE_STRING FullImageName,

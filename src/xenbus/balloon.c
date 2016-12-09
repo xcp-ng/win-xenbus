@@ -264,11 +264,17 @@ BalloonFreePagesFromMdl(
     // by RAM.
     ASSERT((Mdl->ByteCount & (PAGE_SIZE - 1)) == 0);
 
-    for (Index = 0; Index < Mdl->ByteCount >> PAGE_SHIFT; Index++)
+    for (Index = 0; Index < (Mdl->ByteCount >> PAGE_SHIFT); Index++) {
+        UCHAR   Byte;
+
+        ASSERT3U(Index << PAGE_SHIFT, <, Mdl->ByteCount);
         Mapping[Index << PAGE_SHIFT] = (UCHAR)Index;
 
-    for (Index = 0; Index < Mdl->ByteCount >> PAGE_SHIFT; Index++)
-        ASSERT3U(Mapping[Index << PAGE_SHIFT], ==, (UCHAR)Index);
+        KeMemoryBarrier();
+        Byte = Mapping[Index << PAGE_SHIFT];
+
+        ASSERT3U(Byte, ==, (UCHAR)Index);
+    }
 
     MmUnmapLockedPages((PVOID)Mapping, Mdl);
 

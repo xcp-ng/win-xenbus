@@ -157,6 +157,7 @@ __ProductTypeName(
 #undef  PRODUCT_TYPE_NAME
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static NTSTATUS
 SystemGetVersionInformation(
     VOID

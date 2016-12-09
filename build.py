@@ -223,61 +223,19 @@ def remove_timestamps(path):
     dst.close()
     src.close()
 
-def sdv_clean(name, vs):
-    path = [vs, name, 'sdv']
-    print(path)
-
-    shutil.rmtree(os.path.join(*path), True)
-
-    path = [vs, name, 'sdv.temp']
-    print(path)
-
-    shutil.rmtree(os.path.join(*path), True)
-
-    path = [vs, name, 'staticdv.job']
-    print(path)
-
-    try:
-        os.unlink(os.path.join(*path))
-    except OSError:
-        pass
-
-    path = [vs, name, 'refine.sdv']
-    print(path)
-
-    try:
-        os.unlink(os.path.join(*path))
-    except OSError:
-        pass
-
-    path = [vs, name, 'sdv-map.h']
-    print(path)
-
-    try:
-        os.unlink(os.path.join(*path))
-    except OSError:
-        pass
-
-
 def run_sdv(name, dir, vs):
-    configuration = get_configuration('Windows 8', False)
+    release = { 'vs2012':'Windows 8',
+                'vs2013':'Windows 8',
+                'vs2015':'Windows 10' }
+
+    configuration = get_configuration(release[vs], False)
     platform = 'x64'
 
     msbuild(platform, configuration, 'Build', name + '.vcxproj',
             '', os.path.join(vs, name))
 
-    sdv_clean(name, vs)
-
     msbuild(platform, configuration, 'sdv', name + '.vcxproj',
-            '/p:Inputs="/scan"', os.path.join(vs, name))
-
-    path = [vs, name, 'sdv-map.h']
-    file = open(os.path.join(*path), 'r')
-
-    for line in file:
-        print(line)
-
-    file.close()
+            '/p:Inputs="/clean"', os.path.join(vs, name))
 
     msbuild(platform, configuration, 'sdv', name + '.vcxproj',
             '/p:Inputs="/check:default.sdv"', os.path.join(vs, name))
@@ -387,10 +345,11 @@ def getVsVersion():
             continue
         vsenv[k] = v
 
-    if vsenv['VisualStudioVersion'] == '11.0' :
-        return 'vs2012'
-    elif vsenv['VisualStudioVersion'] == '12.0' :
-        return 'vs2013'
+    mapping = { '11.0':'vs2012',
+                '12.0':'vs2013',
+                '14.0':'vs2015' }
+
+    return mapping[vsenv['VisualStudioVersion']]
 
 if __name__ == '__main__':
     debug = { 'checked': True, 'free': False }
@@ -437,16 +396,15 @@ if __name__ == '__main__':
 
     symstore_del(driver, 30)
 
-    if vs=='vs2012':
-        release = 'Windows Vista'
-    else:
-        release = 'Windows 7'
+    release = { 'vs2012':'Windows Vista',
+                'vs2013':'Windows 7',
+                'vs2015':'Windows 8' }
 
-    build_sln(driver, release, 'x86', debug[sys.argv[1]], vs)
-    build_sln(driver, release, 'x64', debug[sys.argv[1]], vs)
+    build_sln(driver, release[vs], 'x86', debug[sys.argv[1]], vs)
+    build_sln(driver, release[vs], 'x64', debug[sys.argv[1]], vs)
 
-    symstore_add(driver, release, 'x86', debug[sys.argv[1]], vs)
-    symstore_add(driver, release, 'x64', debug[sys.argv[1]], vs)
+    symstore_add(driver, release[vs], 'x86', debug[sys.argv[1]], vs)
+    symstore_add(driver, release[vs], 'x64', debug[sys.argv[1]], vs)
 
     if len(sys.argv) <= 2 or sdv[sys.argv[2]]:
         run_sdv('xen', driver, vs)

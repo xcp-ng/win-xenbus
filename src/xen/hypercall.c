@@ -85,7 +85,7 @@ HypercallInitialize(
     ULONG       EBX = 'DEAD';
     ULONG       ECX = 'DEAD';
     ULONG       EDX = 'DEAD';
-    ULONG       Index;
+    ULONG_PTR   Index;
     NTSTATUS    status;
 
     status = STATUS_UNSUCCESSFUL;

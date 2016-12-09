@@ -115,6 +115,7 @@ ThreadFunction(
     // NOT REACHED
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 NTSTATUS
 ThreadCreate(
     IN  XENFILT_THREAD_FUNCTION Function,
