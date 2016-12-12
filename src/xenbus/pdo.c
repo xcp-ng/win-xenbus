@@ -437,8 +437,6 @@ PdoDumpRevisions(
         ASSERT(IMPLY(Index == ARRAYSIZE(PdoRevision) - 1,
                      Revision->EmulatedInterfaceVersion == XENFILT_EMULATED_INTERFACE_VERSION_MAX));
 
-        ASSERT3U(Revision->Number >> 24, ==, MAJOR_VERSION);
-
         Info("%08X -> "
              "SUSPEND v%u "
              "SHARED_INFO v%u "
