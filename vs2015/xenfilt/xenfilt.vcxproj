@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\configs.props" />
   <PropertyGroup Label="PropertySheets">
     <DriverType>WDM</DriverType>
@@ -35,28 +35,16 @@
       <AdditionalDependencies>$(ProjectDir)..\$(ConfigurationName)\$(Platform)\xen.lib;$(DDK_LIB_PATH)/libcntpr.lib;$(DDK_LIB_PATH)/procgrp.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EnableCOMDATFolding>false</EnableCOMDATFolding>
     </Link>
-    <Inf>
-      <SpecifyArchitecture>true</SpecifyArchitecture>
-      <SpecifyDriverVerDirectiveVersion>true</SpecifyDriverVerDirectiveVersion>
-      <TimeStamp>$(MAJOR_VERSION).$(MINOR_VERSION).$(MICRO_VERSION).$(BUILD_NUMBER)</TimeStamp>
-      <EnableVerbose>true</EnableVerbose>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
     <ClCompile>
       <PreprocessorDefinitions>__i386__;%(PreprocessorDefinitions);_X86_</PreprocessorDefinitions>
     </ClCompile>
-    <Inf>
-      <Architecture>x86</Architecture>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
     <ClCompile>
       <PreprocessorDefinitions>__x86_64__;%(PreprocessorDefinitions);_AMD64_</PreprocessorDefinitions>
     </ClCompile>
-    <Inf>
-      <Architecture>amd64</Architecture>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />

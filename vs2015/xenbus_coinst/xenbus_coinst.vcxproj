@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\configs.props" />
   <PropertyGroup Label="PropertySheets">
     <DriverType>WDM</DriverType>
@@ -35,28 +35,16 @@
     <ResourceCompile>
       <AdditionalIncludeDirectories>$(SolutionDir)..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
-    <Inf>
-      <SpecifyArchitecture>true</SpecifyArchitecture>
-      <SpecifyDriverVerDirectiveVersion>true</SpecifyDriverVerDirectiveVersion>
-      <TimeStamp>$(MAJOR_VERSION).$(MINOR_VERSION).$(MICRO_VERSION).$(BUILD_NUMBER)</TimeStamp>
-      <EnableVerbose>true</EnableVerbose>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
     <ClCompile>
       <PreprocessorDefinitions>__i386__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <Inf>
-      <Architecture>x86</Architecture>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
     <ClCompile>
       <PreprocessorDefinitions>__x86_64__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <Inf>
-      <Architecture>amd64</Architecture>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />
