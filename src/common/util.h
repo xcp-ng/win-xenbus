@@ -170,8 +170,8 @@ __FreePoolWithTag(
 }
 
 static FORCEINLINE PMDL
-__AllocatePage(
-    VOID
+__AllocatePages(
+    IN  ULONG           Count
     )
 {
     PHYSICAL_ADDRESS    LowAddress;
@@ -185,7 +185,7 @@ __AllocatePage(
     LowAddress.QuadPart = 0ull;
     HighAddress.QuadPart = ~0ull;
     SkipBytes.QuadPart = 0ull;
-    TotalBytes = (SIZE_T)PAGE_SIZE;
+    TotalBytes = (SIZE_T)PAGE_SIZE * Count;
 
     Mdl = MmAllocatePagesForMdlEx(LowAddress,
                                   HighAddress,
@@ -198,7 +198,7 @@ __AllocatePage(
     if (Mdl == NULL)
         goto fail1;
 
-    if (Mdl->ByteCount < PAGE_SIZE)
+    if (Mdl->ByteCount < TotalBytes)
         goto fail2;
 
     ASSERT((Mdl->MdlFlags & (MDL_MAPPED_TO_SYSTEM_VA |
@@ -221,7 +221,7 @@ __AllocatePage(
 
     ASSERT3P(MdlMappedSystemVa, ==, Mdl->MappedSystemVa);
 
-    RtlZeroMemory(MdlMappedSystemVa, PAGE_SIZE);
+    RtlZeroMemory(MdlMappedSystemVa, Mdl->ByteCount);
 
     return Mdl;
 
@@ -240,8 +240,10 @@ fail1:
     return NULL;
 }
 
+#define __AllocatePage()    __AllocatePages(1)
+
 static FORCEINLINE VOID
-__FreePage(
+__FreePages(
     IN	PMDL	Mdl
     )
 {
@@ -250,12 +252,13 @@ __FreePage(
     ASSERT(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA);
     MdlMappedSystemVa = Mdl->MappedSystemVa;
 
-    RtlFillMemory(MdlMappedSystemVa, PAGE_SIZE, 0xAA);
-
     MmUnmapLockedPages(MdlMappedSystemVa, Mdl);
 
     MmFreePagesFromMdl(Mdl);
+    ExFreePool(Mdl);
 }
+
+#define __FreePage(_Mdl)    __FreePages(_Mdl)
 
 static FORCEINLINE PCHAR
 __strtok_r(
