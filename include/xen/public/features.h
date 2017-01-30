@@ -1,8 +1,8 @@
 /******************************************************************************
  * features.h
- *
+ * 
  * Feature flags, reported by XENVER_get_features.
- *
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
  * deal in the Software without restriction, including without limitation the
@@ -98,6 +98,9 @@
  * This feature flag is deprecated and should not be used.
 #define XENFEAT_grant_map_identity        12
  */
+
+/* Guest can use XENMEMF_vnode to specify virtual node for memory op. */
+#define XENFEAT_memory_op_vnode_supported 13
 
 #define XENFEAT_NR_SUBMAPS 1
 

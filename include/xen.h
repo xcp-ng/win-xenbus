@@ -39,6 +39,7 @@
 #include <xen-warnings.h>
 #include <xen-errno.h>
 
+#include <public/errno.h>
 #include <public/xen.h>
 #include <public/memory.h>
 #include <public/event_channel.h>

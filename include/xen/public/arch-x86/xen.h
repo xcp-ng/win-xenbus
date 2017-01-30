@@ -1,8 +1,8 @@
 /******************************************************************************
  * arch-x86/xen.h
- *
+ * 
  * Guest OS interface to x86 Xen.
- *
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
  * deal in the Software without restriction, including without limitation the
@@ -54,9 +54,6 @@
 #define XEN_GUEST_HANDLE(name)          __XEN_GUEST_HANDLE(name)
 #define XEN_GUEST_HANDLE_PARAM(name)    XEN_GUEST_HANDLE(name)
 #define set_xen_guest_handle_raw(hnd, val)  do { (hnd).p = val; } while (0)
-#ifdef __XEN_TOOLS__
-#define get_xen_guest_handle(val, hnd)  do { val = (hnd).p; } while (0)
-#endif
 #define set_xen_guest_handle(hnd, val) set_xen_guest_handle_raw(hnd, val)
 
 #if defined(__i386__)
@@ -152,7 +149,7 @@ DEFINE_XEN_GUEST_HANDLE(trap_info_t);
 typedef uint64_t tsc_timestamp_t; /* RDTSC timestamp */
 
 /*
- * The following is all CPU context. Note that the fpu_ctxt block is filled
+ * The following is all CPU context. Note that the fpu_ctxt block is filled 
  * in by FXSAVE if the CPU has feature FXSR; otherwise FSAVE is used.
  *
  * Also note that when calling DOMCTL_setvcpucontext and VCPU_initialise
@@ -261,6 +258,40 @@ struct arch_shared_info {
 #endif
 };
 typedef struct arch_shared_info arch_shared_info_t;
+
+#if defined(__XEN__) || defined(__XEN_TOOLS__)
+/*
+ * struct xen_arch_domainconfig's ABI is covered by
+ * XEN_DOMCTL_INTERFACE_VERSION.
+ */
+struct xen_arch_domainconfig {
+#define _XEN_X86_EMU_LAPIC          0
+#define XEN_X86_EMU_LAPIC           (1U<<_XEN_X86_EMU_LAPIC)
+#define _XEN_X86_EMU_HPET           1
+#define XEN_X86_EMU_HPET            (1U<<_XEN_X86_EMU_HPET)
+#define _XEN_X86_EMU_PM             2
+#define XEN_X86_EMU_PM              (1U<<_XEN_X86_EMU_PM)
+#define _XEN_X86_EMU_RTC            3
+#define XEN_X86_EMU_RTC             (1U<<_XEN_X86_EMU_RTC)
+#define _XEN_X86_EMU_IOAPIC         4
+#define XEN_X86_EMU_IOAPIC          (1U<<_XEN_X86_EMU_IOAPIC)
+#define _XEN_X86_EMU_PIC            5
+#define XEN_X86_EMU_PIC             (1U<<_XEN_X86_EMU_PIC)
+#define _XEN_X86_EMU_VGA            6
+#define XEN_X86_EMU_VGA             (1U<<_XEN_X86_EMU_VGA)
+#define _XEN_X86_EMU_IOMMU          7
+#define XEN_X86_EMU_IOMMU           (1U<<_XEN_X86_EMU_IOMMU)
+#define _XEN_X86_EMU_PIT            8
+#define XEN_X86_EMU_PIT             (1U<<_XEN_X86_EMU_PIT)
+
+#define XEN_X86_EMU_ALL             (XEN_X86_EMU_LAPIC | XEN_X86_EMU_HPET |  \
+                                     XEN_X86_EMU_PM | XEN_X86_EMU_RTC |      \
+                                     XEN_X86_EMU_IOAPIC | XEN_X86_EMU_PIC |  \
+                                     XEN_X86_EMU_VGA | XEN_X86_EMU_IOMMU |   \
+                                     XEN_X86_EMU_PIT)
+    uint32_t emulation_flags;
+};
+#endif
 
 #endif /* !__ASSEMBLY__ */
 

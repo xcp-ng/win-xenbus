@@ -61,6 +61,7 @@ if __name__ == '__main__':
     shell(['git', 'rm', '-r', '-f', 'xen'], 'include')
 
     copy_file(working, 'public', 'xen.h')
+    copy_file(working, 'public', 'physdev.h')
     copy_file(working, 'public', 'xen-compat.h')
     copy_file(working, 'public', 'trace.h')
     copy_file(working, 'public', 'memory.h')
