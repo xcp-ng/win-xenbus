@@ -2153,7 +2153,8 @@ StoreEnable(
               Port);
 
     // Trigger an initial poll
-    KeInsertQueueDpc(&Context->Dpc, NULL, NULL);
+    if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
+        Context->Dpcs++;
 }
 
 static PHYSICAL_ADDRESS
