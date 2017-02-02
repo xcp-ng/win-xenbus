@@ -34,21 +34,6 @@
 
 #include <xen.h>
 
-typedef struct _LOG_DISPOSITION LOG_DISPOSITION, *PLOG_DISPOSITION;
-
-extern NTSTATUS
-LogAddDisposition(
-    IN  LOG_LEVEL           Mask,
-    IN  VOID                (*Function)(PVOID, PCHAR, ULONG),
-    IN  PVOID               Argument OPTIONAL,
-    OUT PLOG_DISPOSITION    *Disposition
-    );
-
-extern VOID
-LogRemoveDisposition(
-    IN  PLOG_DISPOSITION    Disposition
-    );
-
 extern NTSTATUS
 LogInitialize(
     VOID

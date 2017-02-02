@@ -51,6 +51,7 @@
 #include "evtchn.h"
 #include "debug.h"
 #include "store.h"
+#include "console.h"
 #include "cache.h"
 #include "gnttab.h"
 #include "suspend.h"
@@ -122,6 +123,7 @@ struct _XENBUS_FDO {
     PXENBUS_EVTCHN_CONTEXT          EvtchnContext;
     PXENBUS_DEBUG_CONTEXT           DebugContext;
     PXENBUS_STORE_CONTEXT           StoreContext;
+    PXENBUS_CONSOLE_CONTEXT         ConsoleContext;
     PXENBUS_RANGE_SET_CONTEXT       RangeSetContext;
     PXENBUS_CACHE_CONTEXT           CacheContext;
     PXENBUS_GNTTAB_CONTEXT          GnttabContext;
@@ -132,6 +134,7 @@ struct _XENBUS_FDO {
     XENBUS_SUSPEND_INTERFACE        SuspendInterface;
     XENBUS_EVTCHN_INTERFACE         EvtchnInterface;
     XENBUS_STORE_INTERFACE          StoreInterface;
+    XENBUS_CONSOLE_INTERFACE        ConsoleInterface;
     XENBUS_RANGE_SET_INTERFACE      RangeSetInterface;
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
 
@@ -140,6 +143,7 @@ struct _XENBUS_FDO {
 
     PXENBUS_EVTCHN_CHANNEL          Channel;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
+    PLOG_DISPOSITION                LogDisposition;
 };
 
 static FORCEINLINE PVOID
@@ -785,6 +789,7 @@ DEFINE_FDO_GET_CONTEXT(SharedInfo, PXENBUS_SHARED_INFO_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Evtchn, PXENBUS_EVTCHN_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Debug, PXENBUS_DEBUG_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Store, PXENBUS_STORE_CONTEXT)
+DEFINE_FDO_GET_CONTEXT(Console, PXENBUS_CONSOLE_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(RangeSet, PXENBUS_RANGE_SET_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Cache, PXENBUS_CACHE_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Gnttab, PXENBUS_GNTTAB_CONTEXT)
@@ -2608,6 +2613,22 @@ fail1:
     return status;
 }
 
+static VOID
+FdoOutputBuffer(
+    IN  PVOID   Argument,
+    IN  PCHAR   Buffer,
+    IN  ULONG   Length
+    )
+{
+    PXENBUS_FDO Fdo = Argument;
+
+    (VOID) XENBUS_CONSOLE(Write,
+                          &Fdo->ConsoleInterface,
+                          Buffer,
+                          Length,
+                          TRUE);
+}
+
 static FORCEINLINE NTSTATUS
 __FdoD3ToD0(
     IN  PXENBUS_FDO Fdo
@@ -2636,6 +2657,15 @@ __FdoD3ToD0(
                   &Fdo->EvtchnInterface,
                   Fdo->Channel,
                   FALSE);
+
+    status = LogAddDisposition(LOG_LEVEL_INFO |
+                               LOG_LEVEL_WARNING |
+                               LOG_LEVEL_ERROR |
+                               LOG_LEVEL_CRITICAL,
+                               FdoOutputBuffer,
+                               Fdo,
+                               &Fdo->LogDisposition);
+    ASSERT(NT_SUCCESS(status));
 
     status = XENBUS_STORE(WatchAdd,
                           &Fdo->StoreInterface,
@@ -2711,6 +2741,9 @@ fail3:
 fail2:
     Error("fail2\n");
 
+    LogRemoveDisposition(Fdo->LogDisposition);
+    Fdo->LogDisposition = NULL;
+
     XENBUS_EVTCHN(Close,
                   &Fdo->EvtchnInterface,
                   Fdo->Channel);
@@ -2759,6 +2792,9 @@ __FdoD0ToD3(
                         &Fdo->StoreInterface,
                         Fdo->ScanWatch);
     Fdo->ScanWatch = NULL;
+
+    LogRemoveDisposition(Fdo->LogDisposition);
+    Fdo->LogDisposition = NULL;
 
     XENBUS_EVTCHN(Close,
                   &Fdo->EvtchnInterface,
@@ -2975,15 +3011,19 @@ FdoD3ToD0(
     if (!NT_SUCCESS(status))
         goto fail6;
 
+    status = XENBUS_CONSOLE(Acquire, &Fdo->ConsoleInterface);
+    if (!NT_SUCCESS(status))
+        goto fail7;
+
     if (Fdo->BalloonInterface.Interface.Context != NULL) {
         status = XENBUS_BALLOON(Acquire, &Fdo->BalloonInterface);
         if (!NT_SUCCESS(status))
-            goto fail7;
+            goto fail8;
     }
 
     status = __FdoD3ToD0(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail9;
 
     status = XENBUS_SUSPEND(Register,
                             &Fdo->SuspendInterface,
@@ -2992,7 +3032,7 @@ FdoD3ToD0(
                             Fdo,
                             &Fdo->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail10;
 
     KeLowerIrql(Irql);
 
@@ -3023,16 +3063,21 @@ not_active:
 
     return STATUS_SUCCESS;
 
+fail10:
+    Error("fail10\n");
+
+    __FdoD0ToD3(Fdo);
+
 fail9:
     Error("fail9\n");
 
-    __FdoD0ToD3(Fdo);
+    if (Fdo->BalloonInterface.Interface.Context != NULL)
+        XENBUS_BALLOON(Release, &Fdo->BalloonInterface);
 
 fail8:
     Error("fail8\n");
 
-    if (Fdo->BalloonInterface.Interface.Context != NULL)
-        XENBUS_BALLOON(Release, &Fdo->BalloonInterface);
+    XENBUS_CONSOLE(Release, &Fdo->ConsoleInterface);
 
 fail7:
     Error("fail7\n");
@@ -3156,6 +3201,8 @@ FdoD0ToD3(
     if (Fdo->BalloonInterface.Interface.Context != NULL)
         XENBUS_BALLOON(Release, &Fdo->BalloonInterface);
 
+    XENBUS_CONSOLE(Release, &Fdo->ConsoleInterface);
+
     XENBUS_STORE(Release, &Fdo->StoreInterface);
 
     XENBUS_EVTCHN(Release, &Fdo->EvtchnInterface);
@@ -3224,6 +3271,7 @@ FdoS3ToS4(
     BUG_ON(SharedInfoGetReferences(Fdo->SharedInfoContext) != 0);
     BUG_ON(EvtchnGetReferences(Fdo->EvtchnContext) != 0);
     BUG_ON(StoreGetReferences(Fdo->StoreContext) != 0);
+    BUG_ON(ConsoleGetReferences(Fdo->ConsoleContext) != 0);
     BUG_ON(GnttabGetReferences(Fdo->GnttabContext) != 0);
     BUG_ON(BalloonGetReferences(Fdo->BalloonContext) != 0);
 
@@ -5090,26 +5138,30 @@ FdoCreate(
     if (!NT_SUCCESS(status))
         goto fail13;
 
-    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
+    status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
     if (!NT_SUCCESS(status))
         goto fail14;
 
-    status = CacheInitialize(Fdo, &Fdo->CacheContext);
+    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
         goto fail15;
 
-    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
+    status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
         goto fail16;
 
-    status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
+    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
         goto fail17;
+
+    status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
+    if (!NT_SUCCESS(status))
+        goto fail18;
 
     if (FdoIsBalloonEnabled(Fdo)) {
         status = BalloonInitialize(Fdo, &Fdo->BalloonContext);
         if (!NT_SUCCESS(status))
-            goto fail18;
+            goto fail19;
     }
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
@@ -5139,6 +5191,13 @@ FdoCreate(
                                sizeof (Fdo->StoreInterface));
     ASSERT(NT_SUCCESS(status));
     ASSERT(Fdo->StoreInterface.Interface.Context != NULL);
+
+    status = ConsoleGetInterface(__FdoGetConsoleContext(Fdo),
+                                 XENBUS_CONSOLE_INTERFACE_VERSION_MAX,
+                                 (PINTERFACE)&Fdo->ConsoleInterface,
+                                 sizeof (Fdo->ConsoleInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT(Fdo->ConsoleInterface.Interface.Context != NULL);
 
     status = RangeSetGetInterface(__FdoGetRangeSetContext(Fdo),
                                   XENBUS_RANGE_SET_INTERFACE_VERSION_MAX,
@@ -5172,29 +5231,35 @@ done:
 
     return STATUS_SUCCESS;
 
-fail18:
-    Error("fail18\n");
+fail19:
+    Error("fail19\n");
 
     UnplugTeardown(Fdo->UnplugContext);
     Fdo->UnplugContext = NULL;
 
-fail17:
-    Error("fail17\n");
+fail18:
+    Error("fail18\n");
 
     GnttabTeardown(Fdo->GnttabContext);
     Fdo->GnttabContext = NULL;
 
-fail16:
-    Error("fail16\n");
+fail17:
+    Error("fail17\n");
 
     CacheTeardown(Fdo->CacheContext);
     Fdo->CacheContext = NULL;
 
-fail15:
-    Error("fail15\n");
+fail16:
+    Error("fail16\n");
 
     RangeSetTeardown(Fdo->RangeSetContext);
     Fdo->RangeSetContext = NULL;
+
+fail15:
+    Error("fail15\n");
+
+    ConsoleTeardown(Fdo->ConsoleContext);
+    Fdo->ConsoleContext = NULL;
 
 fail14:
     Error("fail14\n");
@@ -5318,6 +5383,9 @@ FdoDestroy(
         RtlZeroMemory(&Fdo->RangeSetInterface,
                       sizeof (XENBUS_RANGE_SET_INTERFACE));
 
+        RtlZeroMemory(&Fdo->ConsoleInterface,
+                      sizeof (XENBUS_CONSOLE_INTERFACE));
+
         RtlZeroMemory(&Fdo->StoreInterface,
                       sizeof (XENBUS_STORE_INTERFACE));
 
@@ -5346,6 +5414,9 @@ FdoDestroy(
 
         RangeSetTeardown(Fdo->RangeSetContext);
         Fdo->RangeSetContext = NULL;
+
+        ConsoleTeardown(Fdo->ConsoleContext);
+        Fdo->ConsoleContext = NULL;
 
         StoreTeardown(Fdo->StoreContext);
         Fdo->StoreContext = NULL;

@@ -83,6 +83,7 @@ if __name__ == '__main__':
     copy_file(working, 'public\\hvm', 'hvm_info_table.h')
 
     copy_file(working, 'public\\io', 'xs_wire.h')
+    copy_file(working, 'public\\io', 'console.h')
 
     put_branch(working)
 

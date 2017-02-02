@@ -71,6 +71,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\common\registry.c" />
     <ClCompile Include="..\..\src\xenbus\bus.c" />
+    <ClCompile Include="..\..\src\xenbus\console.c" />
     <ClCompile Include="..\..\src\xenbus\dma.c" />
     <ClCompile Include="..\..\src\xenbus\debug.c" />
     <ClCompile Include="..\..\src\xenbus\driver.c" />

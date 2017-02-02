@@ -56,6 +56,7 @@
 #define EINVAL  XEN_EINVAL
 
 #include <public/io/xs_wire.h>
+#include <public/io/console.h>
 #include <public/version.h>
 
 #ifndef XEN_API
@@ -411,6 +412,24 @@ VOID
 LogResume(
     VOID
     );
+
+typedef struct _LOG_DISPOSITION LOG_DISPOSITION, *PLOG_DISPOSITION;
+
+XEN_API
+NTSTATUS
+LogAddDisposition(
+    IN  LOG_LEVEL           Mask,
+    IN  VOID                (*Function)(PVOID, PCHAR, ULONG),
+    IN  PVOID               Argument OPTIONAL,
+    OUT PLOG_DISPOSITION    *Disposition
+    );
+
+XEN_API
+VOID
+LogRemoveDisposition(
+    IN  PLOG_DISPOSITION    Disposition
+    );
+
 
 // SYSTEM
 
