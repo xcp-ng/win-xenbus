@@ -32,6 +32,7 @@
 #define XEN_API extern
 
 #include <ntddk.h>
+#include <stdlib.h>
 #include <xen.h>
 #include <bugcodes.h>
 
@@ -63,6 +64,7 @@ BugCheckDumpExceptionRecord(
 {
     __try {
         while (Exception != NULL) {
+            ULONG   NumberParameters;
             ULONG   Index;
 
             LogPrintf(LOG_LEVEL_CRITICAL,
@@ -82,7 +84,10 @@ BugCheckDumpExceptionRecord(
                       __MODULE__,
                       Exception->ExceptionAddress);
 
-            for (Index = 0; Index < Exception->NumberParameters; Index++)
+            NumberParameters = __min(EXCEPTION_MAXIMUM_PARAMETERS,
+                                     Exception->NumberParameters);
+
+            for (Index = 0; Index < NumberParameters; Index++)
                 LogPrintf(LOG_LEVEL_CRITICAL,
                           "%s|BUGCHECK: - Parameter[%u] = %p\n", __MODULE__,
                           Index,
