@@ -67,8 +67,10 @@ typedef VOID
     \param Buffer A character buffer
     \param Length The length of the buffer
     \param CRLF Substitute LF with CRLF
+
+    \return The number of characters written
 */
-typedef NTSTATUS
+typedef ULONG
 (*XENBUS_CONSOLE_WRITE)(
     IN  PINTERFACE  Interface,
     IN  PCHAR       Data,

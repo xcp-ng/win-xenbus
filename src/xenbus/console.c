@@ -55,15 +55,11 @@ struct _XENBUS_CONSOLE_CONTEXT {
     KSPIN_LOCK                  Lock;
     LONG                        References;
     struct xencons_interface    *Shared;
-    LIST_ENTRY                  OutList;
-    HIGH_LOCK                   OutLock;
-    KDPC                        Dpc;
-    ULONG                       Polls;
-    ULONG                       Dpcs;
-    ULONG                       Events;
+    HIGH_LOCK                   RingLock;
     XENBUS_EVTCHN_INTERFACE     EvtchnInterface;
     PHYSICAL_ADDRESS            Address;
     PXENBUS_EVTCHN_CHANNEL      Channel;
+    ULONG                       Events;
     XENBUS_SUSPEND_INTERFACE    SuspendInterface;
     XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
@@ -96,7 +92,8 @@ static ULONG
 ConsoleCopyToRing(
     IN  PXENBUS_CONSOLE_CONTEXT Context,
     IN  PCHAR                   Data,
-    IN  ULONG                   Length
+    IN  ULONG                   Length,
+    IN  BOOLEAN                 CRLF
     )
 {
     struct xencons_interface    *Shared;
@@ -115,26 +112,31 @@ ConsoleCopyToRing(
 
     Offset = 0;
     while (Length != 0) {
+        CHAR    Character = Data[Offset];
+        ULONG   Required;
         ULONG   Available;
         ULONG   Index;
-        ULONG   CopyLength;
 
+        Required = (CRLF && Character == '\n') ? 2 : 1;
         Available = cons + sizeof (Shared->out) - prod;
 
-        if (Available == 0)
+        if (Available < Required)
             break;
 
         Index = MASK_XENCONS_IDX(prod, Shared->out);
 
-        CopyLength = __min(Length, Available);
-        CopyLength = __min(CopyLength, sizeof (Shared->out) - Index);
+        if (CRLF && Character == '\n') {
+            Shared->out[Index] = '\r';
+            prod++;
 
-        RtlCopyMemory(&Shared->out[Index], Data + Offset, CopyLength);
+            Index = MASK_XENCONS_IDX(prod, Shared->out);
+        }
 
-        Offset += CopyLength;
-        Length -= CopyLength;
+        Shared->out[Index] = Character;
+        prod++;
 
-        prod += CopyLength;
+        Offset++;
+        Length--;
     }
 
     KeMemoryBarrier();
@@ -144,128 +146,6 @@ ConsoleCopyToRing(
     KeMemoryBarrier();
 
     return Offset;
-}
-
-static FORCEINLINE PXENBUS_CONSOLE_BUFFER
-__ConsoleGetHeadBuffer(
-    IN  PXENBUS_CONSOLE_CONTEXT Context
-    )
-{
-    PLIST_ENTRY                 ListEntry;
-    PXENBUS_CONSOLE_BUFFER      Buffer;
-    KIRQL                       Irql;
-
-    AcquireHighLock(&Context->OutLock, &Irql);
-    ListEntry = (!IsListEmpty(&Context->OutList)) ?
-                Context->OutList.Flink :
-                NULL;
-    ReleaseHighLock(&Context->OutLock, Irql);
-
-    if (ListEntry == NULL)
-        return NULL;
-
-    Buffer = CONTAINING_RECORD(ListEntry,
-                               XENBUS_CONSOLE_BUFFER,
-                               ListEntry);
-
-    return Buffer;
-}
-
-static FORCEINLINE VOID
-__ConsoleRemoveHeadBuffer(
-    IN  PXENBUS_CONSOLE_CONTEXT Context
-    )
-{
-    KIRQL                       Irql;
-
-    AcquireHighLock(&Context->OutLock, &Irql);
-    (VOID) RemoveHeadList(&Context->OutList);
-    ReleaseHighLock(&Context->OutLock, Irql);
-}
-
-static FORCEINLINE VOID
-__ConsoleAddTailBuffer(
-    IN  PXENBUS_CONSOLE_CONTEXT Context,
-    IN  PXENBUS_CONSOLE_BUFFER  Buffer
-    )
-{
-    KIRQL                       Irql;
-
-    AcquireHighLock(&Context->OutLock, &Irql);
-    InsertTailList(&Context->OutList, &Buffer->ListEntry);
-    ReleaseHighLock(&Context->OutLock, Irql);
-}
-
-static BOOLEAN
-ConsoleOut(
-    IN  PXENBUS_CONSOLE_CONTEXT Context
-    )
-{
-    PXENBUS_CONSOLE_BUFFER      Buffer;
-    ULONG                       Written;
-
-    Buffer = __ConsoleGetHeadBuffer(Context);
-
-    if (Buffer == NULL)
-        return FALSE;
-
-    Written = ConsoleCopyToRing(Context,
-                                Buffer->Data + Buffer->Offset,
-                                Buffer->Length - Buffer->Offset);
-
-    Buffer->Offset += Written;
-
-    ASSERT3U(Buffer->Offset, <=, Buffer->Length);
-    if (Buffer->Offset == Buffer->Length) {
-        __ConsoleRemoveHeadBuffer(Context);
-        __ConsoleFree(Buffer);
-    }
-
-    if (Written != 0)
-        XENBUS_EVTCHN(Send,
-                      &Context->EvtchnInterface,
-                      Context->Channel);
-
-    return TRUE;
-}
-
-static VOID
-ConsoleFlush(
-    IN  PXENBUS_CONSOLE_CONTEXT Context
-    )
-{
-    for (;;) {
-        if (!ConsoleOut(Context))
-            break;
-    }
-}
-
-static
-_Function_class_(KDEFERRED_ROUTINE)
-_IRQL_requires_max_(DISPATCH_LEVEL)
-_IRQL_requires_min_(DISPATCH_LEVEL)
-_IRQL_requires_(DISPATCH_LEVEL)
-_IRQL_requires_same_
-VOID
-ConsoleDpc(
-    IN  PKDPC               Dpc,
-    IN  PVOID               _Context,
-    IN  PVOID               Argument1,
-    IN  PVOID               Argument2
-    )
-{
-    PXENBUS_CONSOLE_CONTEXT Context = _Context;
-
-    UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(Argument1);
-    UNREFERENCED_PARAMETER(Argument2);
-
-    ASSERT(Context != NULL);
-
-    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-    if (Context->References != 0)
-        (VOID) ConsoleOut(Context);
-    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
 static
@@ -285,9 +165,6 @@ ConsoleEvtchnCallback(
     ASSERT(Context != NULL);
 
     Context->Events++;
-
-    if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
-        Context->Dpcs++;
 
     return TRUE;
 }
@@ -341,10 +218,6 @@ ConsoleEnable(
     LogPrintf(LOG_LEVEL_INFO,
               "CONSOLE: ENABLE (%u)\n",
               Port);
-
-    // Trigger an initial poll
-    if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
-        Context->Dpcs++;
 }
 
 static PHYSICAL_ADDRESS
@@ -436,13 +309,11 @@ ConsoleDebugCallback(
 
     XENBUS_DEBUG(Printf,
                  &Context->DebugInterface,
-                 "Events = %lu Dpcs = %lu Polls = %lu\n",
-                 Context->Events,
-                 Context->Dpcs,
-                 Context->Polls);
+                 "Events = %lu\n",
+                 Context->Events);
 }
 
-static NTSTATUS
+static ULONG
 ConsoleWrite(
     IN  PINTERFACE          Interface,
     IN  PCHAR               Data,
@@ -451,50 +322,29 @@ ConsoleWrite(
     )
 {
     PXENBUS_CONSOLE_CONTEXT Context = Interface->Context;
-    ULONG                   Extra;
-    PXENBUS_CONSOLE_BUFFER  Buffer;
-    ULONG                   Index;
     KIRQL                   Irql;
+    ULONG                   Written;
     NTSTATUS                status;
 
-    Extra = 0;
-    if (CRLF) {
-        for (Index = 0; Index < Length; Index++) {
-            if (Data[Index] == '\n')
-                Extra++;
-        }
-    }
+    AcquireHighLock(&Context->RingLock, &Irql);
 
-    Buffer = __ConsoleAllocate(FIELD_OFFSET(XENBUS_CONSOLE_BUFFER, Data) +
-                               Length + Extra);
+    Written = 0;
 
-    status = STATUS_NO_MEMORY;
-    if (Buffer == NULL)
-        goto fail1;
+    status = STATUS_UNSUCCESSFUL;
+    if (!Context->Enabled)
+        goto done;
 
-    Index = 0;
-    while (Index < Length + Extra) {
-        if (CRLF && *Data == '\n')
-            Buffer->Data[Index++] = '\r';
+    Written += ConsoleCopyToRing(Context, Data, Length, CRLF);
 
-        Buffer->Data[Index++] = *Data++;
-    }
+    if (Written != 0)
+        XENBUS_EVTCHN(Send,
+                      &Context->EvtchnInterface,
+                      Context->Channel);
 
-    Buffer->Length = Length + Extra;
+done:
+    ReleaseHighLock(&Context->RingLock, Irql);
 
-    AcquireHighLock(&Context->OutLock, &Irql);
-    InsertTailList(&Context->OutList, &Buffer->ListEntry);
-    ReleaseHighLock(&Context->OutLock, Irql);
-
-    if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
-        Context->Dpcs++;
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
+    return Written;
 }
 
 static NTSTATUS
@@ -635,8 +485,6 @@ ConsoleRelease(
 
     Trace("====>\n");
 
-    ConsoleFlush(Context);
-
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
                  Context->DebugCallback);
@@ -716,11 +564,7 @@ ConsoleInitialize(
     ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
 
     KeInitializeSpinLock(&(*Context)->Lock);
-
-    InitializeListHead(&(*Context)->OutList);
-    InitializeHighLock(&(*Context)->OutLock);
-
-    KeInitializeDpc(&(*Context)->Dpc, ConsoleDpc, *Context);
+    InitializeHighLock(&(*Context)->RingLock);
 
     (*Context)->Fdo = Fdo;
 
@@ -788,20 +632,12 @@ ConsoleTeardown(
     Trace("====>\n");
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
-    KeFlushQueuedDpcs();
 
-    Context->Polls = 0;
-    Context->Dpcs = 0;
     Context->Events = 0;
 
     Context->Fdo = NULL;
 
-    RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
-
-    RtlZeroMemory(&Context->OutLock, sizeof (HIGH_LOCK));
-    ASSERT(IsListEmpty(&Context->OutList));
-    RtlZeroMemory(&Context->OutList, sizeof (LIST_ENTRY));
-
+    RtlZeroMemory(&Context->RingLock, sizeof (HIGH_LOCK));
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
 
     RtlZeroMemory(&Context->DebugInterface,
