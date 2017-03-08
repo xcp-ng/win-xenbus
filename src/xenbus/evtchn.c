@@ -798,15 +798,13 @@ EvtchnSend(
     IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
-    KIRQL                       Irql;
     NTSTATUS                    status;
 
     UNREFERENCED_PARAMETER(Interface);
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-    // Make sure we don't suspend
-    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+    ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
     status = STATUS_UNSUCCESSFUL;
     if (!Channel->Active)
@@ -815,6 +813,20 @@ EvtchnSend(
     status = EventChannelSend(Channel->LocalPort);
 
 done:
+    return status;
+}
+
+static NTSTATUS
+EvtchnSendVersion1(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    )
+{
+    KIRQL                       Irql;
+    NTSTATUS                    status;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+    status = EvtchnSend(Interface, Channel);
     KeLowerIrql(Irql);
 
     return status;
@@ -1627,7 +1639,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V1 EvtchnInterfaceVersion1 = {
     EvtchnRelease,
     EvtchnOpen,
     EvtchnUnmaskVersion1,
-    EvtchnSend,
+    EvtchnSendVersion1,
     EvtchnTrigger,
     EvtchnGetPort,
     EvtchnClose
@@ -1640,7 +1652,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V2 EvtchnInterfaceVersion2 = {
     EvtchnOpen,
     EvtchnBindVersion2,
     EvtchnUnmaskVersion1,
-    EvtchnSend,
+    EvtchnSendVersion1,
     EvtchnTrigger,
     EvtchnGetPort,
     EvtchnClose
@@ -1653,7 +1665,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V3 EvtchnInterfaceVersion3 = {
     EvtchnOpen,
     EvtchnBindVersion2,
     EvtchnUnmask,
-    EvtchnSend,
+    EvtchnSendVersion1,
     EvtchnTrigger,
     EvtchnGetPort,
     EvtchnClose
@@ -1666,7 +1678,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V4 EvtchnInterfaceVersion4 = {
     EvtchnOpen,
     EvtchnBind,
     EvtchnUnmask,
-    EvtchnSend,
+    EvtchnSendVersion1,
     EvtchnTrigger,
     EvtchnGetPort,
     EvtchnClose
@@ -1674,6 +1686,20 @@ static struct _XENBUS_EVTCHN_INTERFACE_V4 EvtchnInterfaceVersion4 = {
 
 static struct _XENBUS_EVTCHN_INTERFACE_V5 EvtchnInterfaceVersion5 = {
     { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V5), 5, NULL, NULL, NULL },
+    EvtchnAcquire,
+    EvtchnRelease,
+    EvtchnOpen,
+    EvtchnBind,
+    EvtchnUnmask,
+    EvtchnSendVersion1,
+    EvtchnTrigger,
+    EvtchnWait,
+    EvtchnGetPort,
+    EvtchnClose,
+};
+
+static struct _XENBUS_EVTCHN_INTERFACE_V6 EvtchnInterfaceVersion6 = {
+    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V6), 6, NULL, NULL, NULL },
     EvtchnAcquire,
     EvtchnRelease,
     EvtchnOpen,
@@ -1872,6 +1898,23 @@ EvtchnGetInterface(
             break;
 
         *EvtchnInterface = EvtchnInterfaceVersion5;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 6: {
+        struct _XENBUS_EVTCHN_INTERFACE_V6  *EvtchnInterface;
+
+        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V6 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V6))
+            break;
+
+        *EvtchnInterface = EvtchnInterfaceVersion6;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
