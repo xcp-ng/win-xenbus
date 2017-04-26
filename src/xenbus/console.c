@@ -43,16 +43,28 @@
 #include "assert.h"
 #include "util.h"
 
+#define CONSOLE_WAKEUP_MAGIC 'EKAW'
+
+struct _XENBUS_CONSOLE_WAKEUP {
+    LIST_ENTRY  ListEntry;
+    ULONG       Magic;
+    PVOID       Caller;
+    PKEVENT     Event;
+};
+
 struct _XENBUS_CONSOLE_CONTEXT {
     PXENBUS_FDO                 Fdo;
     KSPIN_LOCK                  Lock;
     LONG                        References;
     struct xencons_interface    *Shared;
     HIGH_LOCK                   RingLock;
-    XENBUS_EVTCHN_INTERFACE     EvtchnInterface;
     PHYSICAL_ADDRESS            Address;
+    LIST_ENTRY                  WakeupList;
+    KDPC                        Dpc;
     PXENBUS_EVTCHN_CHANNEL      Channel;
     ULONG                       Events;
+    ULONG                       Dpcs;
+    XENBUS_EVTCHN_INTERFACE     EvtchnInterface;
     XENBUS_SUSPEND_INTERFACE    SuspendInterface;
     XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
@@ -82,11 +94,31 @@ __ConsoleFree(
 }
 
 static ULONG
-ConsoleCopyToRing(
+ConsoleOutAvailable(
+    IN  PXENBUS_CONSOLE_CONTEXT Context
+    )
+{
+    struct xencons_interface    *Shared;
+    XENCONS_RING_IDX            cons;
+    XENCONS_RING_IDX            prod;
+
+    Shared = Context->Shared;
+
+    KeMemoryBarrier();
+
+    prod = Shared->out_prod;
+    cons = Shared->out_cons;
+
+    KeMemoryBarrier();
+
+    return cons + sizeof (Shared->out) - prod;
+}
+
+static ULONG
+ConsoleCopyToOut(
     IN  PXENBUS_CONSOLE_CONTEXT Context,
     IN  PCHAR                   Data,
-    IN  ULONG                   Length,
-    IN  BOOLEAN                 CRLF
+    IN  ULONG                   Length
     )
 {
     struct xencons_interface    *Shared;
@@ -105,31 +137,26 @@ ConsoleCopyToRing(
 
     Offset = 0;
     while (Length != 0) {
-        CHAR    Character = Data[Offset];
-        ULONG   Required;
         ULONG   Available;
         ULONG   Index;
+        ULONG   CopyLength;
 
-        Required = (CRLF && Character == '\n') ? 2 : 1;
         Available = cons + sizeof (Shared->out) - prod;
 
-        if (Available < Required)
+        if (Available == 0)
             break;
 
         Index = MASK_XENCONS_IDX(prod, Shared->out);
 
-        if (CRLF && Character == '\n') {
-            Shared->out[Index] = '\r';
-            prod++;
+        CopyLength = __min(Length, Available);
+        CopyLength = __min(CopyLength, sizeof (Shared->out) - Index);
 
-            Index = MASK_XENCONS_IDX(prod, Shared->out);
-        }
+        RtlCopyMemory(&Shared->out[Index], Data + Offset, CopyLength);
 
-        Shared->out[Index] = Character;
-        prod++;
+        Offset += CopyLength;
+        Length -= CopyLength;
 
-        Offset++;
-        Length--;
+        prod += CopyLength;
     }
 
     KeMemoryBarrier();
@@ -139,6 +166,129 @@ ConsoleCopyToRing(
     KeMemoryBarrier();
 
     return Offset;
+}
+
+static ULONG
+ConsoleInAvailable(
+    IN  PXENBUS_CONSOLE_CONTEXT Context
+    )
+{
+    struct xencons_interface    *Shared;
+    XENCONS_RING_IDX            cons;
+    XENCONS_RING_IDX            prod;
+
+    Shared = Context->Shared;
+
+    KeMemoryBarrier();
+
+    cons = Shared->in_cons;
+    prod = Shared->in_prod;
+
+    KeMemoryBarrier();
+
+    return prod - cons;
+}
+
+static ULONG
+ConsoleCopyFromIn(
+    IN  PXENBUS_CONSOLE_CONTEXT Context,
+    IN  PCHAR                   Data,
+    IN  ULONG                   Length
+    )
+{
+    struct xencons_interface    *Shared;
+    XENCONS_RING_IDX            cons;
+    XENCONS_RING_IDX            prod;
+    ULONG                       Offset;
+
+    Shared = Context->Shared;
+
+    KeMemoryBarrier();
+
+    cons = Shared->in_cons;
+    prod = Shared->in_prod;
+
+    KeMemoryBarrier();
+
+    Offset = 0;
+    while (Length != 0) {
+        ULONG   Available;
+        ULONG   Index;
+        ULONG   CopyLength;
+
+        Available = prod - cons;
+
+        if (Available == 0)
+            break;
+
+        Index = MASK_XENCONS_IDX(cons, Shared->in);
+
+        CopyLength = __min(Length, Available);
+        CopyLength = __min(CopyLength, sizeof (Shared->in) - Index);
+
+        RtlCopyMemory(Data + Offset, &Shared->in[Index], CopyLength);
+
+        Offset += CopyLength;
+        Length -= CopyLength;
+
+        cons += CopyLength;
+    }
+
+    KeMemoryBarrier();
+
+    Shared->in_cons = cons;
+
+    KeMemoryBarrier();
+
+    return Offset;
+}
+
+static VOID
+ConsolePoll(
+    IN  PXENBUS_CONSOLE_CONTEXT Context
+    )
+{
+    PLIST_ENTRY                 ListEntry;
+
+    for (ListEntry = Context->WakeupList.Flink;
+         ListEntry != &Context->WakeupList;
+         ListEntry = ListEntry->Flink) {
+        PXENBUS_CONSOLE_WAKEUP  Wakeup;
+
+        Wakeup = CONTAINING_RECORD(ListEntry,
+                                   XENBUS_CONSOLE_WAKEUP,
+                                   ListEntry);
+
+        KeSetEvent(Wakeup->Event, IO_NO_INCREMENT, FALSE);
+    }
+}
+
+static
+_Function_class_(KDEFERRED_ROUTINE)
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_requires_min_(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
+_IRQL_requires_same_
+VOID
+ConsoleDpc(
+    IN  PKDPC               Dpc,
+    IN  PVOID               _Context,
+    IN  PVOID               Argument1,
+    IN  PVOID               Argument2
+    )
+{
+    PXENBUS_CONSOLE_CONTEXT Context = _Context;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+
+    ASSERT(Context != NULL);
+
+    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
+    if (Context->References != 0)
+        ConsolePoll(Context);
+    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
 static
@@ -158,6 +308,9 @@ ConsoleEvtchnCallback(
     ASSERT(Context != NULL);
 
     Context->Events++;
+
+    if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
+        Context->Dpcs++;
 
     return TRUE;
 }
@@ -211,6 +364,10 @@ ConsoleEnable(
     LogPrintf(LOG_LEVEL_INFO,
               "CONSOLE: ENABLE (%u)\n",
               Port);
+
+    // Trigger an initial poll
+    if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
+        Context->Dpcs++;
 }
 
 static PHYSICAL_ADDRESS
@@ -302,16 +459,116 @@ ConsoleDebugCallback(
 
     XENBUS_DEBUG(Printf,
                  &Context->DebugInterface,
-                 "Events = %lu\n",
-                 Context->Events);
+                 "Events = %lu Dpcs = %lu\n",
+                 Context->Events,
+                 Context->Dpcs);
+
+    if (!IsListEmpty(&Context->WakeupList)) {
+        PLIST_ENTRY ListEntry;
+
+        XENBUS_DEBUG(Printf,
+                     &Context->DebugInterface,
+                     "WAKEUPS:\n");
+
+        for (ListEntry = Context->WakeupList.Flink;
+             ListEntry != &(Context->WakeupList);
+             ListEntry = ListEntry->Flink) {
+            PXENBUS_CONSOLE_WAKEUP  Wakeup;
+            PCHAR                   Name;
+            ULONG_PTR               Offset;
+
+            Wakeup = CONTAINING_RECORD(ListEntry,
+                                       XENBUS_CONSOLE_WAKEUP,
+                                       ListEntry);
+
+            ModuleLookup((ULONG_PTR)Wakeup->Caller, &Name, &Offset);
+
+            if (Name != NULL) {
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- %s + %p\n",
+                             Name,
+                             (PVOID)Offset);
+            } else {
+                XENBUS_DEBUG(Printf,
+                             &Context->DebugInterface,
+                             "- %p\n",
+                             (PVOID)Wakeup->Caller);
+            }
+        }
+    }
+}
+
+static BOOLEAN
+ConsoleCanRead(
+    IN  PINTERFACE          Interface
+    )
+{
+    PXENBUS_CONSOLE_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+    ULONG                   Available;
+
+    AcquireHighLock(&Context->RingLock, &Irql);
+    Available = ConsoleInAvailable(Context);
+    ReleaseHighLock(&Context->RingLock, Irql);
+
+    return (Available != 0) ? TRUE : FALSE;
+}
+
+static ULONG
+ConsoleRead(
+    IN  PINTERFACE          Interface,
+    IN  PCHAR               Data,
+    IN  ULONG               Length
+    )
+{
+    PXENBUS_CONSOLE_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+    ULONG                   Read;
+    NTSTATUS                status;
+
+    AcquireHighLock(&Context->RingLock, &Irql);
+
+    Read = 0;
+
+    status = STATUS_UNSUCCESSFUL;
+    if (!Context->Enabled)
+        goto done;
+
+    Read += ConsoleCopyFromIn(Context, Data, Length);
+
+    if (Read != 0)
+        XENBUS_EVTCHN(Send,
+                      &Context->EvtchnInterface,
+                      Context->Channel);
+
+done:
+    ReleaseHighLock(&Context->RingLock, Irql);
+
+    return Read;
+}
+
+static BOOLEAN
+ConsoleCanWrite(
+    IN  PINTERFACE          Interface
+    )
+{
+    PXENBUS_CONSOLE_CONTEXT Context = Interface->Context;
+    KIRQL                   Irql;
+    ULONG                   Available;
+
+    AcquireHighLock(&Context->RingLock, &Irql);
+    Available = ConsoleOutAvailable(Context);
+    ReleaseHighLock(&Context->RingLock, Irql);
+
+    return (Available != 0) ? TRUE : FALSE;
 }
 
 static ULONG
 ConsoleWrite(
     IN  PINTERFACE          Interface,
     IN  PCHAR               Data,
-    IN  ULONG               Length,
-    IN  BOOLEAN             CRLF
+    IN  ULONG               Length
     )
 {
     PXENBUS_CONSOLE_CONTEXT Context = Interface->Context;
@@ -327,7 +584,7 @@ ConsoleWrite(
     if (!Context->Enabled)
         goto done;
 
-    Written += ConsoleCopyToRing(Context, Data, Length, CRLF);
+    Written += ConsoleCopyToOut(Context, Data, Length);
 
     if (Written != 0)
         XENBUS_EVTCHN(Send,
@@ -338,6 +595,72 @@ done:
     ReleaseHighLock(&Context->RingLock, Irql);
 
     return Written;
+}
+
+extern USHORT
+RtlCaptureStackBackTrace(
+    __in        ULONG   FramesToSkip,
+    __in        ULONG   FramesToCapture,
+    __out       PVOID   *BackTrace,
+    __out_opt   PULONG  BackTraceHash
+    );
+
+static NTSTATUS
+ConsoleWakeupAdd(
+    IN  PINTERFACE          	Interface,
+    IN  PKEVENT             	Event,
+    OUT PXENBUS_CONSOLE_WAKEUP	*Wakeup
+    )
+{
+    PXENBUS_CONSOLE_CONTEXT     Context = Interface->Context;
+    KIRQL                       Irql;
+    NTSTATUS                    status;
+
+    *Wakeup = __ConsoleAllocate(sizeof (XENBUS_CONSOLE_WAKEUP));
+
+    status = STATUS_NO_MEMORY;
+    if (*Wakeup == NULL)
+        goto fail1;
+
+    (*Wakeup)->Magic = CONSOLE_WAKEUP_MAGIC;
+    (VOID) RtlCaptureStackBackTrace(1, 1, &(*Wakeup)->Caller, NULL);
+
+    (*Wakeup)->Event = Event;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+    InsertTailList(&Context->WakeupList, &(*Wakeup)->ListEntry);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+ConsoleWakeupRemove(
+    IN  PINTERFACE          	Interface,
+    IN  PXENBUS_CONSOLE_WAKEUP	Wakeup
+    )
+{
+    PXENBUS_CONSOLE_CONTEXT     Context = Interface->Context;
+    KIRQL                       Irql;
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+    RemoveEntryList(&Wakeup->ListEntry);
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
+    RtlZeroMemory(&Wakeup->ListEntry, sizeof (LIST_ENTRY));
+
+    Wakeup->Event = NULL;
+
+    Wakeup->Caller = NULL;
+    Wakeup->Magic = 0;
+
+    ASSERT(IsZeroMemory(Wakeup, sizeof (XENBUS_CONSOLE_WAKEUP)));
+    __ConsoleFree(Wakeup);
 }
 
 static NTSTATUS
@@ -478,6 +801,9 @@ ConsoleRelease(
 
     Trace("====>\n");
 
+    if (!IsListEmpty(&Context->WakeupList))
+        BUG("OUTSTANDING WAKEUPS");
+
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
                  Context->DebugCallback);
@@ -516,7 +842,12 @@ static struct _XENBUS_CONSOLE_INTERFACE_V1 ConsoleInterfaceVersion1 = {
     { sizeof (struct _XENBUS_CONSOLE_INTERFACE_V1), 1, NULL, NULL, NULL },
     ConsoleAcquire,
     ConsoleRelease,
-    ConsoleWrite
+    ConsoleCanRead,
+    ConsoleRead,
+    ConsoleCanWrite,
+    ConsoleWrite,
+    ConsoleWakeupAdd,
+    ConsoleWakeupRemove
 };
 
 NTSTATUS
@@ -558,6 +889,10 @@ ConsoleInitialize(
 
     KeInitializeSpinLock(&(*Context)->Lock);
     InitializeHighLock(&(*Context)->RingLock);
+
+    InitializeListHead(&(*Context)->WakeupList);
+
+    KeInitializeDpc(&(*Context)->Dpc, ConsoleDpc, *Context);
 
     (*Context)->Fdo = Fdo;
 
@@ -625,10 +960,16 @@ ConsoleTeardown(
     Trace("====>\n");
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+    KeFlushQueuedDpcs();
 
+    Context->Dpcs = 0;
     Context->Events = 0;
 
     Context->Fdo = NULL;
+
+    RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
+
+    RtlZeroMemory(&Context->WakeupList, sizeof (LIST_ENTRY));
 
     RtlZeroMemory(&Context->RingLock, sizeof (HIGH_LOCK));
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));

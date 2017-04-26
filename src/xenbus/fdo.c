@@ -2613,6 +2613,10 @@ fail1:
     return status;
 }
 
+#define FDO_OUT_BUFFER_SIZE 1024
+
+CHAR FdoOutBuffer[FDO_OUT_BUFFER_SIZE];
+
 static VOID
 FdoOutputBuffer(
     IN  PVOID   Argument,
@@ -2621,12 +2625,30 @@ FdoOutputBuffer(
     )
 {
     PXENBUS_FDO Fdo = Argument;
+    ULONG       Index;
+    PCHAR       Cursor;
+
+    Cursor = FdoOutBuffer;
+    for (Index = 0; Index < Length; Index++) {
+        if (Cursor - FdoOutBuffer >= FDO_OUT_BUFFER_SIZE)
+            break;
+
+        *Cursor++ = Buffer[Index];
+
+        if (Buffer[Index] != '\n')
+            continue;
+
+        if (Cursor - FdoOutBuffer >= FDO_OUT_BUFFER_SIZE)
+            break;
+
+        *(Cursor - 1) = '\r';
+        *Cursor++ = '\n';
+    }
 
     (VOID) XENBUS_CONSOLE(Write,
                           &Fdo->ConsoleInterface,
-                          Buffer,
-                          Length,
-                          TRUE);
+                          FdoOutBuffer,
+                          (ULONG)(Cursor - FdoOutBuffer));
 }
 
 static FORCEINLINE NTSTATUS

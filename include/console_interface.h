@@ -40,6 +40,11 @@
 
 #ifndef _WINDLL
 
+/*! \typedef XENBUS_CONSOLE_WAKEUP
+    \brief XenStore watch handle
+*/
+typedef struct _XENBUS_CONSOLE_WAKEUP   XENBUS_CONSOLE_WAKEUP, *PXENBUS_CONSOLE_WAKEUP;
+
 /*! \typedef XENBUS_CONSOLE_ACQUIRE
     \brief Acquire a reference to the CONSOLE interface
 
@@ -60,13 +65,52 @@ typedef VOID
     IN  PINTERFACE  Interface
     );
 
+/*! \typedef XENBUS_CONSOLE_CAN_READ
+    \brief Get characters from the console
+
+    \param Interface The interface header
+
+    \return A boolean which is true if there is data to read
+*/
+typedef BOOLEAN
+(*XENBUS_CONSOLE_CAN_READ)(
+    IN  PINTERFACE  Interface
+    );
+
+/*! \typedef XENBUS_CONSOLE_READ
+    \brief Get characters from the console
+
+    \param Interface The interface header
+    \param Buffer A character buffer
+    \param Length The length of the buffer
+
+    \return The number of characters read
+*/
+typedef ULONG
+(*XENBUS_CONSOLE_READ)(
+    IN  PINTERFACE  Interface,
+    IN  PCHAR       Data,
+    IN  ULONG       Length
+    );
+
+/*! \typedef XENBUS_CONSOLE_CAN_WRITE
+    \brief Get characters from the console
+
+    \param Interface The interface header
+
+    \return A boolean which is true if there is space to write
+*/
+typedef BOOLEAN
+(*XENBUS_CONSOLE_CAN_WRITE)(
+    IN  PINTERFACE  Interface
+    );
+
 /*! \typedef XENBUS_CONSOLE_WRITE
     \brief Send characters to the console
 
     \param Interface The interface header
     \param Buffer A character buffer
     \param Length The length of the buffer
-    \param CRLF Substitute LF with CRLF
 
     \return The number of characters written
 */
@@ -74,8 +118,34 @@ typedef ULONG
 (*XENBUS_CONSOLE_WRITE)(
     IN  PINTERFACE  Interface,
     IN  PCHAR       Data,
-    IN  ULONG       Length,
-    IN  BOOLEAN     CRLF
+    IN  ULONG       Length
+    );
+
+/*! \typedef XENBUS_CONSOLE_WAKEUP_ADD
+    \brief Add a wakeup item
+
+    \param Interface The interface header
+    \param Event A pointer to an event object to be signalled when there
+    is activity on the rings
+    \param Wakeup A pointer to a wakeup handle to be initialized
+*/
+typedef NTSTATUS
+(*XENBUS_CONSOLE_WAKEUP_ADD)(
+    IN  PINTERFACE          	Interface,
+    IN  PKEVENT             	Event,
+    OUT PXENBUS_CONSOLE_WAKEUP	*Wakeup
+    );
+
+/*! \typedef XENBUS_CONSOLE_WAKEUP_REMOVE
+    \brief Remove a wakeup item
+
+    \param Interface The interface header
+    \param Wakeup The wakeup handle
+*/
+typedef VOID
+(*XENBUS_CONSOLE_WAKEUP_REMOVE)(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_CONSOLE_WAKEUP  Wakeup
     );
 
 // {04c4f738-034a-4268-bd20-a92ac90d4f82}
@@ -87,10 +157,15 @@ DEFINE_GUID(GUID_XENBUS_CONSOLE_INTERFACE,
     \ingroup interfaces
 */
 struct _XENBUS_CONSOLE_INTERFACE_V1 {
-    INTERFACE               Interface;
-    XENBUS_CONSOLE_ACQUIRE  ConsoleAcquire;
-    XENBUS_CONSOLE_RELEASE  ConsoleRelease;
-    XENBUS_CONSOLE_WRITE    ConsoleWrite;
+    INTERFACE                       Interface;
+    XENBUS_CONSOLE_ACQUIRE          ConsoleAcquire;
+    XENBUS_CONSOLE_RELEASE          ConsoleRelease;
+    XENBUS_CONSOLE_CAN_READ         ConsoleCanRead;
+    XENBUS_CONSOLE_READ             ConsoleRead;
+    XENBUS_CONSOLE_CAN_WRITE        ConsoleCanWrite;
+    XENBUS_CONSOLE_WRITE            ConsoleWrite;
+    XENBUS_CONSOLE_WAKEUP_ADD       ConsoleWakeupAdd;
+    XENBUS_CONSOLE_WAKEUP_REMOVE    ConsoleWakeupRemove;
 };
 
 typedef struct _XENBUS_CONSOLE_INTERFACE_V1 XENBUS_CONSOLE_INTERFACE, *PXENBUS_CONSOLE_INTERFACE;
