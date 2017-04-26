@@ -43,13 +43,6 @@
 #include "assert.h"
 #include "util.h"
 
-typedef struct _XENBUS_CONSOLE_BUFFER {
-    LIST_ENTRY  ListEntry;
-    ULONG       Offset;
-    ULONG       Length;
-    CHAR        Data[1];    // Variable length array
-} XENBUS_CONSOLE_BUFFER, *PXENBUS_CONSOLE_BUFFER;
-
 struct _XENBUS_CONSOLE_CONTEXT {
     PXENBUS_FDO                 Fdo;
     KSPIN_LOCK                  Lock;
