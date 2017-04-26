@@ -363,11 +363,12 @@ typedef struct _XENBUS_PDO_REVISION {
     ULONG   CacheInterfaceVersion;
     ULONG   GnttabInterfaceVersion;
     ULONG   UnplugInterfaceVersion;
+    ULONG   ConsoleInterfaceVersion;
     ULONG   EmulatedInterfaceVersion;
 } XENBUS_PDO_REVISION, *PXENBUS_PDO_REVISION;
 
-#define DEFINE_REVISION(_N, _S, _SI, _E, _D, _ST, _R, _C, _G, _U, _EM) \
-    { (_N), (_S), (_SI), (_E), (_D), (_ST), (_R), (_C), (_G), (_U), (_EM) }
+#define DEFINE_REVISION(_N, _S, _SI, _E, _D, _ST, _R, _C, _G, _U, _CO, _EM) \
+    { (_N), (_S), (_SI), (_E), (_D), (_ST), (_R), (_C), (_G), (_U), (_CO), (_EM) }
 
 static XENBUS_PDO_REVISION PdoRevision[] = {
     DEFINE_REVISION_TABLE
@@ -432,6 +433,13 @@ PdoDumpRevisions(
         ASSERT(IMPLY(Index == ARRAYSIZE(PdoRevision) - 1,
                      Revision->UnplugInterfaceVersion == XENBUS_UNPLUG_INTERFACE_VERSION_MAX));
 
+        ASSERT(IMPLY(Revision->ConsoleInterfaceVersion != 0,
+                     Revision->ConsoleInterfaceVersion >= XENBUS_CONSOLE_INTERFACE_VERSION_MIN));
+        ASSERT(IMPLY(Revision->ConsoleInterfaceVersion != 0,
+                     Revision->ConsoleInterfaceVersion <= XENBUS_CONSOLE_INTERFACE_VERSION_MAX));
+        ASSERT(IMPLY(Index == ARRAYSIZE(PdoRevision) - 1,
+                     Revision->ConsoleInterfaceVersion == XENBUS_CONSOLE_INTERFACE_VERSION_MAX));
+
         ASSERT3U(Revision->EmulatedInterfaceVersion, >=, XENFILT_EMULATED_INTERFACE_VERSION_MIN);
         ASSERT3U(Revision->EmulatedInterfaceVersion, <=, XENFILT_EMULATED_INTERFACE_VERSION_MAX);
         ASSERT(IMPLY(Index == ARRAYSIZE(PdoRevision) - 1,
@@ -447,6 +455,7 @@ PdoDumpRevisions(
              "CACHE v%u "
              "GNTTAB v%u "
              "UNPLUG v%u "
+             "CONSOLE v%u "
              "EMULATED v%u\n",
              Revision->Number,
              Revision->SuspendInterfaceVersion,
@@ -458,6 +467,7 @@ PdoDumpRevisions(
              Revision->CacheInterfaceVersion,
              Revision->GnttabInterfaceVersion,
              Revision->UnplugInterfaceVersion,
+             Revision->ConsoleInterfaceVersion,
              Revision->EmulatedInterfaceVersion);
     }
 }
@@ -1023,6 +1033,7 @@ DEFINE_PDO_QUERY_INTERFACE(RangeSet)
 DEFINE_PDO_QUERY_INTERFACE(Cache)
 DEFINE_PDO_QUERY_INTERFACE(Gnttab)
 DEFINE_PDO_QUERY_INTERFACE(Unplug)
+DEFINE_PDO_QUERY_INTERFACE(Console)
 
 struct _INTERFACE_ENTRY {
     const GUID  *Guid;
@@ -1041,6 +1052,7 @@ static struct _INTERFACE_ENTRY PdoInterfaceTable[] = {
     { &GUID_XENBUS_CACHE_INTERFACE, "CACHE_INTERFACE", PdoQueryCacheInterface },
     { &GUID_XENBUS_GNTTAB_INTERFACE, "GNTTAB_INTERFACE", PdoQueryGnttabInterface },
     { &GUID_XENBUS_UNPLUG_INTERFACE, "UNPLUG_INTERFACE", PdoQueryUnplugInterface },
+    { &GUID_XENBUS_CONSOLE_INTERFACE, "CONSOLE_INTERFACE", PdoQueryConsoleInterface },
     { &GUID_XENFILT_EMULATED_INTERFACE, "EMULATED_INTERFACE", PdoDelegateIrp },
     { NULL, NULL, NULL }
 };

@@ -259,6 +259,13 @@ FdoGetUnplugContext(
     IN  PXENBUS_FDO Fdo
     );
 
+#include "console.h"
+
+extern PXENBUS_CONSOLE_CONTEXT
+FdoGetConsoleContext(
+    IN  PXENBUS_FDO Fdo
+    );
+
 extern NTSTATUS
 FdoDispatch(
     IN  PXENBUS_FDO Fdo,
