@@ -161,7 +161,7 @@ __DriverRequestReboot(
 
     status = RegistryCreateSubKey(RequestKey,
                                   __MODULE__,
-                                  REG_OPTION_NON_VOLATILE,
+                                  REG_OPTION_VOLATILE,
                                   &SubKey);
     if (!NT_SUCCESS(status))
         goto fail3;
