@@ -112,13 +112,6 @@ typedef PXENBUS_EVTCHN_CHANNEL
     ...
     );
 
-typedef NTSTATUS
-(*XENBUS_EVTCHN_BIND_V2)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Cpu
-    );
-
 /*! \typedef XENBUS_EVTCHN_BIND
     \brief Bind an event channel to a specific CPU
 
@@ -133,13 +126,6 @@ typedef NTSTATUS
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
     IN  USHORT                  Group,
     IN  UCHAR                   Number
-    );
-
-typedef BOOLEAN
-(*XENBUS_EVTCHN_UNMASK_V1)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InCallback
     );
 
 /*! \typedef XENBUS_EVTCHN_UNMASK
@@ -232,56 +218,6 @@ typedef VOID
 DEFINE_GUID(GUID_XENBUS_EVTCHN_INTERFACE, 
 0xbe2440ac, 0x1098, 0x4150, 0xaf, 0x4d, 0x45, 0x2f, 0xad, 0xce, 0xf9, 0x23);
 
-/*! \struct _XENBUS_EVTCHN_INTERFACE_V1
-    \brief EVTCHN interface version 1
-    \ingroup interfaces
-*/
-struct _XENBUS_EVTCHN_INTERFACE_V1 {
-    INTERFACE               Interface;
-    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
-    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
-    XENBUS_EVTCHN_OPEN      EvtchnOpen;
-    XENBUS_EVTCHN_UNMASK_V1 EvtchnUnmaskVersion1;
-    XENBUS_EVTCHN_SEND_V1   EvtchnSendVersion1;
-    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
-    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
-    XENBUS_EVTCHN_CLOSE     EvtchnClose;
-};
-
-/*! \struct _XENBUS_EVTCHN_INTERFACE_V2
-    \brief EVTCHN interface version 2
-    \ingroup interfaces
-*/
-struct _XENBUS_EVTCHN_INTERFACE_V2 {
-    INTERFACE               Interface;
-    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
-    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
-    XENBUS_EVTCHN_OPEN      EvtchnOpen;
-    XENBUS_EVTCHN_BIND_V2   EvtchnBindVersion2;
-    XENBUS_EVTCHN_UNMASK_V1 EvtchnUnmaskVersion1;
-    XENBUS_EVTCHN_SEND_V1   EvtchnSendVersion1;
-    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
-    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
-    XENBUS_EVTCHN_CLOSE     EvtchnClose;
-};
-
-/*! \struct _XENBUS_EVTCHN_INTERFACE_V3
-    \brief EVTCHN interface version 3
-    \ingroup interfaces
-*/
-struct _XENBUS_EVTCHN_INTERFACE_V3 {
-    INTERFACE               Interface;
-    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
-    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
-    XENBUS_EVTCHN_OPEN      EvtchnOpen;
-    XENBUS_EVTCHN_BIND_V2   EvtchnBindVersion2;
-    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
-    XENBUS_EVTCHN_SEND_V1   EvtchnSendVersion1;
-    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
-    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
-    XENBUS_EVTCHN_CLOSE     EvtchnClose;
-};
-
 /*! \struct _XENBUS_EVTCHN_INTERFACE_V4
     \brief EVTCHN interface version 4
     \ingroup interfaces
@@ -345,7 +281,7 @@ typedef struct _XENBUS_EVTCHN_INTERFACE_V6 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVT
 
 #endif  // _WINDLL
 
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 1
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 4
 #define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 6
 
 #endif  // _XENBUS_EVTCHN_INTERFACE_H

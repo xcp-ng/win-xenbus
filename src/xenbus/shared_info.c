@@ -247,26 +247,6 @@ done:
     return DoneSomething;
 }
 
-static BOOLEAN
-SharedInfoEvtchnPollVersion1(
-    IN  PINTERFACE              Interface,
-    IN  BOOLEAN                 (*Function)(PVOID, ULONG),
-    IN  PVOID                   Argument OPTIONAL
-    )
-{
-    BOOLEAN                     DoneSomething;
-
-    DoneSomething = FALSE;
-
-    while (SharedInfoUpcallPending(Interface, 0))
-        DoneSomething |= SharedInfoEvtchnPoll(Interface,
-                                              0,
-                                              Function,
-                                              Argument);
-
-    return DoneSomething;
-}
-
 static VOID
 SharedInfoEvtchnAck(
     IN  PINTERFACE              Interface,
@@ -685,17 +665,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_SHARED_INFO_INTERFACE_V1 SharedInfoInterfaceVersion1 = {
-    { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V1), 1, NULL, NULL, NULL },
-    SharedInfoAcquire,
-    SharedInfoRelease,
-    SharedInfoEvtchnPollVersion1,
-    SharedInfoEvtchnAck,
-    SharedInfoEvtchnMask,
-    SharedInfoEvtchnUnmask,
-    SharedInfoGetTime
-};
-
 static struct _XENBUS_SHARED_INFO_INTERFACE_V2 SharedInfoInterfaceVersion2 = {
     { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V2), 2, NULL, NULL, NULL },
     SharedInfoAcquire,
@@ -765,23 +734,6 @@ SharedInfoGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 1: {
-        struct _XENBUS_SHARED_INFO_INTERFACE_V1 *SharedInfoInterface;
-
-        SharedInfoInterface = (struct _XENBUS_SHARED_INFO_INTERFACE_V1 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V1))
-            break;
-
-        *SharedInfoInterface = SharedInfoInterfaceVersion1;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 2: {
         struct _XENBUS_SHARED_INFO_INTERFACE_V2 *SharedInfoInterface;
 
