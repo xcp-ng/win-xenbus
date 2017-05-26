@@ -175,17 +175,39 @@ typedef VOID
     IN  PXENBUS_EVTCHN_CHANNEL  Channel
     );
 
-/*! \typedef XENBUS_EVTCHN_WAIT
-    \brief Wait for an event to the local end of the channel
+/*! \typedef XENBUS_EVTCHN_GET_COUNT
+    \brief Get the number of events received by the channel since it was opened
 
     \param Interface The interface header
     \param Channel The channel handle
+    \return The number of events
+*/
+typedef ULONG
+(*XENBUS_EVTCHN_GET_COUNT)(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    );
+
+typedef NTSTATUS
+(*XENBUS_EVTCHN_WAIT_V5)(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  PLARGE_INTEGER          Timeout OPTIONAL
+    );
+
+/*! \typedef XENBUS_EVTCHN_WAIT
+    \brief Wait for events to the local end of the channel
+
+    \param Interface The interface header
+    \param Channel The channel handle
+    \param Count The event count to wait for
     \param Timeout An optional timeout value (similar to KeWaitForSingleObject(), but non-zero values are allowed at DISPATCH_LEVEL).
 */
 typedef NTSTATUS
 (*XENBUS_EVTCHN_WAIT)(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Count,
     IN  PLARGE_INTEGER          Timeout OPTIONAL
     );
 
@@ -248,7 +270,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V5 {
     XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
     XENBUS_EVTCHN_SEND_V1   EvtchnSendVersion1;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
-    XENBUS_EVTCHN_WAIT      EvtchnWait;
+    XENBUS_EVTCHN_WAIT_V5   EvtchnWaitVersion5;
     XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
@@ -266,12 +288,31 @@ struct _XENBUS_EVTCHN_INTERFACE_V6 {
     XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
     XENBUS_EVTCHN_SEND      EvtchnSend;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
+    XENBUS_EVTCHN_WAIT_V5   EvtchnWaitVersion5;
+    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
+    XENBUS_EVTCHN_CLOSE     EvtchnClose;
+};
+
+/*! \struct _XENBUS_EVTCHN_INTERFACE_V7
+    \brief EVTCHN interface version 7
+    \ingroup interfaces
+*/
+struct _XENBUS_EVTCHN_INTERFACE_V7 {
+    INTERFACE               Interface;
+    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
+    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
+    XENBUS_EVTCHN_OPEN      EvtchnOpen;
+    XENBUS_EVTCHN_BIND      EvtchnBind;
+    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_SEND      EvtchnSend;
+    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
+    XENBUS_EVTCHN_GET_COUNT EvtchnGetCount;
     XENBUS_EVTCHN_WAIT      EvtchnWait;
     XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
 
-typedef struct _XENBUS_EVTCHN_INTERFACE_V6 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
+typedef struct _XENBUS_EVTCHN_INTERFACE_V7 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
 
 /*! \def XENBUS_EVTCHN
     \brief Macro at assist in method invocation
@@ -282,7 +323,7 @@ typedef struct _XENBUS_EVTCHN_INTERFACE_V6 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVT
 #endif  // _WINDLL
 
 #define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 4
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 6
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 7
 
 #endif  // _XENBUS_EVTCHN_INTERFACE_H
 
