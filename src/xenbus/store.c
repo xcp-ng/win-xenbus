@@ -900,6 +900,7 @@ StoreSubmitRequest(
 {
     PXENBUS_STORE_RESPONSE      Response;
     KIRQL                       Irql;
+    ULONG                       Count;
     LARGE_INTEGER               Timeout;
 
     ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_PREPARED);
@@ -913,6 +914,11 @@ StoreSubmitRequest(
     InsertTailList(&Context->SubmittedList, &Request->ListEntry);
 
     Request->State = XENBUS_STORE_REQUEST_SUBMITTED;
+
+    Count = XENBUS_EVTCHN(GetCount,
+                          &Context->EvtchnInterface,
+                          Context->Channel);
+
     StorePollLocked(Context);
     KeMemoryBarrier();
 
@@ -924,9 +930,14 @@ StoreSubmitRequest(
         status = XENBUS_EVTCHN(Wait,
                                &Context->EvtchnInterface,
                                Context->Channel,
+                               Count + 1,
                                &Timeout);
         if (status == STATUS_TIMEOUT)
             Warning("TIMED OUT\n");
+
+        Count = XENBUS_EVTCHN(GetCount,
+                              &Context->EvtchnInterface,
+                              Context->Channel);
 
         StorePollLocked(Context);
         KeMemoryBarrier();

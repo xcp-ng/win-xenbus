@@ -81,7 +81,7 @@ struct _XENBUS_EVTCHN_CHANNEL {
     PKSERVICE_ROUTINE           Callback;
     PVOID                       Argument;
     BOOLEAN                     Active; // Must be tested at >= DISPATCH_LEVEL
-    ULONG                       Events;
+    ULONG                       Count;
     XENBUS_EVTCHN_TYPE          Type;
     XENBUS_EVTCHN_PARAMETERS    Parameters;
     BOOLEAN                     Mask;
@@ -401,7 +401,7 @@ EvtchnReap(
 
     Trace("%u\n", LocalPort);
 
-    Channel->Events = 0;
+    Channel->Count = 0;
 
     ASSERT(Channel->Closed);
     Channel->Closed = FALSE;
@@ -507,7 +507,7 @@ EvtchnPoll(
 
         KeMemoryBarrier();
         if (!Channel->Closed) {
-            Channel->Events++;
+            Channel->Count++;
 
             RemoveEntryList(&Channel->PendingListEntry);
             InitializeListHead(&Channel->PendingListEntry);
@@ -898,15 +898,26 @@ EvtchnGetPort(
     return Channel->LocalPort;
 }
 
+static ULONG
+EvtchnGetCount(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    )
+{
+    UNREFERENCED_PARAMETER(Interface);
+
+    return Channel->Count;
+}
+
 static NTSTATUS
 EvtchnWait(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Count,
     IN  PLARGE_INTEGER          Timeout
     )
 {
     KIRQL                       Irql;
-    ULONG                       Events;
     LARGE_INTEGER               Start;
     NTSTATUS                    status;
 
@@ -915,14 +926,13 @@ EvtchnWait(
     ASSERT3U(KeGetCurrentIrql(), <=, DISPATCH_LEVEL);
     KeRaiseIrql(DISPATCH_LEVEL, &Irql); // Prevent suspend
 
-    Events = Channel->Events;
-    KeMemoryBarrier();
-
     KeQuerySystemTime(&Start);
 
     for (;;) {
+        KeMemoryBarrier();
+
         status = STATUS_SUCCESS;
-        if (Channel->Events != Events)
+        if ((LONG64)Count - (LONG64)Channel->Count <= 0)
             break;
 
         if (Timeout != NULL) {
@@ -950,12 +960,33 @@ EvtchnWait(
         }
 
         _mm_pause();
-        KeMemoryBarrier();
     }
+
+    if (status == STATUS_TIMEOUT)
+        Info("TIMED OUT: Count = %08x Channel->Count = %08x\n",
+             Count,
+             Channel->Count);
 
     KeLowerIrql(Irql);
 
     return status;
+}
+
+static NTSTATUS
+EvtchnWaitVersion5(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  PLARGE_INTEGER          Timeout
+    )
+{
+    ULONG                       Count;
+
+    Count = EvtchnGetCount(Interface, Channel);
+
+    return EvtchnWait(Interface,
+                      Channel,
+                      Count + 1,
+                      Timeout);
 }
 
 static
@@ -1369,8 +1400,8 @@ EvtchnDebugCallback(
 
             XENBUS_DEBUG(Printf,
                          &Context->DebugInterface,
-                         "Events = %lu\n",
-                         Channel->Events);
+                         "Count = %lu\n",
+                         Channel->Count);
         }
     }
 }
@@ -1693,7 +1724,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V5 EvtchnInterfaceVersion5 = {
     EvtchnUnmask,
     EvtchnSendVersion1,
     EvtchnTrigger,
-    EvtchnWait,
+    EvtchnWaitVersion5,
     EvtchnGetPort,
     EvtchnClose,
 };
@@ -1707,6 +1738,21 @@ static struct _XENBUS_EVTCHN_INTERFACE_V6 EvtchnInterfaceVersion6 = {
     EvtchnUnmask,
     EvtchnSend,
     EvtchnTrigger,
+    EvtchnWaitVersion5,
+    EvtchnGetPort,
+    EvtchnClose,
+};
+
+static struct _XENBUS_EVTCHN_INTERFACE_V7 EvtchnInterfaceVersion7 = {
+    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V7), 7, NULL, NULL, NULL },
+    EvtchnAcquire,
+    EvtchnRelease,
+    EvtchnOpen,
+    EvtchnBind,
+    EvtchnUnmask,
+    EvtchnSend,
+    EvtchnTrigger,
+    EvtchnGetCount,
     EvtchnWait,
     EvtchnGetPort,
     EvtchnClose,
@@ -1915,6 +1961,23 @@ EvtchnGetInterface(
             break;
 
         *EvtchnInterface = EvtchnInterfaceVersion6;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 7: {
+        struct _XENBUS_EVTCHN_INTERFACE_V7  *EvtchnInterface;
+
+        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V7 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V7))
+            break;
+
+        *EvtchnInterface = EvtchnInterfaceVersion7;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
