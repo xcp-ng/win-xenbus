@@ -48,6 +48,7 @@
 typedef struct _XENBUS_DRIVER {
     PDRIVER_OBJECT      DriverObject;
     HANDLE              ParametersKey;
+    LOG_LEVEL           ConsoleLogLevel;
 
     MUTEX               Mutex;
     LIST_ENTRY          List;
@@ -57,6 +58,10 @@ typedef struct _XENBUS_DRIVER {
 static XENBUS_DRIVER    Driver;
 
 #define XENBUS_DRIVER_TAG   'VIRD'
+#define DEFAULT_CONSOLE_LOG_LEVEL   (LOG_LEVEL_INFO |       \
+                                     LOG_LEVEL_WARNING |    \
+                                     LOG_LEVEL_ERROR |      \
+                                     LOG_LEVEL_CRITICAL)
 
 static FORCEINLINE PVOID
 __DriverAllocate(
@@ -120,6 +125,30 @@ DriverGetParametersKey(
     )
 {
     return __DriverGetParametersKey();
+}
+
+static FORCEINLINE VOID
+__DriverSetConsoleLogLevel(
+    IN  LOG_LEVEL   LogLevel
+    )
+{
+    Driver.ConsoleLogLevel = LogLevel;
+}
+
+static FORCEINLINE LOG_LEVEL
+__DriverGetConsoleLogLevel(
+    VOID
+    )
+{
+    return Driver.ConsoleLogLevel;
+}
+
+LOG_LEVEL
+DriverGetConsoleLogLevel(
+    VOID
+    )
+{
+    return __DriverGetConsoleLogLevel();
 }
 
 #define MAXNAMELEN  128
@@ -680,6 +709,7 @@ DriverEntry(
     HANDLE              ServiceKey;
     HANDLE              ParametersKey;
     ULONG               Index;
+    LOG_LEVEL           LogLevel;
     NTSTATUS            status;
 
     ASSERT3P(__DriverGetDriverObject(), ==, NULL);
@@ -720,6 +750,14 @@ DriverEntry(
         goto fail3;
 
     __DriverSetParametersKey(ParametersKey);
+
+    status = LogReadLogLevel(ParametersKey,
+                             "ConsoleLogLevel",
+                             &LogLevel);
+    if (!NT_SUCCESS(status))
+        LogLevel = DEFAULT_CONSOLE_LOG_LEVEL;
+
+    __DriverSetConsoleLogLevel(LogLevel);
 
     RegistryCloseKey(ServiceKey);
 

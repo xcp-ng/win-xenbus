@@ -365,7 +365,7 @@ UnplugDecrementValue(
 // LOG
 
 typedef enum _LOG_LEVEL {
-    LOG_LEVEL_INVALID = 0,
+    LOG_LEVEL_NONE = 0,
     LOG_LEVEL_TRACE = 1 << DPFLTR_TRACE_LEVEL,
     LOG_LEVEL_INFO = 1 << DPFLTR_INFO_LEVEL,
     LOG_LEVEL_WARNING = 1 << DPFLTR_WARNING_LEVEL,
@@ -411,6 +411,14 @@ XEN_API
 VOID
 LogResume(
     VOID
+    );
+
+XEN_API
+NTSTATUS
+LogReadLogLevel(
+    IN  HANDLE      Key,
+    IN  PCHAR       Name,
+    OUT PLOG_LEVEL  LogLevel
     );
 
 typedef struct _LOG_DISPOSITION LOG_DISPOSITION, *PLOG_DISPOSITION;

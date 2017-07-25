@@ -32,6 +32,8 @@
 #ifndef _XENBUS_DRIVER_H
 #define _XENBUS_DRIVER_H
 
+#include <xen.h>
+
 extern PDRIVER_OBJECT
 DriverGetDriverObject(
     VOID
@@ -39,6 +41,11 @@ DriverGetDriverObject(
 
 extern HANDLE
 DriverGetParametersKey(
+    VOID
+    );
+
+extern LOG_LEVEL
+DriverGetConsoleLogLevel(
     VOID
     );
 

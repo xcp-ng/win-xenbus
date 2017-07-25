@@ -49,9 +49,16 @@
 #include "assert.h"
 #include "version.h"
 
+#define DEFAULT_XEN_LOG_LEVEL   (LOG_LEVEL_TRACE |      \
+                                 LOG_LEVEL_CRITICAL)
+#define DEFAULT_QEMU_LOG_LEVEL  (LOG_LEVEL_INFO |       \
+                                 LOG_LEVEL_WARNING |    \
+                                 LOG_LEVEL_ERROR |      \
+                                 LOG_LEVEL_CRITICAL)
+
 typedef struct _XEN_DRIVER {
-    PLOG_DISPOSITION    TraceDisposition;
-    PLOG_DISPOSITION    InfoDisposition;
+    PLOG_DISPOSITION    XenDisposition;
+    PLOG_DISPOSITION    QemuDisposition;
     HANDLE              UnplugKey;
 } XEN_DRIVER, *PXEN_DRIVER;
 
@@ -160,6 +167,8 @@ DllInitialize(
 {
     HANDLE              ServiceKey;
     HANDLE              UnplugKey;
+    HANDLE              ParametersKey;
+    LOG_LEVEL           LogLevel;
     NTSTATUS            status;
 
     ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
@@ -173,20 +182,43 @@ DllInitialize(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = LogAddDisposition(LOG_LEVEL_TRACE |
-                               LOG_LEVEL_CRITICAL,
+    status = RegistryInitialize(RegistryPath);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    status = RegistryCreateServiceKey(&ServiceKey);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    status = RegistryCreateSubKey(ServiceKey,
+                                "Parameters",
+                                REG_OPTION_NON_VOLATILE,
+                                &ParametersKey);
+    if (!NT_SUCCESS(status))
+        goto fail4;
+
+    status = LogReadLogLevel(ParametersKey,
+                             "XenLogLevel",
+                             &LogLevel);
+    if (!NT_SUCCESS(status))
+        LogLevel = DEFAULT_XEN_LOG_LEVEL;
+
+    status = LogAddDisposition(LogLevel,
                                DriverOutputBuffer,
                                (PVOID)XEN_PORT,
-                               &Driver.TraceDisposition);
+                               &Driver.XenDisposition);
     ASSERT(NT_SUCCESS(status));
 
-    status = LogAddDisposition(LOG_LEVEL_INFO |
-                               LOG_LEVEL_WARNING |
-                               LOG_LEVEL_ERROR |
-                               LOG_LEVEL_CRITICAL,
+    status = LogReadLogLevel(ParametersKey,
+                             "QemuLogLevel",
+                             &LogLevel);
+    if (!NT_SUCCESS(status))
+        LogLevel = DEFAULT_QEMU_LOG_LEVEL;
+
+    status = LogAddDisposition(LogLevel,
                                DriverOutputBuffer,
                                (PVOID)QEMU_PORT,
-                               &Driver.InfoDisposition);
+                               &Driver.QemuDisposition);
     ASSERT(NT_SUCCESS(status));
 
     Info("%d.%d.%d (%d) (%02d.%02d.%04d)\n",
@@ -201,50 +233,44 @@ DllInitialize(
     if (__DriverSafeMode())
         Info("SAFE MODE\n");
 
-    status = RegistryInitialize(RegistryPath);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = RegistryCreateServiceKey(&ServiceKey);
-    if (!NT_SUCCESS(status))
-        goto fail3;
-
     status = RegistryCreateSubKey(ServiceKey,
                                   "Unplug",
                                   REG_OPTION_NON_VOLATILE,
                                   &UnplugKey);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail5;
 
     __DriverSetUnplugKey(UnplugKey);
 
     status = AcpiInitialize();
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     status = SystemInitialize();
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail7;
 
     status = HypercallInitialize();
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail8;
 
     status = BugCheckInitialize();
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail9;
 
     status = ModuleInitialize();
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail10;
 
     status = ProcessInitialize();
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail11;
 
     status = UnplugInitialize();
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail12;
+
+    RegistryCloseKey(ParametersKey);
 
     RegistryCloseKey(ServiceKey);
 
@@ -252,41 +278,52 @@ DllInitialize(
 
     return STATUS_SUCCESS;
 
+fail12:
+    Error("fail12\n");
+
+    ProcessTeardown();
+
 fail11:
     Error("fail11\n");
 
-    ProcessTeardown();
+    ModuleTeardown();
 
 fail10:
     Error("fail10\n");
 
-    ModuleTeardown();
+    BugCheckTeardown();
 
 fail9:
     Error("fail9\n");
 
-    BugCheckTeardown();
+    HypercallTeardown();
 
 fail8:
     Error("fail8\n");
 
-    HypercallTeardown();
+    SystemTeardown();
 
 fail7:
     Error("fail7\n");
 
-    SystemTeardown();
+    AcpiTeardown();
 
 fail6:
     Error("fail6\n");
 
-    AcpiTeardown();
+    RegistryCloseKey(UnplugKey);
+    __DriverSetUnplugKey(NULL);
 
 fail5:
     Error("fail5\n");
 
-    RegistryCloseKey(UnplugKey);
-    __DriverSetUnplugKey(NULL);
+    LogRemoveDisposition(Driver.QemuDisposition);
+    Driver.QemuDisposition = NULL;
+
+    LogRemoveDisposition(Driver.XenDisposition);
+    Driver.XenDisposition = NULL;
+
+    RegistryCloseKey(ParametersKey);
 
 fail4:
     Error("fail4\n");
@@ -300,12 +337,6 @@ fail3:
 
 fail2:
     Error("fail2\n");
-
-    LogRemoveDisposition(Driver.InfoDisposition);
-    Driver.InfoDisposition = NULL;
-
-    LogRemoveDisposition(Driver.TraceDisposition);
-    Driver.TraceDisposition = NULL;
 
     LogTeardown();
 
@@ -354,11 +385,11 @@ DllUnload(
          MONTH,
          YEAR);
 
-    LogRemoveDisposition(Driver.InfoDisposition);
-    Driver.InfoDisposition = NULL;
+    LogRemoveDisposition(Driver.QemuDisposition);
+    Driver.QemuDisposition = NULL;
 
-    LogRemoveDisposition(Driver.TraceDisposition);
-    Driver.TraceDisposition = NULL;
+    LogRemoveDisposition(Driver.XenDisposition);
+    Driver.XenDisposition = NULL;
 
     LogTeardown();
 

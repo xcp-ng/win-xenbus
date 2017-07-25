@@ -2680,10 +2680,7 @@ __FdoD3ToD0(
                   Fdo->Channel,
                   FALSE);
 
-    status = LogAddDisposition(LOG_LEVEL_INFO |
-                               LOG_LEVEL_WARNING |
-                               LOG_LEVEL_ERROR |
-                               LOG_LEVEL_CRITICAL,
+    status = LogAddDisposition(DriverGetConsoleLogLevel(),
                                FdoOutputBuffer,
                                Fdo,
                                &Fdo->LogDisposition);

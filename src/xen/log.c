@@ -560,9 +560,9 @@ LogAddDisposition(
     ULONG                   Index;
     NTSTATUS                status;
 
-    status = STATUS_INVALID_PARAMETER;
-    if (Mask == 0)
-        goto fail1;
+    *Disposition = NULL;
+    if (Mask == LOG_LEVEL_NONE)
+        goto ignore;
 
     AcquireHighLock(&Context->Lock, &Irql);
 
@@ -581,21 +581,19 @@ LogAddDisposition(
     }
 
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail1;
 
     ReleaseHighLock(&Context->Lock, Irql);
 
+ignore:
     return STATUS_SUCCESS;
-
-fail2:
-    Error("fail2\n");
-
-    *Disposition = NULL;
-
-    ReleaseHighLock(&Context->Lock, Irql);
 
 fail1:
     Error("fail1 (%08x)\n", status);
+
+    ReleaseHighLock(&Context->Lock, Irql);
+
+    *Disposition = NULL;
 
     return status;
 }
@@ -608,6 +606,9 @@ LogRemoveDisposition(
     PLOG_CONTEXT            Context = &LogContext;
     KIRQL                   Irql;
     ULONG                   Index;
+
+    if (Disposition == NULL)
+        return;
 
     AcquireHighLock(&Context->Lock, &Irql);
 
@@ -662,6 +663,73 @@ LogResume(
 
     (VOID) DbgSetDebugPrintCallback(LogDebugPrint, FALSE);
     (VOID) DbgSetDebugPrintCallback(LogDebugPrint, TRUE);
+}
+
+typedef struct _XEN_LOG_LEVEL_NAME {
+    const CHAR      *Name;
+    LOG_LEVEL       LogLevel;
+} XEN_LOG_LEVEL_NAME, *PXEN_LOG_LEVEL_NAME;
+
+static const XEN_LOG_LEVEL_NAME XenLogLevelNames[] = {
+    {   "TRACE",    LOG_LEVEL_TRACE     },
+    {   "INFO",     LOG_LEVEL_INFO      },
+    {   "WARNING",  LOG_LEVEL_WARNING   },
+    {   "ERROR",    LOG_LEVEL_ERROR,    },
+    {   "CRITICAL", LOG_LEVEL_CRITICAL  }
+};
+
+XEN_API
+NTSTATUS
+LogReadLogLevel(
+    IN  HANDLE      Key,
+    IN  PCHAR       Name,
+    OUT PLOG_LEVEL  LogLevel
+    )
+{
+    PANSI_STRING    Values;
+    ULONG           Type;
+    ULONG           Index;
+    NTSTATUS        status;
+
+    status = RegistryQuerySzValue(Key,
+                                  Name,
+                                  &Type,
+                                  &Values);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (Type != REG_MULTI_SZ)
+        goto fail2;
+
+    *LogLevel = LOG_LEVEL_NONE;
+    for (Index = 0; Values[Index].Buffer != NULL; ++Index) {
+        PANSI_STRING    Value = &Values[Index];
+        ULONG           Level;
+
+        for (Level = 0; Level < ARRAYSIZE(XenLogLevelNames); ++Level) {
+            if (_stricmp(XenLogLevelNames[Level].Name, Value->Buffer) == 0) {
+                *LogLevel |= XenLogLevelNames[Level].LogLevel;
+                break;
+            }
+        }
+    }
+
+    RegistryFreeSzValue(Values);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    RegistryFreeSzValue(Values);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    *LogLevel = LOG_LEVEL_NONE;
+
+    return status;
 }
 
 NTSTATUS
