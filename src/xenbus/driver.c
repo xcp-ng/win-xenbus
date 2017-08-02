@@ -597,6 +597,8 @@ DriverUnload(
     RtlZeroMemory(&Driver.List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&Driver.Mutex, sizeof (MUTEX));
 
+    __DriverSetConsoleLogLevel(0);
+
     ParametersKey = __DriverGetParametersKey();
 
     RegistryCloseKey(ParametersKey);
