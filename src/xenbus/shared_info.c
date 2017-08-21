@@ -316,51 +316,80 @@ SharedInfoGetTime(
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
     shared_info_t               *Shared;
-    ULONG                       Version;
+    ULONG                       WcVersion;
+    ULONG                       TimeVersion;
     ULONGLONG                   Seconds;
     ULONGLONG                   NanoSeconds;
+    ULONGLONG                   Timestamp;
+    ULONGLONG                   Tsc;
+    ULONGLONG                   SystemTime;
+    ULONG                       TscSystemMul;
+    CHAR                        TscShift;
     LARGE_INTEGER               Now;
     TIME_FIELDS                 Time;
     KIRQL                       Irql;
-    NTSTATUS                    status;
 
     // Make sure we don't suspend
-    KeRaiseIrql(DISPATCH_LEVEL, &Irql); 
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
     Shared = Context->Shared;
 
+    // Loop until we can read a consistent set of values from the same update
     do {
-        Version = Shared->wc_version;
+        WcVersion = Shared->wc_version;
+        TimeVersion = Shared->vcpu_info[0].time.version;
         KeMemoryBarrier();
 
+        // Wallclock time at system time zero (guest boot or resume)
         Seconds = Shared->wc_sec;
         NanoSeconds = Shared->wc_nsec;
-        KeMemoryBarrier();
-    } while (Shared->wc_version != Version);
 
-    // Get the number of nanoseconds since boot
-    status = HvmGetTime(&Now);
-    if (!NT_SUCCESS(status))
-        Now.QuadPart = Shared->vcpu_info[0].time.system_time;
+        // Cached time in nanoseconds since guest boot
+        SystemTime = Shared->vcpu_info[0].time.system_time;
+
+        // Timestamp counter value when these time values were last updated
+        Timestamp = Shared->vcpu_info[0].time.tsc_timestamp;
+
+        // Timestamp modifiers
+        TscShift = Shared->vcpu_info[0].time.tsc_shift;
+        TscSystemMul = Shared->vcpu_info[0].time.tsc_to_system_mul;
+        KeMemoryBarrier();
+
+    // Version is incremented to indicate update in progress.
+    // LSB of version is set if update in progress.
+    // Version is incremented again once update has completed.
+    } while (Shared->wc_version != WcVersion ||
+             Shared->vcpu_info[0].time.version != TimeVersion ||
+             (WcVersion & 1) ||
+             (TimeVersion & 1));
+
+    // Read counter ticks
+    Tsc = __rdtsc();
 
     KeLowerIrql(Irql);
 
-    Trace("WALLCLOCK: Seconds = %llu NanoSeconds = %llu\n",
+    // Number of elapsed ticks since timestamp was captured
+    Tsc -= Timestamp;
+
+    // Time in nanoseconds since boot
+    SystemTime += ((Tsc << TscShift) * TscSystemMul) >> 32;
+
+    Trace("WALLCLOCK TIME AT BOOT: Seconds = %llu NanoSeconds = %llu\n",
           Seconds,
           NanoSeconds);
 
-    Trace("BOOT: Seconds = %llu NanoSeconds = %llu\n",
-          Now.QuadPart / 1000000000ull,
-          Now.QuadPart % 1000000000ull);
+    Trace("TIME SINCE BOOT: Seconds = %llu NanoSeconds = %llu\n",
+          SystemTime / 1000000000ull,
+          SystemTime % 1000000000ull);
 
     // Convert wallclock from Unix epoch (1970) to Windows epoch (1601)
     Seconds += 11644473600ull;
 
     // Add in time since host boot
-    Seconds += Now.QuadPart / 1000000000ull;
-    NanoSeconds += Now.QuadPart % 1000000000ull;
+    Seconds += SystemTime / 1000000000ull;
+    NanoSeconds += SystemTime % 1000000000ull;
 
-    // Converto to system time format
+    // Convert to system time format
     Now.QuadPart = (Seconds * 10000000ull) + (NanoSeconds / 100ull);
 
     RtlTimeToTimeFields(&Now, &Time);
