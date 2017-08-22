@@ -115,34 +115,6 @@ fail1:
 __checkReturn
 XEN_API
 NTSTATUS
-HvmGetTime(
-    OUT PLARGE_INTEGER      Now
-    )
-{
-    struct xen_hvm_get_time op;
-    LONG_PTR                rc;
-    NTSTATUS                status;
-
-    rc = HvmOp(HVMOP_get_time, &op);
-    
-    if (rc < 0) {
-        ERRNO_TO_STATUS(-rc, status);
-        goto fail1;
-    }
-
-    Now->QuadPart = op.now;
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
-}
-
-__checkReturn
-XEN_API
-NTSTATUS
 HvmPagetableDying(
     IN  PHYSICAL_ADDRESS            Address
     )

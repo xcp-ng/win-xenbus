@@ -103,13 +103,6 @@ HvmGetParam(
 __checkReturn
 XEN_API
 NTSTATUS
-HvmGetTime(
-    OUT PLARGE_INTEGER  Now
-    );
-
-__checkReturn
-XEN_API
-NTSTATUS
 HvmPagetableDying(
     IN  PHYSICAL_ADDRESS    Address
     );
