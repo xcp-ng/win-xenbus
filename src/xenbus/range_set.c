@@ -194,12 +194,17 @@ RangeSetPop(
 
     UNREFERENCED_PARAMETER(Interface);
 
+    status = STATUS_INVALID_PARAMETER;
+
+    if (Count == 0)
+        goto fail1;
+
     KeAcquireSpinLock(&RangeSet->Lock, &Irql);
 
     status = STATUS_INSUFFICIENT_RESOURCES;
 
     if (__RangeSetIsEmpty(RangeSet))
-        goto fail1;
+        goto fail2;
 
     Cursor = RangeSet->List.Flink;
 
@@ -210,7 +215,7 @@ RangeSetPop(
             goto found;
     }
 
-    goto fail2;
+    goto fail3;
 
 found:
     RangeSet->Cursor = Cursor;
@@ -228,13 +233,16 @@ found:
 
     return STATUS_SUCCESS;
 
+fail3:
+    Error("fail3\n");
+
 fail2:
     Error("fail2\n");
 
+    KeReleaseSpinLock(&RangeSet->Lock, Irql);
+
 fail1:
     Error("fail1 (%08x)\n", status);
-
-    KeReleaseSpinLock(&RangeSet->Lock, Irql);
 
     return status;
 }
@@ -326,6 +334,11 @@ RangeSetGet(
 
     UNREFERENCED_PARAMETER(Interface);
 
+    status = STATUS_INVALID_PARAMETER;
+
+    if (Count == 0)
+        goto fail1;
+
     KeAcquireSpinLock(&RangeSet->Lock, &Irql);
 
     Cursor = RangeSet->Cursor;
@@ -381,7 +394,7 @@ RangeSetGet(
     // We need to split a range
     status = RangeSetAdd(RangeSet, End + 1, Range->End, TRUE);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     Range->End = Start - 1;
 
@@ -393,10 +406,13 @@ done:
 
     return STATUS_SUCCESS;
 
-fail1:
-    Error("fail1 (%08x)\n", status);
+fail2:
+    Error("fail2\n");
 
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
 
     return status;    
 }
@@ -500,6 +516,11 @@ RangeSetPut(
 
     UNREFERENCED_PARAMETER(Interface);
 
+    status = STATUS_INVALID_PARAMETER;
+
+    if (Count == 0)
+        goto fail1;
+
     ASSERT3S(End, >=, Start);
 
     KeAcquireSpinLock(&RangeSet->Lock, &Irql);
@@ -522,7 +543,7 @@ RangeSetPut(
     }
 
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     RangeSet->ItemCount += Count;
 
@@ -530,10 +551,13 @@ RangeSetPut(
 
     return STATUS_SUCCESS;
 
-fail1:
-    Error("fail1 (%08x)\n", status);
+fail2:
+    Error("fail2\n");
 
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
 
     return status;
 }
