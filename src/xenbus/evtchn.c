@@ -727,16 +727,19 @@ fail1:
     return status;
 }
 
-static VOID
+static BOOLEAN
 EvtchnUnmask(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InUpcall
+    IN  BOOLEAN                 InUpcall,
+    IN  BOOLEAN                 Force
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
     KIRQL                       Irql = PASSIVE_LEVEL;
+    BOOLEAN                     Pending;
     ULONG                       LocalPort;
+    PROCESSOR_NUMBER            ProcNumber;
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
@@ -745,27 +748,76 @@ EvtchnUnmask(
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
+    Pending = FALSE;
+
     if (!Channel->Active)
         goto done;
 
     LocalPort = Channel->LocalPort;
 
-    if (XENBUS_EVTCHN_ABI(PortUnmask,
-                          &Context->EvtchnAbi,
-                          LocalPort)) {
-        //
-        // The event was pending so we must re-mask and use
-        // a hypercall to do the unmask and raise the event
-        //
+    Pending = XENBUS_EVTCHN_ABI(PortUnmask,
+                                &Context->EvtchnAbi,
+                                LocalPort);
+
+    if (!Pending)
+        goto done;
+
+    //
+    // If we are in context of the upcall, or we cannot tolerate a
+    // failure to unmask, then use the hypercall.
+    //
+    if (InUpcall || Force) {
         XENBUS_EVTCHN_ABI(PortMask,
                           &Context->EvtchnAbi,
                           LocalPort);
         (VOID) EventChannelUnmask(LocalPort);
+
+        Pending = FALSE;
+        goto done;
     }
+
+    //
+    // If we are not unmasking on the same CPU to which the
+    // event channel is bound, then we need to use the hypercall.
+    // to schedule the upcall on the correct CPU.
+    //
+    (VOID) KeGetCurrentProcessorNumberEx(&ProcNumber);
+
+    if (Channel->ProcNumber.Group != ProcNumber.Group ||
+        Channel->ProcNumber.Number != ProcNumber.Number) {
+        XENBUS_EVTCHN_ABI(PortMask,
+                          &Context->EvtchnAbi,
+                          LocalPort);
+        (VOID) EventChannelUnmask(LocalPort);
+
+        Pending = FALSE;
+        goto done;
+    }
+
+    if (Channel->Mask)
+        XENBUS_EVTCHN_ABI(PortMask,
+                          &Context->EvtchnAbi,
+                          LocalPort);
+
+    XENBUS_EVTCHN_ABI(PortAck,
+                      &Context->EvtchnAbi,
+                      LocalPort);
 
 done:
     if (!InUpcall)
         KeReleaseSpinLock(&Channel->Lock, Irql);
+
+    return Pending;
+}
+
+static VOID
+EvtchnUnmaskVersion4(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  BOOLEAN                 InUpcall
+    )
+{
+    EvtchnUnmask(Interface, Channel, InUpcall, TRUE);
 }
 
 static VOID
@@ -1635,7 +1687,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V4 EvtchnInterfaceVersion4 = {
     EvtchnRelease,
     EvtchnOpen,
     EvtchnBind,
-    EvtchnUnmask,
+    EvtchnUnmaskVersion4,
     EvtchnSendVersion1,
     EvtchnTrigger,
     EvtchnGetPort,
@@ -1648,7 +1700,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V5 EvtchnInterfaceVersion5 = {
     EvtchnRelease,
     EvtchnOpen,
     EvtchnBind,
-    EvtchnUnmask,
+    EvtchnUnmaskVersion4,
     EvtchnSendVersion1,
     EvtchnTrigger,
     EvtchnWaitVersion5,
@@ -1662,7 +1714,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V6 EvtchnInterfaceVersion6 = {
     EvtchnRelease,
     EvtchnOpen,
     EvtchnBind,
-    EvtchnUnmask,
+    EvtchnUnmaskVersion4,
     EvtchnSend,
     EvtchnTrigger,
     EvtchnWaitVersion5,
@@ -1672,6 +1724,21 @@ static struct _XENBUS_EVTCHN_INTERFACE_V6 EvtchnInterfaceVersion6 = {
 
 static struct _XENBUS_EVTCHN_INTERFACE_V7 EvtchnInterfaceVersion7 = {
     { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V7), 7, NULL, NULL, NULL },
+    EvtchnAcquire,
+    EvtchnRelease,
+    EvtchnOpen,
+    EvtchnBind,
+    EvtchnUnmaskVersion4,
+    EvtchnSend,
+    EvtchnTrigger,
+    EvtchnGetCount,
+    EvtchnWait,
+    EvtchnGetPort,
+    EvtchnClose,
+};
+
+static struct _XENBUS_EVTCHN_INTERFACE_V8 EvtchnInterfaceVersion8 = {
+    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V8), 8, NULL, NULL, NULL },
     EvtchnAcquire,
     EvtchnRelease,
     EvtchnOpen,
@@ -1854,6 +1921,23 @@ EvtchnGetInterface(
             break;
 
         *EvtchnInterface = EvtchnInterfaceVersion7;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 8: {
+        struct _XENBUS_EVTCHN_INTERFACE_V8  *EvtchnInterface;
+
+        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V8 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V8))
+            break;
+
+        *EvtchnInterface = EvtchnInterfaceVersion8;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;

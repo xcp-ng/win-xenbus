@@ -2152,10 +2152,11 @@ StoreEnable(
                                      FALSE);
     ASSERT(Context->Channel != NULL);
 
-    XENBUS_EVTCHN(Unmask,
-                  &Context->EvtchnInterface,
-                  Context->Channel,
-                  FALSE);
+    (VOID) XENBUS_EVTCHN(Unmask,
+                         &Context->EvtchnInterface,
+                         Context->Channel,
+                         FALSE,
+                         TRUE);
 
     Context->Enabled = TRUE;
 

@@ -2675,10 +2675,11 @@ __FdoD3ToD0(
     if (Fdo->Channel == NULL)
         goto fail1;
 
-    XENBUS_EVTCHN(Unmask,
-                  &Fdo->EvtchnInterface,
-                  Fdo->Channel,
-                  FALSE);
+    (VOID) XENBUS_EVTCHN(Unmask,
+                         &Fdo->EvtchnInterface,
+                         Fdo->Channel,
+                         FALSE,
+                         TRUE);
 
     status = LogAddDisposition(DriverGetConsoleLogLevel(),
                                FdoOutputBuffer,

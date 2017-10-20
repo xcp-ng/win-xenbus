@@ -128,18 +128,27 @@ typedef NTSTATUS
     IN  UCHAR                   Number
     );
 
+typedef VOID
+(*XENBUS_EVTCHN_UNMASK_V4)(
+    IN  PINTERFACE              Interface,
+    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  BOOLEAN                 InCallback
+    );
+
 /*! \typedef XENBUS_EVTCHN_UNMASK
     \brief Unmask an event channel
 
     \param Interface The interface header
     \param Channel The channel handle
     \param InCallback Set to TRUE if this method is invoked in context of the channel callback
+    \param Force Set to TRUE if the unmask must succeed, otherwise set to FALSE and the function will return FALSE if the unmask did not complete.
 */
-typedef VOID
+typedef BOOLEAN
 (*XENBUS_EVTCHN_UNMASK)(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InCallback
+    IN  BOOLEAN                 InCallback,
+    IN  BOOLEAN                 Force
     );
 
 typedef VOID
@@ -250,7 +259,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V4 {
     XENBUS_EVTCHN_RELEASE   EvtchnRelease;
     XENBUS_EVTCHN_OPEN      EvtchnOpen;
     XENBUS_EVTCHN_BIND      EvtchnBind;
-    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_UNMASK_V4 EvtchnUnmaskVersion4;
     XENBUS_EVTCHN_SEND_V1   EvtchnSendVersion1;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
     XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
@@ -267,7 +276,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V5 {
     XENBUS_EVTCHN_RELEASE   EvtchnRelease;
     XENBUS_EVTCHN_OPEN      EvtchnOpen;
     XENBUS_EVTCHN_BIND      EvtchnBind;
-    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_UNMASK_V4 EvtchnUnmaskVersion4;
     XENBUS_EVTCHN_SEND_V1   EvtchnSendVersion1;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
     XENBUS_EVTCHN_WAIT_V5   EvtchnWaitVersion5;
@@ -285,7 +294,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V6 {
     XENBUS_EVTCHN_RELEASE   EvtchnRelease;
     XENBUS_EVTCHN_OPEN      EvtchnOpen;
     XENBUS_EVTCHN_BIND      EvtchnBind;
-    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_UNMASK_V4 EvtchnUnmaskVersion4;
     XENBUS_EVTCHN_SEND      EvtchnSend;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
     XENBUS_EVTCHN_WAIT_V5   EvtchnWaitVersion5;
@@ -303,6 +312,25 @@ struct _XENBUS_EVTCHN_INTERFACE_V7 {
     XENBUS_EVTCHN_RELEASE   EvtchnRelease;
     XENBUS_EVTCHN_OPEN      EvtchnOpen;
     XENBUS_EVTCHN_BIND      EvtchnBind;
+    XENBUS_EVTCHN_UNMASK_V4 EvtchnUnmaskVersion4;
+    XENBUS_EVTCHN_SEND      EvtchnSend;
+    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
+    XENBUS_EVTCHN_GET_COUNT EvtchnGetCount;
+    XENBUS_EVTCHN_WAIT      EvtchnWait;
+    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
+    XENBUS_EVTCHN_CLOSE     EvtchnClose;
+};
+
+/*! \struct _XENBUS_EVTCHN_INTERFACE_V8
+    \brief EVTCHN interface version 8
+    \ingroup interfaces
+*/
+struct _XENBUS_EVTCHN_INTERFACE_V8 {
+    INTERFACE               Interface;
+    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
+    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
+    XENBUS_EVTCHN_OPEN      EvtchnOpen;
+    XENBUS_EVTCHN_BIND      EvtchnBind;
     XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
     XENBUS_EVTCHN_SEND      EvtchnSend;
     XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
@@ -312,7 +340,7 @@ struct _XENBUS_EVTCHN_INTERFACE_V7 {
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
 
-typedef struct _XENBUS_EVTCHN_INTERFACE_V7 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
+typedef struct _XENBUS_EVTCHN_INTERFACE_V8 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
 
 /*! \def XENBUS_EVTCHN
     \brief Macro at assist in method invocation
@@ -323,7 +351,7 @@ typedef struct _XENBUS_EVTCHN_INTERFACE_V7 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVT
 #endif  // _WINDLL
 
 #define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 4
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 7
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 8
 
 #endif  // _XENBUS_EVTCHN_INTERFACE_H
 
