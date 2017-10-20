@@ -792,44 +792,33 @@ EvtchnUnmaskVersion1(
     return FALSE;
 }
 
-static NTSTATUS
+static VOID
 EvtchnSend(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
-    NTSTATUS                    status;
-
     UNREFERENCED_PARAMETER(Interface);
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
 
-    status = STATUS_UNSUCCESSFUL;
-    if (!Channel->Active)
-        goto done;
-
-    status = EventChannelSend(Channel->LocalPort);
-
-done:
-    return status;
+    if (Channel->Active)
+        (VOID) EventChannelSend(Channel->LocalPort);
 }
 
-static NTSTATUS
+static VOID
 EvtchnSendVersion1(
     IN  PINTERFACE              Interface,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel
     )
 {
     KIRQL                       Irql;
-    NTSTATUS                    status;
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
-    status = EvtchnSend(Interface, Channel);
+    EvtchnSend(Interface, Channel);
     KeLowerIrql(Irql);
-
-    return status;
 }
 
 static VOID
