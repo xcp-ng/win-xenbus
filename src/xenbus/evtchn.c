@@ -727,18 +727,6 @@ fail1:
     return status;
 }
 
-static NTSTATUS
-EvtchnBindVersion2(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Cpu
-    )
-{
-    ASSERT3U(Cpu, <, MAXIMUM_PROCESSORS);
-
-    return EvtchnBind(Interface, Channel, 0, (CHAR)Cpu);
-}
-
 static VOID
 EvtchnUnmask(
     IN  PINTERFACE              Interface,
@@ -778,18 +766,6 @@ EvtchnUnmask(
 done:
     if (!InUpcall)
         KeReleaseSpinLock(&Channel->Lock, Irql);
-}
-
-static BOOLEAN
-EvtchnUnmaskVersion1(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InUpcall
-    )
-{
-    EvtchnUnmask(Interface, Channel, InUpcall);
-
-    return FALSE;
 }
 
 static VOID
