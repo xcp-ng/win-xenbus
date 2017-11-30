@@ -546,6 +546,35 @@ GnttabGetReference(
 }
 
 static NTSTATUS
+GnttabQueryReference(
+    IN  PINTERFACE          Interface,
+    IN	ULONG               Reference,
+    OUT PPFN_NUMBER         Pfn OPTIONAL,
+    OUT PBOOLEAN            ReadOnly OPTIONAL
+    )
+{
+    PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
+    NTSTATUS                status;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (Reference >= (Context->FrameIndex + 1) * XENBUS_GNTTAB_ENTRY_PER_FRAME)
+        goto fail1;
+
+    if (Pfn != NULL)
+        *Pfn = Context->Table[Reference].frame;
+
+    if (ReadOnly != NULL)
+        *ReadOnly = (Context->Table[Reference].frame & GTF_readonly) ? TRUE : FALSE;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static NTSTATUS
 GnttabMapForeignPages(
     IN  PINTERFACE              Interface,
     IN  USHORT                  Domain,
@@ -789,12 +818,25 @@ GnttabAcquire(
     if (!NT_SUCCESS(status))
         goto fail10;
 
+    /* Make sure at least the reserved refrences are present */
+    status = GnttabExpand(Context);
+    if (!NT_SUCCESS(status))
+        goto fail11;
+
     Trace("<====\n");
 
 done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     return STATUS_SUCCESS;
+
+fail11:
+    Error("fail11\n");
+
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
+    Context->DebugCallback = NULL;
 
 fail10:
     Error("fail10\n");
@@ -956,6 +998,20 @@ static struct _XENBUS_GNTTAB_INTERFACE_V2   GnttabInterfaceVersion2 = {
     GnttabUnmapForeignPages
 };
 
+static struct _XENBUS_GNTTAB_INTERFACE_V3   GnttabInterfaceVersion3 = {
+    { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V3), 3, NULL, NULL, NULL },
+    GnttabAcquire,
+    GnttabRelease,
+    GnttabCreateCache,
+    GnttabPermitForeignAccess,
+    GnttabRevokeForeignAccess,
+    GnttabGetReference,
+    GnttabQueryReference,
+    GnttabDestroyCache,
+    GnttabMapForeignPages,
+    GnttabUnmapForeignPages
+};
+
 NTSTATUS
 GnttabInitialize(
     IN  PXENBUS_FDO             Fdo,
@@ -1062,6 +1118,23 @@ GnttabGetInterface(
             break;
 
         *GnttabInterface = GnttabInterfaceVersion2;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 3: {
+        struct _XENBUS_GNTTAB_INTERFACE_V3  *GnttabInterface;
+
+        GnttabInterface = (struct _XENBUS_GNTTAB_INTERFACE_V3 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_GNTTAB_INTERFACE_V3))
+            break;
+
+        *GnttabInterface = GnttabInterfaceVersion3;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
