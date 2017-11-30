@@ -60,12 +60,6 @@ typedef struct _XENBUS_CACHE_MAGAZINE {
     PVOID   Slot[XENBUS_CACHE_MAGAZINE_SLOTS];
 } XENBUS_CACHE_MAGAZINE, *PXENBUS_CACHE_MAGAZINE;
 
-typedef struct _XENBUS_CACHE_FIST {
-    LONG    Defer;
-    ULONG   Probability;
-    ULONG   Seed;
-} XENBUS_CACHE_FIST, *PXENBUS_CACHE_FIST;
-
 #define MAXNAMELEN  128
 
 struct _XENBUS_CACHE {
@@ -85,7 +79,6 @@ struct _XENBUS_CACHE {
     LONG                    ListCount;
     PXENBUS_CACHE_MAGAZINE  Magazine;
     ULONG                   MagazineCount;
-    XENBUS_CACHE_FIST       FIST;
 };
 
 struct _XENBUS_CACHE_CONTEXT {
@@ -94,7 +87,6 @@ struct _XENBUS_CACHE_CONTEXT {
     LONG                    References;
     XENBUS_DEBUG_INTERFACE  DebugInterface;
     PXENBUS_DEBUG_CALLBACK  DebugCallback;
-    XENBUS_STORE_INTERFACE  StoreInterface;
     PXENBUS_THREAD          MonitorThread;
     LIST_ENTRY              List;
 };
@@ -359,20 +351,6 @@ CacheGet(
 
     UNREFERENCED_PARAMETER(Interface);
 
-    if (Cache->FIST.Probability != 0) {
-        LONG    Defer;
-
-        Defer = InterlockedDecrement(&Cache->FIST.Defer);
-
-        if (Defer <= 0) {
-            ULONG   Random = RtlRandomEx(&Cache->FIST.Seed);
-            ULONG   Threshold = (MAXLONG / 100) * Cache->FIST.Probability;
-
-            if (Random < Threshold)
-                return NULL;
-        }
-    }
-
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
     Index = KeGetCurrentProcessorNumberEx(NULL);
 
@@ -457,81 +435,6 @@ CacheDestroyObject(
 }
 
 static NTSTATUS
-CacheGetFISTEntries(
-    IN  PXENBUS_CACHE_CONTEXT   Context,
-    IN  PXENBUS_CACHE           Cache
-    )
-{
-    CHAR                        Node[sizeof ("FIST/cache/") + MAXNAMELEN];
-    PCHAR                       Buffer;
-    LARGE_INTEGER               Now;
-    NTSTATUS                    status;
-
-    status = XENBUS_STORE(Acquire, &Context->StoreInterface);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = RtlStringCbPrintfA(Node,
-                                sizeof (Node),
-                                "FIST/cache/%s",
-                                Cache->Name);
-    ASSERT(NT_SUCCESS(status));
-
-    status = XENBUS_STORE(Read,
-                          &Context->StoreInterface,
-                          NULL,
-                          Node,
-                          "defer",
-                          &Buffer);
-    if (!NT_SUCCESS(status)) {
-        Cache->FIST.Defer = 0;
-    } else {
-        Cache->FIST.Defer = (ULONG)strtol(Buffer, NULL, 0);
-
-        XENBUS_STORE(Free,
-                     &Context->StoreInterface,
-                     Buffer);
-    }
-
-    status = XENBUS_STORE(Read,
-                          &Context->StoreInterface,
-                          NULL,
-                          Node,
-                          "probability",
-                          &Buffer);
-    if (!NT_SUCCESS(status)) {
-        Cache->FIST.Probability = 0;
-    } else {
-        Cache->FIST.Probability = (ULONG)strtol(Buffer, NULL, 0);
-
-        XENBUS_STORE(Free,
-                     &Context->StoreInterface,
-                     Buffer);
-    }
-
-    if (Cache->FIST.Probability > 100)
-        Cache->FIST.Probability = 100;
-
-    if (Cache->FIST.Probability != 0)
-        Info("%s: Defer = %d Probability = %d\n",
-             Cache->Name,
-             Cache->FIST.Defer,
-             Cache->FIST.Probability);
-
-    KeQuerySystemTime(&Now);
-    Cache->FIST.Seed = Now.LowPart;
-
-    XENBUS_STORE(Release, &Context->StoreInterface);
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;    
-}
-
-static NTSTATUS
 CacheFill(
     IN  PXENBUS_CACHE   Cache,
     IN  ULONG           Count
@@ -607,22 +510,18 @@ CacheCreate(
     (*Cache)->ReleaseLock = ReleaseLock;
     (*Cache)->Argument = Argument;
 
-    status = CacheGetFISTEntries(Context, *Cache);
-    if (!NT_SUCCESS(status))
-        goto fail3;
-
     InitializeListHead(&(*Cache)->GetList);
 
     status =  CacheFill(*Cache, Reservation);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail3;
 
     (*Cache)->MagazineCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
     (*Cache)->Magazine = __CacheAllocate(sizeof (XENBUS_CACHE_MAGAZINE) * (*Cache)->MagazineCount);
 
     status = STATUS_NO_MEMORY;
     if ((*Cache)->Magazine == NULL)
-        goto fail5;
+        goto fail4;
 
     (*Cache)->Reservation = Reservation;
 
@@ -634,20 +533,15 @@ CacheCreate(
 
     return STATUS_SUCCESS;
 
-fail5:
-    Error("fail5\n");
-
-    (*Cache)->MagazineCount = 0;
-
 fail4:
     Error("fail4\n");
 
-    RtlZeroMemory(&(*Cache)->GetList, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&(*Cache)->FIST, sizeof (XENBUS_CACHE_FIST));
+    (*Cache)->MagazineCount = 0;
 
 fail3:
     Error("fail3\n");
+
+    RtlZeroMemory(&(*Cache)->GetList, sizeof (LIST_ENTRY));
 
     (*Cache)->Argument = NULL;
     (*Cache)->ReleaseLock = NULL;
@@ -704,8 +598,6 @@ CacheDestroy(
 
     ASSERT(IsListEmpty(&Cache->GetList));
     RtlZeroMemory(&Cache->GetList, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&Cache->FIST, sizeof (XENBUS_CACHE_FIST));
 
     Cache->Argument = NULL;
     Cache->ReleaseLock = NULL;
@@ -938,13 +830,6 @@ CacheInitialize(
     ASSERT(NT_SUCCESS(status));
     ASSERT((*Context)->DebugInterface.Interface.Context != NULL);
 
-    status = StoreGetInterface(FdoGetStoreContext(Fdo),
-                               XENBUS_STORE_INTERFACE_VERSION_MAX,
-                               (PINTERFACE)&(*Context)->StoreInterface,
-                               sizeof ((*Context)->StoreInterface));
-    ASSERT(NT_SUCCESS(status));
-    ASSERT((*Context)->StoreInterface.Interface.Context != NULL);
-
     InitializeListHead(&(*Context)->List);
     KeInitializeSpinLock(&(*Context)->Lock);
 
@@ -963,9 +848,6 @@ fail2:
 
     RtlZeroMemory(&(*Context)->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&(*Context)->List, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&(*Context)->StoreInterface,
-                  sizeof (XENBUS_STORE_INTERFACE));
 
     RtlZeroMemory(&(*Context)->DebugInterface,
                   sizeof (XENBUS_DEBUG_INTERFACE));
@@ -1037,9 +919,6 @@ CacheTeardown(
 
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&Context->StoreInterface,
-                  sizeof (XENBUS_STORE_INTERFACE));
 
     RtlZeroMemory(&Context->DebugInterface,
                   sizeof (XENBUS_DEBUG_INTERFACE));
