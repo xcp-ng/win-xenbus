@@ -272,7 +272,8 @@ EvtchnFifoContract(
         __FreePage(Mdl);
     }
 
-    __EvtchnFifoFree(Context->EventPageMdl);
+    if (Context->EventPageMdl != NULL)
+        __EvtchnFifoFree(Context->EventPageMdl);
 
     Context->EventPageMdl = NULL;
     Context->EventPageCount = 0;
