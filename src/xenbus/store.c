@@ -141,6 +141,7 @@ struct _XENBUS_STORE_CONTEXT {
     PXENBUS_EVTCHN_CHANNEL              Channel;
     XENBUS_SUSPEND_INTERFACE            SuspendInterface;
     XENBUS_DEBUG_INTERFACE              DebugInterface;
+    XENBUS_GNTTAB_INTERFACE             GnttabInterface;
     PXENBUS_SUSPEND_CALLBACK            SuspendCallbackEarly;
     PXENBUS_SUSPEND_CALLBACK            SuspendCallbackLate;
     PXENBUS_DEBUG_CALLBACK              DebugCallback;
@@ -2169,28 +2170,36 @@ StoreEnable(
         Context->Dpcs++;
 }
 
-static PHYSICAL_ADDRESS
+static
 StoreGetAddress(
-    PXENBUS_STORE_CONTEXT   Context
+    IN  PXENBUS_STORE_CONTEXT   Context,
+    OUT PPHYSICAL_ADDRESS       Address
     )
 {
-    PHYSICAL_ADDRESS        Address;
-    NTSTATUS                status;
+    PFN_NUMBER                  Pfn;
+    NTSTATUS                    status;
 
-    UNREFERENCED_PARAMETER(Context);
+    status = XENBUS_GNTTAB(QueryReference,
+                           &Context->GnttabInterface,
+                           XENBUS_GNTTAB_STORE_REFERENCE,
+                           &Pfn,
+                           NULL);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
-    status = HvmGetParam(HVM_PARAM_STORE_PFN,
-                         (PULONGLONG)&Address.QuadPart);
-    ASSERT(NT_SUCCESS(status));
-
-    Address.QuadPart <<= PAGE_SHIFT;
+    Address->QuadPart = Pfn << PAGE_SHIFT;
 
     LogPrintf(LOG_LEVEL_INFO,
               "STORE: PAGE @ %08x.%08x\n",
-              Address.HighPart,
-              Address.LowPart);
+              Address->HighPart,
+              Address->LowPart);
 
-    return Address;
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }
 
 static VOID
@@ -2200,10 +2209,6 @@ StoreSuspendCallbackEarly(
 {
     PXENBUS_STORE_CONTEXT   Context = Argument;
     PLIST_ENTRY             ListEntry;
-    PHYSICAL_ADDRESS        Address;
-
-    Address = StoreGetAddress(Context);
-    ASSERT3U(Address.QuadPart, ==, Context->Address.QuadPart);
 
     for (ListEntry = Context->TransactionList.Flink;
          ListEntry != &(Context->TransactionList);
@@ -2232,13 +2237,16 @@ StoreSuspendCallbackLate(
     )
 {
     PXENBUS_STORE_CONTEXT               Context = Argument;
-    struct xenstore_domain_interface    *Shared;
     PLIST_ENTRY                         ListEntry;
     KIRQL                               Irql;
-
-    Shared = Context->Shared;
+    PHYSICAL_ADDRESS                    Address;
+    NTSTATUS                            status;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    status = StoreGetAddress(Context, &Address);
+    ASSERT(NT_SUCCESS(status));
+    ASSERT3U(Address.QuadPart, ==, Context->Address.QuadPart);
 
     StoreDisable(Context);
     StoreResetResponse(Context);
@@ -2272,7 +2280,7 @@ StoreDebugCallback(
                  Context->Address.LowPart);
 
     if (!Crashing) {
-        struct xenstore_domain_interface    *Shared;
+        struct xenstore_domain_interface *Shared;
 
         Shared = Context->Shared;
 
@@ -2415,6 +2423,7 @@ StoreAcquire(
 {
     PXENBUS_STORE_CONTEXT   Context = Interface->Context;
     KIRQL                   Irql;
+    PHYSICAL_ADDRESS        Address;
     NTSTATUS                status;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
@@ -2424,24 +2433,32 @@ StoreAcquire(
 
     Trace("====>\n");
 
-    Context->Address = StoreGetAddress(Context);
+    status = XENBUS_GNTTAB(Acquire, &Context->GnttabInterface);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = StoreGetAddress(Context, &Address);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Context->Address = Address;
     Context->Shared = (struct xenstore_domain_interface *)MmMapIoSpace(Context->Address,
                                                                        PAGE_SIZE,
                                                                        MmCached);
     status = STATUS_UNSUCCESSFUL;
     if (Context->Shared == NULL)
-        goto fail1;
+        goto fail3;
 
     status = XENBUS_EVTCHN(Acquire, &Context->EvtchnInterface);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail4;
 
     StoreResetResponse(Context);
     StoreEnable(Context);
 
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail5;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -2450,7 +2467,7 @@ StoreAcquire(
                             Context,
                             &Context->SuspendCallbackEarly);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail6;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -2459,11 +2476,11 @@ StoreAcquire(
                             Context,
                             &Context->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail7;
 
     status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail8;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -2472,7 +2489,7 @@ StoreAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail9;
 
     Trace("<====\n");
 
@@ -2481,45 +2498,55 @@ done:
 
     return STATUS_SUCCESS;
 
-fail7:
-    Error("fail7\n");
+fail9:
+    Error("fail9\n");
 
     XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-fail6:
-    Error("fail6\n");
+fail8:
+    Error("fail8\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackLate);
     Context->SuspendCallbackLate = NULL;
 
-fail5:
-    Error("fail5\n");
+fail7:
+    Error("fail7\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
-fail4:
-    Error("fail4\n");
+fail6:
+    Error("fail6\n");
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-fail3:
-    Error("fail3\n");
+fail5:
+    Error("fail5\n");
 
     StoreDisable(Context);
     RtlZeroMemory(&Context->Response, sizeof (XENBUS_STORE_RESPONSE));
 
     XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
 
-fail2:
-    Error("fail2\n");
+fail4:
+    Error("fail4\n");
 
     MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
     Context->Shared = NULL;
+
+fail3:
+    Error("fail3\n");
+
+    Context->Address.QuadPart = 0;
+
+fail2:
+    Error("fail2\n");
+
+    XENBUS_GNTTAB(Release, &Context->GnttabInterface);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -2587,6 +2614,8 @@ StoreRelease(
 
     Context->Address.QuadPart = 0;
 
+    XENBUS_GNTTAB(Release, &Context->GnttabInterface);
+
     Trace("<====\n");
 
 done:
@@ -2643,6 +2672,13 @@ StoreInitialize(
     status = STATUS_NO_MEMORY;
     if (*Context == NULL)
         goto fail1;
+
+    status = GnttabGetInterface(FdoGetGnttabContext(Fdo),
+                                XENBUS_GNTTAB_INTERFACE_VERSION_MAX,
+                                (PINTERFACE)&(*Context)->GnttabInterface,
+                                sizeof ((*Context)->GnttabInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->GnttabInterface.Interface.Context != NULL);
 
     status = EvtchnGetInterface(FdoGetEvtchnContext(Fdo),
                                 XENBUS_EVTCHN_INTERFACE_VERSION_MAX,
@@ -2721,6 +2757,9 @@ fail2:
 
     RtlZeroMemory(&(*Context)->EvtchnInterface,
                   sizeof (XENBUS_EVTCHN_INTERFACE));
+
+    RtlZeroMemory(&(*Context)->GnttabInterface,
+                  sizeof (XENBUS_GNTTAB_INTERFACE));
 
     ASSERT(IsZeroMemory(*Context, sizeof (XENBUS_STORE_CONTEXT)));
     __StoreFree(*Context);
@@ -2837,6 +2876,9 @@ StoreTeardown(
 
     RtlZeroMemory(&Context->EvtchnInterface,
                   sizeof (XENBUS_EVTCHN_INTERFACE));
+
+    RtlZeroMemory(&Context->GnttabInterface,
+                  sizeof (XENBUS_GNTTAB_INTERFACE));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_STORE_CONTEXT)));
     __StoreFree(Context);

@@ -5154,23 +5154,23 @@ FdoCreate(
     if (!NT_SUCCESS(status))
         goto fail12;
 
-    status = StoreInitialize(Fdo, &Fdo->StoreContext);
+    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
         goto fail13;
 
-    status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
+    status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
         goto fail14;
 
-    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
+    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
         goto fail15;
 
-    status = CacheInitialize(Fdo, &Fdo->CacheContext);
+    status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
         goto fail16;
 
-    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
+    status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
     if (!NT_SUCCESS(status))
         goto fail17;
 
@@ -5205,6 +5205,13 @@ FdoCreate(
     ASSERT(NT_SUCCESS(status));
     ASSERT(Fdo->EvtchnInterface.Interface.Context != NULL);
 
+    status = RangeSetGetInterface(__FdoGetRangeSetContext(Fdo),
+                                  XENBUS_RANGE_SET_INTERFACE_VERSION_MAX,
+                                  (PINTERFACE)&Fdo->RangeSetInterface,
+                                  sizeof (Fdo->RangeSetInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT(Fdo->RangeSetInterface.Interface.Context != NULL);
+
     status = StoreGetInterface(__FdoGetStoreContext(Fdo),
                                XENBUS_STORE_INTERFACE_VERSION_MAX,
                                (PINTERFACE)&Fdo->StoreInterface,
@@ -5218,13 +5225,6 @@ FdoCreate(
                                  sizeof (Fdo->ConsoleInterface));
     ASSERT(NT_SUCCESS(status));
     ASSERT(Fdo->ConsoleInterface.Interface.Context != NULL);
-
-    status = RangeSetGetInterface(__FdoGetRangeSetContext(Fdo),
-                                  XENBUS_RANGE_SET_INTERFACE_VERSION_MAX,
-                                  (PINTERFACE)&Fdo->RangeSetInterface,
-                                  sizeof (Fdo->RangeSetInterface));
-    ASSERT(NT_SUCCESS(status));
-    ASSERT(Fdo->RangeSetInterface.Interface.Context != NULL);
 
     status = BalloonGetInterface(__FdoGetBalloonContext(Fdo),
                                  XENBUS_BALLOON_INTERFACE_VERSION_MAX,
@@ -5260,32 +5260,32 @@ fail19:
 fail18:
     Error("fail18\n");
 
-    GnttabTeardown(Fdo->GnttabContext);
-    Fdo->GnttabContext = NULL;
+    ConsoleTeardown(Fdo->ConsoleContext);
+    Fdo->ConsoleContext = NULL;
 
 fail17:
     Error("fail17\n");
 
-    CacheTeardown(Fdo->CacheContext);
-    Fdo->CacheContext = NULL;
+    StoreTeardown(Fdo->StoreContext);
+    Fdo->StoreContext = NULL;
 
 fail16:
     Error("fail16\n");
 
-    RangeSetTeardown(Fdo->RangeSetContext);
-    Fdo->RangeSetContext = NULL;
+    GnttabTeardown(Fdo->GnttabContext);
+    Fdo->GnttabContext = NULL;
 
 fail15:
     Error("fail15\n");
 
-    ConsoleTeardown(Fdo->ConsoleContext);
-    Fdo->ConsoleContext = NULL;
+    CacheTeardown(Fdo->CacheContext);
+    Fdo->CacheContext = NULL;
 
 fail14:
     Error("fail14\n");
 
-    StoreTeardown(Fdo->StoreContext);
-    Fdo->StoreContext = NULL;
+    RangeSetTeardown(Fdo->RangeSetContext);
+    Fdo->RangeSetContext = NULL;
 
 fail13:
     Error("fail13\n");
@@ -5400,14 +5400,14 @@ FdoDestroy(
         RtlZeroMemory(&Fdo->BalloonInterface,
                       sizeof (XENBUS_BALLOON_INTERFACE));
 
-        RtlZeroMemory(&Fdo->RangeSetInterface,
-                      sizeof (XENBUS_RANGE_SET_INTERFACE));
-
         RtlZeroMemory(&Fdo->ConsoleInterface,
                       sizeof (XENBUS_CONSOLE_INTERFACE));
 
         RtlZeroMemory(&Fdo->StoreInterface,
                       sizeof (XENBUS_STORE_INTERFACE));
+
+        RtlZeroMemory(&Fdo->RangeSetInterface,
+                      sizeof (XENBUS_RANGE_SET_INTERFACE));
 
         RtlZeroMemory(&Fdo->EvtchnInterface,
                       sizeof (XENBUS_EVTCHN_INTERFACE));
@@ -5426,6 +5426,12 @@ FdoDestroy(
         UnplugTeardown(Fdo->UnplugContext);
         Fdo->UnplugContext = NULL;
 
+        ConsoleTeardown(Fdo->ConsoleContext);
+        Fdo->ConsoleContext = NULL;
+
+        StoreTeardown(Fdo->StoreContext);
+        Fdo->StoreContext = NULL;
+
         GnttabTeardown(Fdo->GnttabContext);
         Fdo->GnttabContext = NULL;
 
@@ -5434,12 +5440,6 @@ FdoDestroy(
 
         RangeSetTeardown(Fdo->RangeSetContext);
         Fdo->RangeSetContext = NULL;
-
-        ConsoleTeardown(Fdo->ConsoleContext);
-        Fdo->ConsoleContext = NULL;
-
-        StoreTeardown(Fdo->StoreContext);
-        Fdo->StoreContext = NULL;
 
         EvtchnTeardown(Fdo->EvtchnContext);
         Fdo->EvtchnContext = NULL;

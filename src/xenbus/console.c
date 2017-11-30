@@ -64,10 +64,10 @@ struct _XENBUS_CONSOLE_CONTEXT {
     PXENBUS_EVTCHN_CHANNEL      Channel;
     ULONG                       Events;
     ULONG                       Dpcs;
+    XENBUS_GNTTAB_INTERFACE     GnttabInterface;
     XENBUS_EVTCHN_INTERFACE     EvtchnInterface;
     XENBUS_SUSPEND_INTERFACE    SuspendInterface;
     XENBUS_DEBUG_INTERFACE      DebugInterface;
-    PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackLate;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
     BOOLEAN                     Enabled;
@@ -371,40 +371,36 @@ ConsoleEnable(
         Context->Dpcs++;
 }
 
-static PHYSICAL_ADDRESS
+static
 ConsoleGetAddress(
-    PXENBUS_CONSOLE_CONTEXT Context
+    IN  PXENBUS_CONSOLE_CONTEXT Context,
+    OUT PPHYSICAL_ADDRESS       Address
     )
 {
-    PHYSICAL_ADDRESS        Address;
-    NTSTATUS                status;
+    PFN_NUMBER                  Pfn;
+    NTSTATUS                    status;
 
-    UNREFERENCED_PARAMETER(Context);
+    status = XENBUS_GNTTAB(QueryReference,
+                           &Context->GnttabInterface,
+                           XENBUS_GNTTAB_CONSOLE_REFERENCE,
+                           &Pfn,
+                           NULL);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
-    status = HvmGetParam(HVM_PARAM_CONSOLE_PFN,
-                         (PULONGLONG)&Address.QuadPart);
-    ASSERT(NT_SUCCESS(status));
-
-    Address.QuadPart <<= PAGE_SHIFT;
+    Address->QuadPart = Pfn << PAGE_SHIFT;
 
     LogPrintf(LOG_LEVEL_INFO,
               "CONSOLE: PAGE @ %08x.%08x\n",
-              Address.HighPart,
-              Address.LowPart);
+              Address->HighPart,
+              Address->LowPart);
 
-    return Address;
-}
+    return STATUS_SUCCESS;
 
-static VOID
-ConsoleSuspendCallbackEarly(
-    IN  PVOID               Argument
-    )
-{
-    PXENBUS_CONSOLE_CONTEXT Context = Argument;
-    PHYSICAL_ADDRESS        Address;
+fail1:
+    Error("fail1 (%08x)\n", status);
 
-    Address = ConsoleGetAddress(Context);
-    ASSERT3U(Address.QuadPart, ==, Context->Address.QuadPart);
+    return status;
 }
 
 static VOID
@@ -415,6 +411,11 @@ ConsoleSuspendCallbackLate(
     PXENBUS_CONSOLE_CONTEXT     Context = Argument;
     struct xencons_interface    *Shared;
     KIRQL                       Irql;
+    PHYSICAL_ADDRESS            Address;
+    NTSTATUS                    status;
+
+    status = ConsoleGetAddress(Context, &Address);
+    ASSERT3U(Address.QuadPart, ==, Context->Address.QuadPart);
 
     Shared = Context->Shared;
 
@@ -671,6 +672,7 @@ ConsoleAcquire(
 {
     PXENBUS_CONSOLE_CONTEXT Context = Interface->Context;
     KIRQL                   Irql;
+    PHYSICAL_ADDRESS        Address;
     NTSTATUS                status;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
@@ -680,32 +682,31 @@ ConsoleAcquire(
 
     Trace("====>\n");
 
-    Context->Address = ConsoleGetAddress(Context);
+    status = XENBUS_GNTTAB(Acquire, &Context->GnttabInterface);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = ConsoleGetAddress(Context, &Address);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Context->Address = Address;
     Context->Shared = (struct xencons_interface *)MmMapIoSpace(Context->Address,
                                                                PAGE_SIZE,
                                                                MmCached);
     status = STATUS_UNSUCCESSFUL;
     if (Context->Shared == NULL)
-        goto fail1;
+        goto fail3;
 
     status = XENBUS_EVTCHN(Acquire, &Context->EvtchnInterface);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail4;
 
     ConsoleEnable(Context);
 
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail3;
-
-    status = XENBUS_SUSPEND(Register,
-                            &Context->SuspendInterface,
-                            SUSPEND_CALLBACK_EARLY,
-                            ConsoleSuspendCallbackEarly,
-                            Context,
-                            &Context->SuspendCallbackEarly);
-    if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail5;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -714,11 +715,11 @@ ConsoleAcquire(
                             Context,
                             &Context->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail7;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -727,7 +728,7 @@ ConsoleAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail8;
 
     Trace("<====\n");
 
@@ -736,44 +737,46 @@ done:
 
     return STATUS_SUCCESS;
 
-fail7:
-    Error("fail7\n");
+fail8:
+    Error("fail8\n");
 
     XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-fail6:
-    Error("fail6\n");
+fail7:
+    Error("fail7\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackLate);
     Context->SuspendCallbackLate = NULL;
 
-fail5:
-    Error("fail5\n");
-
-    XENBUS_SUSPEND(Deregister,
-                   &Context->SuspendInterface,
-                   Context->SuspendCallbackEarly);
-    Context->SuspendCallbackEarly = NULL;
-
-fail4:
-    Error("fail4\n");
+fail6:
+    Error("fail6\n");
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-fail3:
-    Error("fail3\n");
+fail5:
+    Error("fail5\n");
 
     ConsoleDisable(Context);
 
     XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
 
-fail2:
-    Error("fail2\n");
+fail4:
+    Error("fail4\n");
 
     MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
     Context->Shared = NULL;
+
+fail3:
+    Error("fail3\n");
+
+    Context->Address.QuadPart = 0;
+
+fail2:
+    Error("fail2\n");
+
+    XENBUS_GNTTAB(Release, &Context->GnttabInterface);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -817,11 +820,6 @@ ConsoleRelease(
                    Context->SuspendCallbackLate);
     Context->SuspendCallbackLate = NULL;
 
-    XENBUS_SUSPEND(Deregister,
-                   &Context->SuspendInterface,
-                   Context->SuspendCallbackEarly);
-    Context->SuspendCallbackEarly = NULL;
-
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
     ConsoleDisable(Context);
@@ -832,6 +830,8 @@ ConsoleRelease(
     Context->Shared = NULL;
 
     Context->Address.QuadPart = 0;
+
+    XENBUS_GNTTAB(Release, &Context->GnttabInterface);
 
     Trace("<====\n");
 
@@ -866,6 +866,13 @@ ConsoleInitialize(
     status = STATUS_NO_MEMORY;
     if (*Context == NULL)
         goto fail1;
+
+    status = GnttabGetInterface(FdoGetGnttabContext(Fdo),
+                                XENBUS_GNTTAB_INTERFACE_VERSION_MAX,
+                                (PINTERFACE)&(*Context)->GnttabInterface,
+                                sizeof ((*Context)->GnttabInterface));
+    ASSERT(NT_SUCCESS(status));
+    ASSERT((*Context)->GnttabInterface.Interface.Context != NULL);
 
     status = EvtchnGetInterface(FdoGetEvtchnContext(Fdo),
                                 XENBUS_EVTCHN_INTERFACE_VERSION_MAX,
@@ -983,6 +990,9 @@ ConsoleTeardown(
 
     RtlZeroMemory(&Context->EvtchnInterface,
                   sizeof (XENBUS_EVTCHN_INTERFACE));
+
+    RtlZeroMemory(&Context->GnttabInterface,
+                  sizeof (XENBUS_GNTTAB_INTERFACE));
 
     ASSERT(IsZeroMemory(Context, sizeof (XENBUS_CONSOLE_CONTEXT)));
     __ConsoleFree(Context);
