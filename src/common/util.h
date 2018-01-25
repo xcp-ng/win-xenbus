@@ -219,7 +219,11 @@ __AllocatePages(
     if (MdlMappedSystemVa == NULL)
         goto fail3;
 
-    ASSERT3P(MdlMappedSystemVa, ==, Mdl->MappedSystemVa);
+    Mdl->StartVa = PAGE_ALIGN(MdlMappedSystemVa);
+
+    ASSERT3U(Mdl->ByteOffset, ==, 0);
+    ASSERT3P(Mdl->StartVa, ==, MdlMappedSystemVa);
+    ASSERT3P(Mdl->MappedSystemVa, ==, MdlMappedSystemVa);
 
     RtlZeroMemory(MdlMappedSystemVa, Mdl->ByteCount);
 
