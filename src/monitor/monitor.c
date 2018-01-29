@@ -360,8 +360,8 @@ PromptForReboot(
     PTCHAR              DisplayName;
     DWORD               Type;
     PTCHAR              Description;
-    PTCHAR              Message;
-    DWORD               MessageLength;
+    PTCHAR              Body;
+    DWORD               BodyLength;
     PWTS_SESSION_INFO   SessionInfo;
     DWORD               Count;
     DWORD               Index;
@@ -435,17 +435,17 @@ PromptForReboot(
     else
         Description++;
 
-    MessageLength = (DWORD)((_tcslen(Description) +
-                             1 + // ' '
-                             _tcslen(Context->Message) +
-                             1) * sizeof (TCHAR));
+    BodyLength = (DWORD)((_tcslen(Description) +
+                          1 + // ' '
+                          _tcslen(Context->Message) +
+                          1) * sizeof (TCHAR));
 
-    Message = calloc(1, MessageLength);
-    if (Message == NULL)
+    Body = calloc(1, BodyLength);
+    if (Body == NULL)
         goto fail6;
 
-    Result = StringCbPrintf(Message,
-                            MessageLength,
+    Result = StringCbPrintf(Body,
+                            BodyLength,
                             TEXT("%s %s"),
                             Description,
                             Context->Message);
@@ -480,8 +480,8 @@ PromptForReboot(
                                  SessionId,
                                  Title,
                                  TitleLength,
-                                 Message,
-                                 MessageLength,
+                                 Body,
+                                 BodyLength,
                                  MB_YESNO | MB_ICONEXCLAMATION,
                                  Timeout,
                                  &Response,

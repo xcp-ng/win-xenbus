@@ -906,14 +906,11 @@ DEFINE_PDO_QUERY_INTERFACE(Emulated)
 struct _INTERFACE_ENTRY {
     const GUID  *Guid;
     const CHAR  *Name;
-    NTSTATUS    (*Query)(PXENBUS_PDO, PIRP);
+    NTSTATUS    (*Query)(PXENFILT_PDO, PIRP);
 };
 
-#define DEFINE_INTERFACE_ENTRY(_Guid, _Interface)   \
-    { &GUID_XENFILT_ ## _Guid, #_Guid, PdoQuery ## _Interface ## Interface }
-
 struct _INTERFACE_ENTRY PdoInterfaceTable[] = {
-    DEFINE_INTERFACE_ENTRY(EMULATED_INTERFACE, Emulated),
+    { &GUID_XENFILT_EMULATED_INTERFACE, "EMULATED_INTERFACE", PdoQueryEmulatedInterface },
     { NULL, NULL, NULL }
 };
 
