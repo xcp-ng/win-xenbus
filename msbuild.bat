@@ -1,6 +1,8 @@
-call "%VS%\VC\vcvarsall.bat" x86
+set MSBUILD_ROOT=%cd%
+call "%MSBUILD_VCVARSALL%" x86_amd64
 @echo on
-msbuild.exe /m:1 /p:Configuration="%CONFIGURATION%" /p:Platform="%PLATFORM%" /t:"%TARGET%" %EXTRA% %FILE%
+cd "%MSBUILD_ROOT%"
+msbuild.exe /m:1 /p:Configuration="%MSBUILD_CONFIGURATION%" /p:Platform="%MSBUILD_PLATFORM%" /t:"%MSBUILD_TARGET%" %MSBUILD_EXTRA% %MSBUILD_FILE%
 if errorlevel 1 goto error
 exit 0
 
