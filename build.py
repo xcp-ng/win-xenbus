@@ -171,18 +171,28 @@ def shell(command, dir):
     return sub.returncode
 
 
+def find(name, path):
+    for root, dirs, files in os.walk(path):
+        if name in files:
+            return os.path.join(root, name)
+
+
 class msbuild_failure(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):
         return repr(self.value)
 
+
 def msbuild(platform, configuration, target, file, args, dir):
-    os.environ['PLATFORM'] = platform
-    os.environ['CONFIGURATION'] = configuration
-    os.environ['TARGET'] = target
-    os.environ['FILE'] = file
-    os.environ['EXTRA'] = args
+    vcvarsall = find('vcvarsall.bat', os.environ['VS'])
+
+    os.environ['MSBUILD_PLATFORM'] = platform
+    os.environ['MSBUILD_CONFIGURATION'] = configuration
+    os.environ['MSBUILD_TARGET'] = target
+    os.environ['MSBUILD_FILE'] = file
+    os.environ['MSBUILD_EXTRA'] = args
+    os.environ['MSBUILD_VCVARSALL'] = vcvarsall
 
     bin = os.path.join(os.getcwd(), 'msbuild.bat')
 
@@ -199,8 +209,6 @@ def build_sln(name, release, arch, debug, vs):
         platform = 'Win32'
     elif arch == 'x64':
         platform = 'x64'
-
-    cwd = os.getcwd()
 
     msbuild(platform, configuration, 'Build', name + '.sln', '', vs)
 
@@ -357,23 +365,25 @@ def archive(filename, files, tgz=False):
     tar.close()
 
 
-
 def getVsVersion():
-    vsenv ={} 
-    vars = subprocess.check_output([os.environ['VS']+'\\VC\\vcvarsall.bat', '&&', 'set'], shell=True)
+    vsenv = {}
+    vcvarsall= find('vcvarsall.bat', os.environ['VS'])
+
+    vars = subprocess.check_output([vcvarsall, 'x86_amd64', '&&', 'set'], shell=True)
+
     for var in vars.splitlines():
         k, _, v = map(str.strip, var.strip().decode('utf-8').partition('='))
         if k.startswith('?'):
             continue
         vsenv[k] = v
 
-    mapping = { '11.0':'vs2012',
-                '12.0':'vs2013',
-                '14.0':'vs2015' }
+    mapping = { '14.0':'vs2015',
+                '15.0':'vs2017'}
 
     return mapping[vsenv['VisualStudioVersion']]
 
-if __name__ == '__main__':
+
+def main():
     debug = { 'checked': True, 'free': False }
     sdv = { 'nosdv': False, None: True }
     driver = 'xenbus'
@@ -418,9 +428,8 @@ if __name__ == '__main__':
 
     symstore_del(driver, 30)
 
-    release = { 'vs2012':'Windows Vista',
-                'vs2013':'Windows 7',
-                'vs2015':'Windows 8' }
+    release = { 'vs2015':'Windows 8',
+                'vs2017':'Windows 8' }
 
     shutil.rmtree(driver, ignore_errors=True)
 
@@ -441,4 +450,5 @@ if __name__ == '__main__':
     archive(driver + '\\source.tgz', manifest().splitlines(), tgz=True)
     archive(driver + '.tar', [driver,'revision'])
 
-
+if __name__ == '__main__':
+    main()
