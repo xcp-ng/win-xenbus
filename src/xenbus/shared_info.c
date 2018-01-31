@@ -542,25 +542,16 @@ SharedInfoAcquire(
 
     Trace("====>\n");
 
-    status = FdoAllocateIoSpace(Fdo, PAGE_SIZE, &Context->Address);
+    status = FdoAllocateHole(Fdo, 1, &Context->Shared, &Context->Address);
     if (!NT_SUCCESS(status))
         goto fail1;
 
     SharedInfoMap(Context);
-
-    Context->Shared = (shared_info_t *)MmMapIoSpace(Context->Address,
-                                                    PAGE_SIZE,
-                                                    MmCached);
-
-    status = STATUS_UNSUCCESSFUL;
-    if (Context->Shared == NULL)
-        goto fail2;
-
     SharedInfoEvtchnMaskAll(Context);
 
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail3;   
+        goto fail2;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -569,11 +560,11 @@ SharedInfoAcquire(
                             Context,
                             &Context->SuspendCallbackEarly);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail3;
 
     status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail4;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -582,7 +573,7 @@ SharedInfoAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail5;
 
     Trace("<====\n");
 
@@ -591,37 +582,32 @@ done:
 
     return STATUS_SUCCESS;
 
-fail6:
-    Error("fail6\n");
+fail5:
+    Error("fail5\n");
 
     XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-fail5:
-    Error("fail5\n");
+fail4:
+    Error("fail4\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
-fail4:
-    Error("fail4\n");
-
-    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
-
 fail3:
     Error("fail3\n");
 
-    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
-    Context->Shared = NULL;
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
 fail2:
     Error("fail2\n");
 
     SharedInfoUnmap(Context);
 
-    FdoFreeIoSpace(Fdo, Context->Address, PAGE_SIZE);
+    FdoFreeHole(Fdo, Context->Address, 1);
     Context->Address.QuadPart = 0;
+    Context->Shared = NULL;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -665,13 +651,11 @@ SharedInfoRelease (
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
-    Context->Shared = NULL;
-
     SharedInfoUnmap(Context);
 
-    FdoFreeIoSpace(Fdo, Context->Address, PAGE_SIZE);
+    FdoFreeHole(Fdo, Context->Address, 1);
     Context->Address.QuadPart = 0;
+    Context->Shared = NULL;
 
     Trace("<====\n");
 

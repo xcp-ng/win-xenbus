@@ -132,17 +132,18 @@ FdoGetName(
     );
 
 extern NTSTATUS
-FdoAllocateIoSpace(
+FdoAllocateHole(
     IN  PXENBUS_FDO         Fdo,
-    IN  ULONG               Size,
-    OUT PPHYSICAL_ADDRESS   Address
+    IN  ULONG               Count,
+    OUT PVOID               *VirtualAddress OPTIONAL,
+    OUT PPHYSICAL_ADDRESS   PhysicalAddress
     );
 
 extern VOID
-FdoFreeIoSpace(
+FdoFreeHole(
     IN  PXENBUS_FDO         Fdo,
-    IN  PHYSICAL_ADDRESS    Address,
-    IN  ULONG               Size
+    IN  PHYSICAL_ADDRESS    PhysicalAddress,
+    IN  ULONG               Count
     );
 
 // Disable erroneous SAL warnings around use of interrupt locks

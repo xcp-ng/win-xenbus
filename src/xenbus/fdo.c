@@ -138,7 +138,9 @@ struct _XENBUS_FDO {
     XENBUS_RANGE_SET_INTERFACE      RangeSetInterface;
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
 
-    PXENBUS_RANGE_SET               IoRangeSet;
+    PUCHAR                          Buffer;
+    PMDL                            Mdl;
+    PXENBUS_RANGE_SET               RangeSet;
     LIST_ENTRY                      InterruptList;
 
     PXENBUS_EVTCHN_CHANNEL          Channel;
@@ -2841,61 +2843,62 @@ FdoSuspendCallbackLate(
 }
 
 static NTSTATUS
-FdoCreateIoSpace(
-    IN  PXENBUS_FDO                 Fdo
+FdoCreateHole(
+    IN  PXENBUS_FDO Fdo
     )
 {
-    ULONG                           Index;
-    PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
-    PHYSICAL_ADDRESS                End;
-    NTSTATUS                        status;
+    PMDL            Mdl;
+    PFN_NUMBER      Pfn;
+    LONGLONG        Start;
+    ULONG           Count;
+    NTSTATUS        status;
 
-    for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
-        Translated = &Fdo->TranslatedResourceList->PartialDescriptors[Index];
-
-        if (Translated->Type == CmResourceTypeMemory)
-            goto found;
-    }
-
-    status = STATUS_OBJECT_NAME_NOT_FOUND;
-    goto fail1;
-
-found:
     status = XENBUS_RANGE_SET(Create,
                               &Fdo->RangeSetInterface,
-                              "io_space",
-                              &Fdo->IoRangeSet);
+                              "hole",
+                              &Fdo->RangeSet);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail1;
+
+    Mdl = Fdo->Mdl;
+
+    Pfn = MmGetMdlPfnArray(Mdl)[0];
+
+    Start = Pfn;
+    Count = BYTES_TO_PAGES(Mdl->ByteCount);
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
-                              Fdo->IoRangeSet,
-                              Translated->u.Memory.Start.QuadPart,
-                              Translated->u.Memory.Length);
+                              Fdo->RangeSet,
+                              Start,
+                              Count);
     if (!NT_SUCCESS(status))
+        goto fail2;
+
+    status = STATUS_UNSUCCESSFUL;
+    if (MemoryDecreaseReservation(PAGE_ORDER_2M, 1, &Pfn) != 1)
         goto fail3;
 
-    End.QuadPart = Translated->u.Memory.Start.QuadPart + Translated->u.Memory.Length - 1;
-
-    Info("%08x.%08x - %08x.%08x\n",
-         Translated->u.Memory.Start.HighPart,
-         Translated->u.Memory.Start.LowPart,
-         End.HighPart,
-         End.LowPart);
+    Trace("%08x - %08x\n", Start, Start + Count - 1);
 
     return STATUS_SUCCESS;
 
 fail3:
     Error("fail3\n");
 
-    XENBUS_RANGE_SET(Destroy,
+    XENBUS_RANGE_SET(Get,
                      &Fdo->RangeSetInterface,
-                     Fdo->IoRangeSet);
-    Fdo->IoRangeSet = NULL;
+                     Fdo->RangeSet,
+                     Start,
+                     Count);
 
 fail2:
     Error("fail2\n");
+
+    XENBUS_RANGE_SET(Destroy,
+                     &Fdo->RangeSetInterface,
+                     Fdo->RangeSet);
+    Fdo->RangeSet = NULL;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -2904,25 +2907,40 @@ fail1:
 }
 
 NTSTATUS
-FdoAllocateIoSpace(
+FdoAllocateHole(
     IN  PXENBUS_FDO         Fdo,
-    IN  ULONG               Size,
-    OUT PPHYSICAL_ADDRESS   Address
+    IN  ULONG               Count,
+    OUT PVOID               *VirtualAddress OPTIONAL,
+    OUT PPHYSICAL_ADDRESS   PhysicalAddress
     )
 {
+    LONGLONG                Start;
     NTSTATUS                status;
-
-    ASSERT3U(Size & (PAGE_SIZE - 1), ==, 0);
 
     status = XENBUS_RANGE_SET(Pop,
                               &Fdo->RangeSetInterface,
-                              Fdo->IoRangeSet,
-                              Size,
-                              &Address->QuadPart);
+                              Fdo->RangeSet,
+                              Count,
+                              &Start);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    ASSERT3U(Address->QuadPart & (PAGE_SIZE - 1), ==, 0);
+    Trace("%08x - %08x\n", Start, Start + Count - 1);
+
+    if (VirtualAddress != NULL) {
+        PUCHAR  StartVa = Fdo->Buffer;
+        PMDL    Mdl = Fdo->Mdl;
+        ULONG   Index;
+        ULONG   ByteOffset;
+
+        Index = (ULONG)((PFN_NUMBER)Start - MmGetMdlPfnArray(Mdl)[0]);
+        ByteOffset = Index * PAGE_SIZE;
+        ASSERT3U(ByteOffset, <=, Mdl->ByteCount);
+
+        *VirtualAddress = StartVa + ByteOffset;
+    }
+
+    PhysicalAddress->QuadPart = Start << PAGE_SHIFT;
 
     return STATUS_SUCCESS;;
 
@@ -2933,56 +2951,62 @@ fail1:
 }
 
 VOID
-FdoFreeIoSpace(
+FdoFreeHole(
     IN  PXENBUS_FDO         Fdo,
-    IN  PHYSICAL_ADDRESS    Address,
-    IN  ULONG               Size
+    IN  PHYSICAL_ADDRESS    PhysicalAddress,
+    IN  ULONG               Count
     )
 {
+    LONGLONG                Start;
     NTSTATUS                status;
 
-    ASSERT3U(Address.QuadPart & (PAGE_SIZE - 1), ==, 0);
-    ASSERT3U(Size & (PAGE_SIZE - 1), ==, 0);
+    ASSERT3U(PhysicalAddress.QuadPart & (PAGE_SIZE - 1), ==, 0);
+    Start = PhysicalAddress.QuadPart >> PAGE_SHIFT;
+
+    Trace("%08x - %08x\n", Start, Start + Count - 1);
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
-                              Fdo->IoRangeSet,
-                              Address.QuadPart,
-                              Size);
+                              Fdo->RangeSet,
+                              Start,
+                              Count);
     ASSERT(NT_SUCCESS(status));
 }
 
 static VOID
-FdoDestroyIoSpace(
-    IN  PXENBUS_FDO                 Fdo
+FdoDestroyHole(
+    IN  PXENBUS_FDO Fdo
     )
 {
-    ULONG                           Index;
-    PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
-    NTSTATUS                        status;
+    PMDL            Mdl;
+    PFN_NUMBER      Pfn;
+    LONGLONG        Start;
+    ULONG           Count;
+    NTSTATUS        status;
 
-    for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
-        Translated = &Fdo->TranslatedResourceList->PartialDescriptors[Index];
+    Mdl = Fdo->Mdl;
 
-        if (Translated->Type == CmResourceTypeMemory)
-            goto found;
-    }
+    Pfn = MmGetMdlPfnArray(Mdl)[0];
 
-    ASSERT(FALSE);
-    return;
+    Start = Pfn;
+    Count = BYTES_TO_PAGES(Mdl->ByteCount);
 
-found:
+    Trace("%08x - %08x\n", Start, Start + Count - 1);
+
+    if (MemoryPopulatePhysmap(PAGE_ORDER_2M, 1, &Pfn) != 1)
+        BUG("FAILED TO RE-POPULATE HOLE");
+
     status = XENBUS_RANGE_SET(Get,
                               &Fdo->RangeSetInterface,
-                              Fdo->IoRangeSet,
-                              Translated->u.Memory.Start.QuadPart,
-                              Translated->u.Memory.Length);
+                              Fdo->RangeSet,
+                              Start,
+                              Count);
     ASSERT(NT_SUCCESS(status));
 
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
-                     Fdo->IoRangeSet);
-    Fdo->IoRangeSet = NULL;
+                     Fdo->RangeSet);
+    Fdo->RangeSet = NULL;
 }
 
 // This function must not touch pageable code or data
@@ -3019,7 +3043,7 @@ FdoD3ToD0(
         goto fail3;
 
     // Subsequent interfaces require use of BAR space
-    status = FdoCreateIoSpace(Fdo);
+    status = FdoCreateHole(Fdo);
     if (!NT_SUCCESS(status))
         goto fail4;
 
@@ -3112,7 +3136,7 @@ fail6:
 fail5:
     Error("fail5\n");
 
-    FdoDestroyIoSpace(Fdo);
+    FdoDestroyHole(Fdo);
 
 fail4:
     Error("fail4\n");
@@ -3227,7 +3251,7 @@ FdoD0ToD3(
 
     XENBUS_EVTCHN(Release, &Fdo->EvtchnInterface);
 
-    FdoDestroyIoSpace(Fdo);
+    FdoDestroyHole(Fdo);
 
     XENBUS_RANGE_SET(Release, &Fdo->RangeSetInterface);
 
@@ -5032,6 +5056,82 @@ fail1:
                       (_Size),                                                          \
                       (_Optional))
 
+
+#define FDO_HOLE_SIZE   (2ull << 20)
+
+static FORCEINLINE NTSTATUS
+__FdoAllocateBuffer(
+    IN  PXENBUS_FDO     Fdo
+    )
+{
+    ULONG               Size;
+    PHYSICAL_ADDRESS    Low;
+    PHYSICAL_ADDRESS    High;
+    PHYSICAL_ADDRESS    Align;
+    PVOID               Buffer;
+    PMDL                Mdl;
+    NTSTATUS            status;
+
+    Size = 2 << 20;
+
+    Low.QuadPart = 0;
+    High = SystemMaximumPhysicalAddress();
+    Align.QuadPart = Size;
+
+    Buffer = MmAllocateContiguousNodeMemory((SIZE_T)Size,
+                                            Low,
+                                            High,
+                                            Align,
+                                            PAGE_READWRITE,
+                                            MM_ANY_NODE_OK);
+
+    status = STATUS_NO_MEMORY;
+    if (Buffer == NULL)
+        goto fail1;
+
+    Mdl = IoAllocateMdl(Buffer,
+                        Size,
+                        FALSE,
+                        FALSE,
+                        NULL);
+
+    status = STATUS_NO_MEMORY;
+    if (Mdl == NULL)
+        goto fail2;
+
+    MmBuildMdlForNonPagedPool(Mdl);
+
+    ASSERT3U(Mdl->ByteOffset, ==, 0);
+    ASSERT3U(Mdl->ByteCount, ==, Size);
+
+    Fdo->Buffer = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+    Fdo->Mdl = Mdl;
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    MmFreeContiguousMemory(Buffer);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static FORCEINLINE VOID
+__FdoFreeBuffer(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    ExFreePool(Fdo->Mdl);
+    Fdo->Mdl = NULL;
+
+    MmFreeContiguousMemory(Fdo->Buffer);
+    Fdo->Buffer = NULL;
+}
+
 static BOOLEAN
 FdoIsBalloonEnabled(
     IN  PXENBUS_FDO Fdo
@@ -5138,50 +5238,54 @@ FdoCreate(
     if (!__FdoIsActive(Fdo))
         goto done;
 
-    status = DebugInitialize(Fdo, &Fdo->DebugContext);
+    status = __FdoAllocateBuffer(Fdo);
     if (!NT_SUCCESS(status))
         goto fail9;
 
-    status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
+    status = DebugInitialize(Fdo, &Fdo->DebugContext);
     if (!NT_SUCCESS(status))
         goto fail10;
 
-    status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
+    status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
     if (!NT_SUCCESS(status))
         goto fail11;
 
-    status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
+    status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
     if (!NT_SUCCESS(status))
         goto fail12;
 
-    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
+    status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
     if (!NT_SUCCESS(status))
         goto fail13;
 
-    status = CacheInitialize(Fdo, &Fdo->CacheContext);
+    status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
         goto fail14;
 
-    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
+    status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
         goto fail15;
 
-    status = StoreInitialize(Fdo, &Fdo->StoreContext);
+    status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
         goto fail16;
 
-    status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
+    status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
         goto fail17;
 
-    status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
+    status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
     if (!NT_SUCCESS(status))
         goto fail18;
+
+    status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
+    if (!NT_SUCCESS(status))
+        goto fail19;
 
     if (FdoIsBalloonEnabled(Fdo)) {
         status = BalloonInitialize(Fdo, &Fdo->BalloonContext);
         if (!NT_SUCCESS(status))
-            goto fail19;
+            goto fail20;
     }
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
@@ -5251,65 +5355,70 @@ done:
 
     return STATUS_SUCCESS;
 
-fail19:
-    Error("fail19\n");
+fail20:
+    Error("fail20\n");
 
     UnplugTeardown(Fdo->UnplugContext);
     Fdo->UnplugContext = NULL;
 
-fail18:
-    Error("fail18\n");
+fail19:
+    Error("fail19\n");
 
     ConsoleTeardown(Fdo->ConsoleContext);
     Fdo->ConsoleContext = NULL;
 
-fail17:
-    Error("fail17\n");
+fail18:
+    Error("fail18\n");
 
     StoreTeardown(Fdo->StoreContext);
     Fdo->StoreContext = NULL;
 
-fail16:
-    Error("fail16\n");
+fail17:
+    Error("fail17\n");
 
     GnttabTeardown(Fdo->GnttabContext);
     Fdo->GnttabContext = NULL;
 
-fail15:
-    Error("fail15\n");
+fail16:
+    Error("fail16\n");
 
     CacheTeardown(Fdo->CacheContext);
     Fdo->CacheContext = NULL;
 
-fail14:
-    Error("fail14\n");
+fail15:
+    Error("fail15\n");
 
     RangeSetTeardown(Fdo->RangeSetContext);
     Fdo->RangeSetContext = NULL;
 
-fail13:
-    Error("fail13\n");
+fail14:
+    Error("fail14\n");
 
     EvtchnTeardown(Fdo->EvtchnContext);
     Fdo->EvtchnContext = NULL;
 
-fail12:
-    Error("fail12\n");
+fail13:
+    Error("fail13\n");
 
     SharedInfoTeardown(Fdo->SharedInfoContext);
     Fdo->SharedInfoContext = NULL;
 
-fail11:
-    Error("fail11\n");
+fail12:
+    Error("fail12\n");
 
     SuspendTeardown(Fdo->SuspendContext);
     Fdo->SuspendContext = NULL;
 
-fail10:
-    Error("fail10\n");
+fail11:
+    Error("fail11\n");
 
     DebugTeardown(Fdo->DebugContext);
     Fdo->DebugContext = NULL;
+
+fail10:
+    Error("fail10\n");
+
+    __FdoFreeBuffer(Fdo);
 
 fail9:
     Error("fail9\n");
@@ -5452,6 +5561,8 @@ FdoDestroy(
 
         DebugTeardown(Fdo->DebugContext);
         Fdo->DebugContext = NULL;
+
+        __FdoFreeBuffer(Fdo);
 
         FdoClearActive(Fdo);
     }

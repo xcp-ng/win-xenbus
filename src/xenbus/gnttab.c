@@ -590,9 +590,10 @@ GnttabMapForeignPages(
     PXENBUS_GNTTAB_MAP_ENTRY    MapEntry;
     NTSTATUS                    status;
 
-    status = FdoAllocateIoSpace(Context->Fdo,
-                                NumberPages * PAGE_SIZE,
-                                Address);
+    status = FdoAllocateHole(Context->Fdo,
+                             NumberPages,
+                             NULL,
+                             Address);
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -644,7 +645,7 @@ fail3:
 fail2:
     Error("fail2\n");
 
-    FdoFreeIoSpace(Context->Fdo, *Address, NumberPages * PAGE_SIZE);
+    FdoFreeHole(Context->Fdo, *Address, NumberPages);
 
 fail1:
     Error("fail1: (%08x)\n", status);
@@ -685,9 +686,9 @@ GnttabUnmapForeignPages(
         PageAddress.QuadPart += PAGE_SIZE;
     }
 
-    FdoFreeIoSpace(Context->Fdo,
-                   Address,
-                   MapEntry->NumberPages * PAGE_SIZE);
+    FdoFreeHole(Context->Fdo,
+                Address,
+                MapEntry->NumberPages);
 
     __GnttabFree(MapEntry);
 
@@ -742,7 +743,6 @@ GnttabAcquire(
     PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
     PXENBUS_FDO             Fdo = Context->Fdo;
     KIRQL                   Irql;
-    ULONG                   Size;
     NTSTATUS                status;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
@@ -760,41 +760,33 @@ GnttabAcquire(
               "GNTTAB: MAX FRAMES = %u\n",
               Context->MaximumFrameCount);
 
-    Size = Context->MaximumFrameCount * PAGE_SIZE;
-
-    status = FdoAllocateIoSpace(Fdo,
-                                Size,
-                                &Context->Address);
+    status = FdoAllocateHole(Fdo,
+                             Context->MaximumFrameCount,
+                             &Context->Table,
+                             &Context->Address);
     if (!NT_SUCCESS(status))
         goto fail2;
-
-    Context->Table = (grant_entry_v1_t *)MmMapIoSpace(Context->Address,
-                                                      Size,
-                                                      MmCached);
-    status = STATUS_UNSUCCESSFUL;
-    if (Context->Table == NULL)
-        goto fail3;
 
     Context->FrameIndex = -1;
 
     status = XENBUS_RANGE_SET(Acquire, &Context->RangeSetInterface);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail3;
 
     status = XENBUS_RANGE_SET(Create,
                               &Context->RangeSetInterface,
                               "gnttab",
                               &Context->RangeSet);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail4;
 
     status = XENBUS_CACHE(Acquire, &Context->CacheInterface);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail5;
     
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail6;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -803,11 +795,11 @@ GnttabAcquire(
                             Context,
                             &Context->SuspendCallbackEarly);
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail7;
 
     status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail8;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -816,12 +808,12 @@ GnttabAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail9;
 
     /* Make sure at least the reserved refrences are present */
     status = GnttabExpand(Context);
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail10;
 
     Trace("<====\n");
 
@@ -830,39 +822,39 @@ done:
 
     return STATUS_SUCCESS;
 
-fail11:
-    Error("fail11\n");
+fail10:
+    Error("fail10\n");
 
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
                  Context->DebugCallback);
     Context->DebugCallback = NULL;
 
-fail10:
-    Error("fail10\n");
+fail9:
+    Error("fail9\n");
 
     XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-fail9:
-    Error("fail9\n");
+fail8:
+    Error("fail8\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackEarly);
     Context->SuspendCallbackEarly = NULL;
 
-fail8:
-    Error("fail8\n");
-
-    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
-
 fail7:
     Error("fail7\n");
 
-    XENBUS_CACHE(Release, &Context->CacheInterface);
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
 fail6:
     Error("fail6\n");
+
+    XENBUS_CACHE(Release, &Context->CacheInterface);
+
+fail5:
+    Error("fail5\n");
 
     GnttabContract(Context);
     ASSERT3S(Context->FrameIndex, ==, -1);
@@ -874,24 +866,19 @@ fail6:
 
     Context->FrameIndex = 0;
 
-fail5:
-    Error("fail5\n");
-
-    XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
-
 fail4:
     Error("fail4\n");
 
-    MmUnmapIoSpace(Context->Table, Size);
-    Context->Table = NULL;
+    XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
 
 fail3:
     Error("fail3\n");
 
-    FdoFreeIoSpace(Fdo,
-                   Context->Address,
-                   Size);
+    FdoFreeHole(Fdo,
+                Context->Address,
+                Context->MaximumFrameCount);
     Context->Address.QuadPart = 0;
+    Context->Table = NULL;
 
 fail2:
     Error("fail2\n");
@@ -916,7 +903,6 @@ GnttabRelease(
     PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
     PXENBUS_FDO             Fdo = Context->Fdo;
     KIRQL                   Irql;
-    ULONG                   Size;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -956,15 +942,11 @@ GnttabRelease(
 
     XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
 
-    Size = Context->MaximumFrameCount * PAGE_SIZE;
-
-    MmUnmapIoSpace(Context->Table, Size);
-    Context->Table = NULL;
-
-    FdoFreeIoSpace(Fdo,
-                   Context->Address,
-                   Size);
+    FdoFreeHole(Fdo,
+                Context->Address,
+                Context->MaximumFrameCount);
     Context->Address.QuadPart = 0;
+    Context->Table = NULL;
 
     Context->MaximumFrameCount = 0;
 
