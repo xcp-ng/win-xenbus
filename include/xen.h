@@ -452,4 +452,10 @@ SystemVirtualCpuIndex(
     OUT unsigned int    *vcpu_id
     );
 
+XEN_API
+PHYSICAL_ADDRESS
+SystemMaximumPhysicalAddress(
+    VOID
+    );
+
 #endif  // _XEN_H

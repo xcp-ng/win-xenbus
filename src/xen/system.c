@@ -62,6 +62,7 @@ typedef struct _SYSTEM_CONTEXT {
     ULONG               ProcessorCount;
     PVOID               PowerStateHandle;
     PVOID               ProcessorChangeHandle;
+    PHYSICAL_ADDRESS    MaximumPhysicalAddress;
 } SYSTEM_CONTEXT, *PSYSTEM_CONTEXT;
 
 static SYSTEM_CONTEXT   SystemContext;
@@ -224,6 +225,7 @@ SystemGetMemoryInformation(
     VOID
     )
 {
+    PSYSTEM_CONTEXT         Context = &SystemContext;
     PHYSICAL_MEMORY_RANGE   *Range;
     ULONG                   Index;
     NTSTATUS                status;
@@ -247,9 +249,16 @@ SystemGetMemoryInformation(
              Index,
              Start.HighPart, Start.LowPart,
              End.HighPart, End.LowPart);
+
+        if (End.QuadPart > Context->MaximumPhysicalAddress.QuadPart)
+            Context->MaximumPhysicalAddress.QuadPart = End.QuadPart;
     }
 
     ExFreePool(Range);
+
+    Info("MaximumPhysicalAddress = %08x.%08x\n",
+         Context->MaximumPhysicalAddress.HighPart,
+         Context->MaximumPhysicalAddress.LowPart);
 
     return STATUS_SUCCESS;
 
@@ -1018,6 +1027,17 @@ fail1:
     return status;
 }
 
+XEN_API
+PHYSICAL_ADDRESS
+SystemMaximumPhysicalAddress(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+
+    return Context->MaximumPhysicalAddress;
+}
+
 VOID
 SystemTeardown(
     VOID
@@ -1031,6 +1051,8 @@ SystemTeardown(
 
     __SystemFree(Context->Madt);
     Context->Madt = NULL;
+
+    Context->MaximumPhysicalAddress.QuadPart = 0;
 
     (VOID) InterlockedDecrement(&Context->References);
 
