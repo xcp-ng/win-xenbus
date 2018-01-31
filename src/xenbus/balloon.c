@@ -340,17 +340,17 @@ BalloonPopulatePhysmap(
     IN  PPFN_NUMBER PfnArray
     )
 {
-    LARGE_INTEGER           Start;
-    LARGE_INTEGER           End;
-    ULONGLONG               TimeDelta;
-    ULONGLONG               Rate;
-    ULONG                   Count;
+    LARGE_INTEGER   Start;
+    LARGE_INTEGER   End;
+    ULONGLONG       TimeDelta;
+    ULONGLONG       Rate;
+    ULONG           Count;
 
     ASSERT(Requested != 0);
 
     KeQuerySystemTime(&Start);
 
-    Count = MemoryPopulatePhysmap(Requested, PfnArray);
+    Count = MemoryPopulatePhysmap(Requested, PAGE_ORDER_4K, PfnArray);
 
     KeQuerySystemTime(&End);
     TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
@@ -427,17 +427,17 @@ BalloonDecreaseReservation(
     IN  PPFN_NUMBER PfnArray
     )
 {
-    LARGE_INTEGER           Start;
-    LARGE_INTEGER           End;
-    ULONGLONG               TimeDelta;
-    ULONGLONG               Rate;
-    ULONG                   Count;
+    LARGE_INTEGER   Start;
+    LARGE_INTEGER   End;
+    ULONGLONG       TimeDelta;
+    ULONGLONG       Rate;
+    ULONG           Count;
 
     ASSERT(Requested != 0);
 
     KeQuerySystemTime(&Start);
 
-    Count = MemoryDecreaseReservation(Requested, PfnArray);
+    Count = MemoryDecreaseReservation(Requested, PAGE_ORDER_4K, PfnArray);
 
     KeQuerySystemTime(&End);
     TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);

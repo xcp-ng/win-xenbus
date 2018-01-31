@@ -84,6 +84,7 @@ __checkReturn
 XEN_API
 ULONG
 MemoryDecreaseReservation(
+    IN  ULONG                       Order,
     IN  ULONG                       Count,
     IN  PPFN_NUMBER                 PfnArray
     )
@@ -92,7 +93,7 @@ MemoryDecreaseReservation(
     LONG_PTR                        rc;
 
     set_xen_guest_handle(op.extent_start, PfnArray);
-    op.extent_order = 0;
+    op.extent_order = Order;
     op.mem_flags = 0;
     op.domid = DOMID_SELF;
     op.nr_extents = Count;
@@ -106,6 +107,7 @@ __checkReturn
 XEN_API
 ULONG
 MemoryPopulatePhysmap(
+    IN  ULONG                       Order,
     IN  ULONG                       Count,
     IN  PPFN_NUMBER                 PfnArray
     )
@@ -114,7 +116,7 @@ MemoryPopulatePhysmap(
     LONG_PTR                        rc;
 
     set_xen_guest_handle(op.extent_start, PfnArray);
-    op.extent_order = 0;
+    op.extent_order = Order;
     op.mem_flags = 0;
     op.domid = DOMID_SELF;
     op.nr_extents = Count;

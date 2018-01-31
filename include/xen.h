@@ -126,10 +126,14 @@ MemoryAddToPhysmap(
     IN  ULONG_PTR   Offset
     );
 
+#define PAGE_ORDER_4K   0
+#define PAGE_ORDER_2M   9
+
 __checkReturn
 XEN_API
 ULONG
 MemoryDecreaseReservation(
+    IN  ULONG       Order,
     IN  ULONG       Count,
     IN  PPFN_NUMBER PfnArray
     );
@@ -138,6 +142,7 @@ __checkReturn
 XEN_API
 ULONG
 MemoryPopulatePhysmap(
+    IN  ULONG       Order,
     IN  ULONG       Count,
     IN  PPFN_NUMBER PfnArray
     );
