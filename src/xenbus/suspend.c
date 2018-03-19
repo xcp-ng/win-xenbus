@@ -140,6 +140,46 @@ SuspendDeregister(
     __SuspendFree(Callback);
 }
 
+static FORCEINLINE VOID
+__SuspendLogTimers(
+    IN  const CHAR  *Prefix
+    )
+{
+    LARGE_INTEGER   SystemTime;
+    LARGE_INTEGER   TickCount;
+    ULONG           TimeIncrement;
+    LARGE_INTEGER   PerformanceCounter;
+    LARGE_INTEGER   PerformanceFrequency;
+
+    KeQuerySystemTime(&SystemTime);
+
+    TimeIncrement = KeQueryTimeIncrement();
+    KeQueryTickCount(&TickCount);
+
+    PerformanceCounter = KeQueryPerformanceCounter(&PerformanceFrequency);
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "%s: SystemTime = %08x.%08x\n",
+              Prefix,
+              SystemTime.HighPart,
+              SystemTime.LowPart);
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "%s: TickCount = %08x.%08x (TimeIncrement = %08x)\n",
+              Prefix,
+              TickCount.HighPart,
+              TickCount.LowPart,
+              TimeIncrement);
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "%s: PerformanceCounter = %08x.%08x (Frequency = %08x.%08x)\n",
+              Prefix,
+              PerformanceCounter.HighPart,
+              PerformanceCounter.LowPart,
+              PerformanceFrequency.HighPart,
+              PerformanceFrequency.LowPart);
+}
+
 NTSTATUS
 #pragma prefast(suppress:28167) // Function changes IRQL
 SuspendTrigger(
@@ -158,12 +198,16 @@ SuspendTrigger(
     SyncCapture();
     SyncDisableInterrupts();
 
+    __SuspendLogTimers("PRE-SUSPEND");
+
     LogPrintf(LOG_LEVEL_INFO,
               "SUSPEND: SCHEDOP_shutdown:SHUTDOWN_suspend ====>\n");
     status = SchedShutdown(SHUTDOWN_suspend);
     LogPrintf(LOG_LEVEL_INFO,
               "SUSPEND: SCHEDOP_shutdown:SHUTDOWN_suspend <==== (%08x)\n",
               status);
+
+    __SuspendLogTimers("POST-SUSPEND");
 
     if (NT_SUCCESS(status)) {
         PLIST_ENTRY ListEntry;
