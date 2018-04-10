@@ -540,6 +540,8 @@ done:
     return STATUS_SUCCESS;
 
 fail2:
+    Error("fail2\n");
+
     __FreePage(Mdl);
 
 fail1:
@@ -550,8 +552,7 @@ fail1:
     while (--Index >= 0) {
         unsigned int    vcpu_id;
 
-        status = SystemVirtualCpuIndex(Index, &vcpu_id);
-        ASSERT(NT_SUCCESS(status));
+        (VOID) SystemVirtualCpuIndex(Index, &vcpu_id);
 
         Mdl = Context->ControlBlockMdl[vcpu_id];
         Context->ControlBlockMdl[vcpu_id] = NULL;
