@@ -1524,11 +1524,12 @@ FdoSuspend(
         if (!NT_SUCCESS(status))
             goto loop;
 
-        (VOID) XENBUS_STORE(Remove,
+        (VOID) XENBUS_STORE(Printf,
                             &Fdo->StoreInterface,
                             NULL,
                             "control",
-                            "shutdown");
+                            "shutdown",
+                            "");
 
         (VOID) XENBUS_SUSPEND(Trigger, &Fdo->SuspendInterface);
 
