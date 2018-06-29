@@ -46,19 +46,28 @@ RtlRandomEx (
     __inout PULONG Seed
     );
 
-typedef struct _XENBUS_CACHE_OBJECT_HEADER {
-    ULONG       Magic;
-
-#define XENBUS_CACHE_OBJECT_HEADER_MAGIC 'EJBO'
-
-    LIST_ENTRY  ListEntry;
-} XENBUS_CACHE_OBJECT_HEADER, *PXENBUS_CACHE_OBJECT_HEADER;
-
 #define XENBUS_CACHE_MAGAZINE_SLOTS   6
 
 typedef struct _XENBUS_CACHE_MAGAZINE {
     PVOID   Slot[XENBUS_CACHE_MAGAZINE_SLOTS];
 } XENBUS_CACHE_MAGAZINE, *PXENBUS_CACHE_MAGAZINE;
+
+
+#define XENBUS_CACHE_SLAB_MAGIC 'BALS'
+
+typedef struct _XENBUS_CACHE_SLAB {
+    ULONG           Magic;
+    LIST_ENTRY      ListEntry;
+    ULONG           Size;
+    ULONG           Count;
+    ULONG           Allocated;
+    UCHAR           Buffer[1];
+} XENBUS_CACHE_SLAB, *PXENBUS_CACHE_SLAB;
+
+#define BITS_PER_ULONG (sizeof (ULONG) * 8)
+#define MINIMUM_OBJECT_SIZE (PAGE_SIZE / BITS_PER_ULONG)
+
+C_ASSERT(sizeof (XENBUS_CACHE_SLAB) <= MINIMUM_OBJECT_SIZE);
 
 #define MAXNAMELEN  128
 
@@ -72,11 +81,8 @@ struct _XENBUS_CACHE {
     VOID                    (*AcquireLock)(PVOID);
     VOID                    (*ReleaseLock)(PVOID);
     PVOID                   Argument;
-    LIST_ENTRY              GetList;
-    LONG                    GetCount;
-    PLIST_ENTRY             PutList;
-    LONG                    PutCount;
-    LONG                    ListCount;
+    LIST_ENTRY              SlabList;
+    ULONG                   Count;
     PXENBUS_CACHE_MAGAZINE  Magazine;
     ULONG                   MagazineCount;
 };
@@ -87,7 +93,6 @@ struct _XENBUS_CACHE_CONTEXT {
     LONG                    References;
     XENBUS_DEBUG_INTERFACE  DebugInterface;
     PXENBUS_DEBUG_CALLBACK  DebugCallback;
-    PXENBUS_THREAD          MonitorThread;
     LIST_ENTRY              List;
 };
 
@@ -109,198 +114,50 @@ __CacheFree(
     __FreePoolWithTag(Buffer, CACHE_TAG);
 }
 
-static VOID
-CacheSwizzle(
-    IN  PXENBUS_CACHE   Cache
-    )
-{
-    PLIST_ENTRY         List;
-
-    List = InterlockedExchangePointer(&Cache->PutList, NULL);
-
-    // Not really a doubly-linked list; it's actually a singly-linked
-    // list via the Flink field.
-    while (List != NULL) {
-        PLIST_ENTRY                 Next;
-        PXENBUS_CACHE_OBJECT_HEADER Header;
-
-        Next = List->Flink;
-        List->Flink = NULL;
-        ASSERT3P(List->Blink, ==, NULL);
-
-        Header = CONTAINING_RECORD(List,
-                                   XENBUS_CACHE_OBJECT_HEADER,
-                                   ListEntry);
-        ASSERT3U(Header->Magic, ==, XENBUS_CACHE_OBJECT_HEADER_MAGIC);
-
-        InsertTailList(&Cache->GetList, &Header->ListEntry);
-
-        List = Next;
-    }
-}
-
-static PVOID
-CacheCreateObject(
-    IN  PXENBUS_CACHE           Cache
-    )
-{
-    PXENBUS_CACHE_OBJECT_HEADER Header;
-    PVOID                       Object;
-    NTSTATUS                    status;
-
-    Header = __CacheAllocate(sizeof (XENBUS_CACHE_OBJECT_HEADER) +
-                             Cache->Size);
-
-    status = STATUS_NO_MEMORY;
-    if (Header == NULL)
-        goto fail1;
-
-    Header->Magic = XENBUS_CACHE_OBJECT_HEADER_MAGIC;
-
-    Object = Header + 1;
-
-    status = Cache->Ctor(Cache->Argument, Object);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    return Object;
-
-fail2:
-    Error("fail2\n");
-
-    Header->Magic = 0;
-
-    ASSERT(IsZeroMemory(Header, sizeof (XENBUS_CACHE_OBJECT_HEADER)));
-    __CacheFree(Header);
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return NULL;    
-}
-
-static FORCEINLINE
-__drv_savesIRQL
-__drv_raisesIRQL(DISPATCH_LEVEL)
-KIRQL
+static FORCEINLINE VOID
+__drv_requiresIRQL(DISPATCH_LEVEL)
 __CacheAcquireLock(
     IN  PXENBUS_CACHE   Cache
     )
 {
-    KIRQL               Irql;
-
-    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
     Cache->AcquireLock(Cache->Argument);
-
-    return Irql;
 }
 
 static FORCEINLINE VOID
 __drv_requiresIRQL(DISPATCH_LEVEL)
 __CacheReleaseLock(
-    IN  PXENBUS_CACHE               Cache,
-    IN  __drv_restoresIRQL KIRQL    Irql
+    IN  PXENBUS_CACHE   Cache
     )
 {
     Cache->ReleaseLock(Cache->Argument);
-    KeLowerIrql(Irql);
 }
 
-static PVOID
-CacheGetObjectFromList(
-    IN  PXENBUS_CACHE           Cache,
-    IN  BOOLEAN                 Locked
+static FORCEINLINE NTSTATUS
+__drv_requiresIRQL(DISPATCH_LEVEL)
+__CacheCtor(
+    IN  PXENBUS_CACHE   Cache,
+    IN  PVOID           Object
     )
 {
-    LONG                        Count;
-    PLIST_ENTRY                 ListEntry;
-    PXENBUS_CACHE_OBJECT_HEADER Header;
-    PVOID                       Object;
-    KIRQL                       Irql = PASSIVE_LEVEL;
-    NTSTATUS                    status;
-
-    Count = InterlockedDecrement(&Cache->ListCount);
-
-    status = STATUS_NO_MEMORY;
-    if (Count < 0)
-        goto fail1;
-
-    if (!Locked)
-        Irql = __CacheAcquireLock(Cache);
-
-    if (IsListEmpty(&Cache->GetList))
-        CacheSwizzle(Cache);
-
-    ListEntry = RemoveHeadList(&Cache->GetList);
-    ASSERT(ListEntry != &Cache->GetList);
-
-    if (!Locked)
-        __CacheReleaseLock(Cache, Irql);
-
-    RtlZeroMemory(ListEntry, sizeof (LIST_ENTRY));
-
-    Header = CONTAINING_RECORD(ListEntry,
-                               XENBUS_CACHE_OBJECT_HEADER,
-                               ListEntry);
-    ASSERT3U(Header->Magic, ==, XENBUS_CACHE_OBJECT_HEADER_MAGIC);
-
-    Object = Header + 1;
-
-    return Object;
-
-fail1:
-    (VOID) InterlockedIncrement(&Cache->ListCount);
-
-    return NULL;    
+    return Cache->Ctor(Cache->Argument, Object);
 }
 
-static VOID
-CachePutObjectToList(
-    IN  PXENBUS_CACHE           Cache,
-    IN  PVOID                   Object,
-    IN  BOOLEAN                 Locked
+static FORCEINLINE VOID
+__drv_requiresIRQL(DISPATCH_LEVEL)
+__CacheDtor(
+    IN  PXENBUS_CACHE   Cache,
+    IN  PVOID           Object
     )
 {
-    PXENBUS_CACHE_OBJECT_HEADER Header;
-    PLIST_ENTRY                 Old;
-    PLIST_ENTRY                 New;
-
-    ASSERT(Object != NULL);
-
-    Header = Object;
-    --Header;
-    ASSERT3U(Header->Magic, ==, XENBUS_CACHE_OBJECT_HEADER_MAGIC);
-
-    ASSERT(IsZeroMemory(&Header->ListEntry, sizeof (LIST_ENTRY)));
-
-    if (!Locked) {
-        New = &Header->ListEntry;
-
-        do {
-            Old = Cache->PutList;
-            New->Flink = Old;
-        } while (InterlockedCompareExchangePointer(&Cache->PutList,
-                                                   New,
-                                                   Old) != Old);
-    } else {
-        InsertTailList(&Cache->GetList, &Header->ListEntry);
-    }
-
-    KeMemoryBarrier();
-
-    (VOID) InterlockedIncrement(&Cache->ListCount);
+    Cache->Dtor(Cache->Argument, Object);
 }
 
 static PVOID
 CacheGetObjectFromMagazine(
-    IN  PXENBUS_CACHE       Cache,
-    IN  ULONG               Index
+    IN  PXENBUS_CACHE_MAGAZINE  Magazine
     )
 {
-    PXENBUS_CACHE_MAGAZINE  Magazine;
-
-    ASSERT3U(Index, <, Cache->MagazineCount);
-    Magazine = &Cache->Magazine[Index];
+    ULONG                       Index;
 
     for (Index = 0; Index < XENBUS_CACHE_MAGAZINE_SLOTS; Index++) {
         PVOID   Object;
@@ -316,157 +173,356 @@ CacheGetObjectFromMagazine(
     return NULL;
 }
 
-static BOOLEAN
+static NTSTATUS
 CachePutObjectToMagazine(
-    IN  PXENBUS_CACHE       Cache,
-    IN  ULONG               Index,
-    IN  PVOID               Object
+    IN  PXENBUS_CACHE_MAGAZINE  Magazine,
+    IN  PVOID                   Object
     )
 {
-    PXENBUS_CACHE_MAGAZINE  Magazine;
-
-    ASSERT3U(Index, <, Cache->MagazineCount);
-    Magazine = &Cache->Magazine[Index];
+    ULONG                       Index;
 
     for (Index = 0; Index < XENBUS_CACHE_MAGAZINE_SLOTS; Index++) {
         if (Magazine->Slot[Index] == NULL) {
             Magazine->Slot[Index] = Object;
-            return TRUE;
+            return STATUS_SUCCESS;
         }
     }
 
-    return FALSE;
+    return STATUS_UNSUCCESSFUL;
+}
+
+// Must be called with lock held
+static PXENBUS_CACHE_SLAB
+CacheCreateSlab(
+    IN  PXENBUS_CACHE   Cache
+    )
+{
+    ULONG               Size;
+    PXENBUS_CACHE_SLAB  Slab;
+    ULONG               NumberOfBytes;
+    LARGE_INTEGER       LowAddress;
+    LARGE_INTEGER       HighAddress;
+    LARGE_INTEGER       Boundary;
+    LONG                Index;
+    NTSTATUS            status;
+
+    Size = __max(Cache->Size, MINIMUM_OBJECT_SIZE);
+    Size = P2ROUNDUP(Size, sizeof (ULONG_PTR));
+
+    NumberOfBytes = P2ROUNDUP(FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer) +
+                              Size,
+                              PAGE_SIZE);
+
+    LowAddress.QuadPart = 0ull;
+    HighAddress.QuadPart = ~0ull;
+    Boundary.QuadPart = 0ull;
+
+    Slab = MmAllocateContiguousMemorySpecifyCacheNode((SIZE_T)NumberOfBytes,
+                                                      LowAddress,
+                                                      HighAddress,
+                                                      Boundary,
+                                                      MmCached,
+                                                      MM_ANY_NODE_OK);
+
+    status = STATUS_NO_MEMORY;
+    if (Slab == NULL)
+        goto fail1;
+
+    RtlZeroMemory(Slab, NumberOfBytes);
+
+    Slab->Magic = XENBUS_CACHE_SLAB_MAGIC;
+    Slab->Size = Size;
+    Slab->Count = (NumberOfBytes -
+                   FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer)) /
+                  Size;
+    ASSERT(Slab->Count != 0);
+
+    for (Index = 0; Index < (LONG)Slab->Count; Index++) {
+        PVOID Object = (PVOID)&Slab->Buffer[Index * Size];
+
+        status = __CacheCtor(Cache, Object);
+        if (!NT_SUCCESS(status))
+            goto fail2;
+    }
+
+    InsertHeadList(&Cache->SlabList, &Slab->ListEntry);
+    Cache->Count += Slab->Count;
+
+    return Slab;
+
+fail2:
+    while (--Index >= 0) {
+        PVOID Object = (PVOID)&Slab->Buffer[Index * Size];
+
+        __CacheDtor(Cache, Object);
+    }
+
+    MmFreeContiguousMemory(Slab);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return NULL;
+}
+
+// Must be called with lock held
+static NTSTATUS
+CacheDestroySlab(
+    IN  PXENBUS_CACHE       Cache,
+    IN  PXENBUS_CACHE_SLAB  Slab
+    )
+{
+    LONG                    Index;
+
+    // This may not have been previously tested under lock
+    if (Slab->Allocated != 0)
+        return STATUS_UNSUCCESSFUL;
+
+    ASSERT3U(Cache->Count, >=, Slab->Count);
+    Cache->Count -= Slab->Count;
+    RemoveEntryList(&Slab->ListEntry);
+
+    Index = Slab->Count;
+    while (--Index >= 0) {
+        PVOID Object = (PVOID)&Slab->Buffer[Index * Slab->Size];
+
+        __CacheDtor(Cache, Object);
+    }
+
+    MmFreeContiguousMemory(Slab);
+
+    return STATUS_SUCCESS;
+}
+
+// Must be called with lock held
+static PVOID
+CacheGetObjectFromSlab(
+    IN  PXENBUS_CACHE_SLAB  Slab
+    )
+{
+    ULONG                   Free;
+    ULONG                   Index;
+    ULONG                   Set;
+
+    Free = ~Slab->Allocated;
+    if (!_BitScanForward(&Index, Free) || Index >= Slab->Count)
+        return NULL;
+
+    Set = InterlockedBitTestAndSet((LONG *)&Slab->Allocated, Index);
+    ASSERT(!Set);
+
+    return (PVOID)&Slab->Buffer[Index * Slab->Size];
+}
+
+// May be called with or without lock held
+static VOID
+CachePutObjectToSlab(
+    IN  PXENBUS_CACHE_SLAB  Slab,
+    IN  PVOID               Object
+    )
+{
+    ULONG                   Index;
+
+    Index = (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) / Slab->Size;
+    BUG_ON(Index >= Slab->Count);
+
+    (VOID) InterlockedBitTestAndReset((LONG *)&Slab->Allocated, Index);
 }
 
 static PVOID
 CacheGet(
-    IN  PINTERFACE      Interface,
-    IN  PXENBUS_CACHE   Cache,
-    IN  BOOLEAN         Locked
+    IN  PINTERFACE          Interface,
+    IN  PXENBUS_CACHE       Cache,
+    IN  BOOLEAN             Locked
     )
 {
-    KIRQL               Irql;
-    ULONG               Index;
-    PVOID               Object;
+    KIRQL                   Irql;
+    ULONG                   Index;
+    PXENBUS_CACHE_MAGAZINE  Magazine;
+    PVOID                   Object;
+    PLIST_ENTRY             ListEntry;
 
     UNREFERENCED_PARAMETER(Interface);
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
     Index = KeGetCurrentProcessorNumberEx(NULL);
 
-    Object = CacheGetObjectFromMagazine(Cache, Index);
+    ASSERT3U(Index, <, Cache->MagazineCount);
+    Magazine = &Cache->Magazine[Index];
+
+    Object = CacheGetObjectFromMagazine(Magazine);
     if (Object != NULL)
         goto done;
 
-    Object = CacheGetObjectFromList(Cache, Locked);
-    if (Object != NULL)
-        goto done;
+    if (!Locked)
+        __CacheAcquireLock(Cache);
 
-    Object = CacheCreateObject(Cache);
+    for (ListEntry = Cache->SlabList.Flink;
+         ListEntry != &Cache->SlabList;
+         ListEntry = ListEntry->Flink) {
+        PXENBUS_CACHE_SLAB  Slab;
+
+        Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
+
+        Object = CacheGetObjectFromSlab(Slab);
+        if (Object != NULL)
+            break;
+    }
+
+    if (Object == NULL) {
+        PXENBUS_CACHE_SLAB  Slab;
+
+        Slab = CacheCreateSlab(Cache);
+        if (Slab != NULL)
+            Object = CacheGetObjectFromSlab(Slab);
+    }
+
+    if (!Locked)
+        __CacheReleaseLock(Cache);
 
 done:
     KeLowerIrql(Irql);
-
-    (VOID) InterlockedIncrement(&Cache->GetCount);
 
     return Object;
 }
 
 static VOID
 CachePut(
-    IN  PINTERFACE      Interface,
-    IN  PXENBUS_CACHE   Cache,
-    IN  PVOID           Object,
-    IN  BOOLEAN         Locked
+    IN  PINTERFACE          Interface,
+    IN  PXENBUS_CACHE       Cache,
+    IN  PVOID               Object,
+    IN  BOOLEAN             Locked
     )
 {
-    KIRQL               Irql;
-    ULONG               Index;
+    KIRQL                   Irql;
+    ULONG                   Index;
+    PXENBUS_CACHE_MAGAZINE  Magazine;
+    PXENBUS_CACHE_SLAB      Slab;
+    NTSTATUS                status;
 
     UNREFERENCED_PARAMETER(Interface);
-
-    (VOID) InterlockedIncrement(&Cache->PutCount);
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
     Index = KeGetCurrentProcessorNumberEx(NULL);
 
-    if (CachePutObjectToMagazine(Cache, Index, Object))
+    ASSERT3U(Index, <, Cache->MagazineCount);
+    Magazine = &Cache->Magazine[Index];
+
+    status = CachePutObjectToMagazine(Magazine, Object);
+
+    if (NT_SUCCESS(status))
         goto done;
 
-    CachePutObjectToList(Cache, Object, Locked);
+    Slab = (PXENBUS_CACHE_SLAB)PAGE_ALIGN(Object);
+    ASSERT3U(Slab->Magic, ==, XENBUS_CACHE_SLAB_MAGIC);
+
+    CachePutObjectToSlab(Slab, Object);
+
+    if (Slab->Allocated != 0)
+        goto done;
+
+    if (!Locked)
+        __CacheAcquireLock(Cache);
+
+    (VOID) CacheDestroySlab(Cache, Slab);
+
+    if (!Locked)
+        __CacheReleaseLock(Cache);
 
 done:
     KeLowerIrql(Irql);
 }
 
+static FORCEINLINE NTSTATUS
+__CacheFill(
+    IN  PXENBUS_CACHE   Cache
+    )
+{
+    KIRQL               Irql;
+    NTSTATUS            status;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+    __CacheAcquireLock(Cache);
+
+    while (Cache->Count < Cache->Reservation) {
+        PXENBUS_CACHE_SLAB  Slab;
+
+        Slab = CacheCreateSlab(Cache);
+
+        status = STATUS_NO_MEMORY;
+        if (Slab == NULL)
+            goto fail1;
+    }
+
+    __CacheReleaseLock(Cache);
+    KeLowerIrql(Irql);
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    while (!IsListEmpty(&Cache->SlabList)) {
+        PLIST_ENTRY         ListEntry = Cache->SlabList.Flink;
+        PXENBUS_CACHE_SLAB  Slab;
+
+        Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
+
+        (VOID) CacheDestroySlab(Cache, Slab);
+    }
+    ASSERT3U(Cache->Count, ==, 0);
+
+    __CacheReleaseLock(Cache);
+    KeLowerIrql(Irql);
+
+    return status;
+}
+
 static FORCEINLINE VOID
-CacheFlushMagazines(
+__CacheEmpty(
+    IN  PXENBUS_CACHE   Cache
+    )
+{
+    KIRQL               Irql;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+    __CacheAcquireLock(Cache);
+
+    while (!IsListEmpty(&Cache->SlabList)) {
+        PLIST_ENTRY         ListEntry = Cache->SlabList.Flink;
+        PXENBUS_CACHE_SLAB  Slab;
+        NTSTATUS            status;
+
+        Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
+
+        status = CacheDestroySlab(Cache, Slab);
+        ASSERT(NT_SUCCESS(status));
+    }
+    ASSERT3U(Cache->Count, ==, 0);
+
+    __CacheReleaseLock(Cache);
+    KeLowerIrql(Irql);
+}
+
+static FORCEINLINE VOID
+__CacheFlushMagazines(
     IN  PXENBUS_CACHE   Cache
     )
 {
     ULONG               Index;
 
     for (Index = 0; Index < Cache->MagazineCount; Index++) {
-        PVOID   Object;
+        PXENBUS_CACHE_MAGAZINE  Magazine = &Cache->Magazine[Index];
+        PVOID                   Object;
 
-        while ((Object = CacheGetObjectFromMagazine(Cache, Index)) != NULL)
-            CachePutObjectToList(Cache, Object, TRUE);
-    }
-}
+        while ((Object = CacheGetObjectFromMagazine(Magazine)) != NULL) {
+            PXENBUS_CACHE_SLAB  Slab;
 
-static VOID
-CacheDestroyObject(
-    IN  PXENBUS_CACHE           Cache,
-    IN  PVOID                   Object
-    )
-{
-    PXENBUS_CACHE_OBJECT_HEADER Header;
+            Slab = (PXENBUS_CACHE_SLAB)PAGE_ALIGN(Object);
+            ASSERT3U(Slab->Magic, ==, XENBUS_CACHE_SLAB_MAGIC);
 
-    Header = Object;
-    --Header;
-    ASSERT3U(Header->Magic, ==, XENBUS_CACHE_OBJECT_HEADER_MAGIC);
-
-    Cache->Dtor(Cache->Argument, Object);
-
-    Header->Magic = 0;
-
-    ASSERT(IsZeroMemory(Header, sizeof (XENBUS_CACHE_OBJECT_HEADER)));
-    __CacheFree(Header);
-}
-
-static NTSTATUS
-CacheFill(
-    IN  PXENBUS_CACHE   Cache,
-    IN  ULONG           Count
-    )
-{
-    while (Count != 0) {
-        PVOID   Object = CacheCreateObject(Cache);
-
-        if (Object == NULL)
-            break;
-
-        CachePutObjectToList(Cache, Object, FALSE);
-        --Count;
-    }
-
-    return (Count == 0) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
-}
-
-static VOID
-CacheSpill(
-    IN  PXENBUS_CACHE   Cache,
-    IN  ULONG           Count
-    )
-{
-    while (Count != 0) {
-        PVOID   Object = CacheGetObjectFromList(Cache, FALSE);
-
-        if (Object == NULL)
-            break;
-
-        CacheDestroyObject(Cache, Object);
-        --Count;
+            CachePutObjectToSlab(Slab, Object);
+        }
     }
 }
 
@@ -504,17 +560,20 @@ CacheCreate(
         goto fail2;
 
     (*Cache)->Size = Size;
+    (*Cache)->Reservation = Reservation;
     (*Cache)->Ctor = Ctor;
     (*Cache)->Dtor = Dtor;
     (*Cache)->AcquireLock = AcquireLock;
     (*Cache)->ReleaseLock = ReleaseLock;
     (*Cache)->Argument = Argument;
 
-    InitializeListHead(&(*Cache)->GetList);
+    InitializeListHead(&(*Cache)->SlabList);
 
-    status =  CacheFill(*Cache, Reservation);
-    if (!NT_SUCCESS(status))
-        goto fail3;
+    if ((*Cache)->Reservation != 0) {
+        status = __CacheFill(*Cache);
+        if (!NT_SUCCESS(status))
+            goto fail3;
+    }
 
     (*Cache)->MagazineCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
     (*Cache)->Magazine = __CacheAllocate(sizeof (XENBUS_CACHE_MAGAZINE) * (*Cache)->MagazineCount);
@@ -522,8 +581,6 @@ CacheCreate(
     status = STATUS_NO_MEMORY;
     if ((*Cache)->Magazine == NULL)
         goto fail4;
-
-    (*Cache)->Reservation = Reservation;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     InsertTailList(&Context->List, &(*Cache)->ListEntry);
@@ -538,10 +595,13 @@ fail4:
 
     (*Cache)->MagazineCount = 0;
 
+    __CacheEmpty(*Cache);
+
 fail3:
     Error("fail3\n");
 
-    RtlZeroMemory(&(*Cache)->GetList, sizeof (LIST_ENTRY));
+    ASSERT(IsListEmpty(&(*Cache)->SlabList));
+    RtlZeroMemory(&(*Cache)->SlabList, sizeof (LIST_ENTRY));
 
     (*Cache)->Argument = NULL;
     (*Cache)->ReleaseLock = NULL;
@@ -581,23 +641,18 @@ CacheDestroy(
 
     RtlZeroMemory(&Cache->ListEntry, sizeof (LIST_ENTRY));
 
-    ASSERT3U(Cache->PutCount, ==, Cache->GetCount);
-    Cache->PutCount = 0;
-    Cache->GetCount = 0;
-
-    Cache->Reservation = 0;
-    CacheFlushMagazines(Cache);
+    __CacheFlushMagazines(Cache);
 
     ASSERT(IsZeroMemory(Cache->Magazine, sizeof (XENBUS_CACHE_MAGAZINE) * Cache->MagazineCount));
     __CacheFree(Cache->Magazine);
     Cache->Magazine = NULL;
     Cache->MagazineCount = 0;
 
-    CacheSpill(Cache, Cache->ListCount);
-    ASSERT3U(Cache->ListCount, ==, 0);
+    __CacheEmpty(Cache);
+    Cache->Reservation = 0;
 
-    ASSERT(IsListEmpty(&Cache->GetList));
-    RtlZeroMemory(&Cache->GetList, sizeof (LIST_ENTRY));
+    ASSERT(IsListEmpty(&Cache->SlabList));
+    RtlZeroMemory(&Cache->SlabList, sizeof (LIST_ENTRY));
 
     Cache->Argument = NULL;
     Cache->ReleaseLock = NULL;
@@ -642,77 +697,10 @@ CacheDebugCallback(
                          &Context->DebugInterface,
                          "- %s: Count = %d (Reservation = %d)\n",
                          Cache->Name,
-                         Cache->ListCount,
+                         Cache->Count,
                          Cache->Reservation);
         }
     }
-}
-
-#define TIME_US(_us)        ((_us) * 10)
-#define TIME_MS(_ms)        (TIME_US((_ms) * 1000))
-#define TIME_S(_s)          (TIME_MS((_s) * 1000))
-#define TIME_RELATIVE(_t)   (-(_t))
-
-#define XENBUS_CACHE_MONITOR_PERIOD 5
-
-static NTSTATUS
-CacheMonitor(
-    IN  PXENBUS_THREAD      Self,
-    IN  PVOID               _Context
-    )
-{
-    PXENBUS_CACHE_CONTEXT   Context = _Context;
-    PKEVENT                 Event;
-    LARGE_INTEGER           Timeout;
-    PLIST_ENTRY             ListEntry;
-
-    Trace("====>\n");
-
-    Event = ThreadGetEvent(Self);
-
-    Timeout.QuadPart = TIME_RELATIVE(TIME_S(XENBUS_CACHE_MONITOR_PERIOD));
-
-    for (;;) {
-        KIRQL   Irql;
-
-        (VOID) KeWaitForSingleObject(Event,
-                                     Executive,
-                                     KernelMode,
-                                     FALSE,
-                                     &Timeout);
-        KeClearEvent(Event);
-
-        if (ThreadIsAlerted(Self))
-            break;
-
-        KeAcquireSpinLock(&Context->Lock, &Irql);
-
-        if (Context->References == 0)
-            goto loop;
-
-        for (ListEntry = Context->List.Flink;
-             ListEntry != &Context->List;
-             ListEntry = ListEntry->Flink) {
-            PXENBUS_CACHE   Cache;
-            ULONG           Count;
-
-            Cache = CONTAINING_RECORD(ListEntry, XENBUS_CACHE, ListEntry);
-
-            Count = Cache->ListCount;
-
-            if (Count < Cache->Reservation)
-                CacheFill(Cache, Cache->Reservation - Count);
-            else if (Count > Cache->Reservation)
-                CacheSpill(Cache, (Count - Cache->Reservation + 1) / 2);
-        }
-
-loop:
-        KeReleaseSpinLock(&Context->Lock, Irql);
-    }
-
-    Trace("====>\n");
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -833,24 +821,11 @@ CacheInitialize(
     InitializeListHead(&(*Context)->List);
     KeInitializeSpinLock(&(*Context)->Lock);
 
-    status = ThreadCreate(CacheMonitor, *Context, &(*Context)->MonitorThread);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
     (*Context)->Fdo = Fdo;
 
     Trace("<====\n");
 
     return STATUS_SUCCESS;
-
-fail2:
-    Error("fail2\n");
-
-    RtlZeroMemory(&(*Context)->Lock, sizeof (KSPIN_LOCK));
-    RtlZeroMemory(&(*Context)->List, sizeof (LIST_ENTRY));
-
-    RtlZeroMemory(&(*Context)->DebugInterface,
-                  sizeof (XENBUS_DEBUG_INTERFACE));
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -912,10 +887,6 @@ CacheTeardown(
     Trace("====>\n");
 
     Context->Fdo = NULL;
-
-    ThreadAlert(Context->MonitorThread);
-    ThreadJoin(Context->MonitorThread);
-    Context->MonitorThread = NULL;
 
     RtlZeroMemory(&Context->Lock, sizeof (KSPIN_LOCK));
     RtlZeroMemory(&Context->List, sizeof (LIST_ENTRY));
