@@ -256,7 +256,7 @@ def remove_timestamps(path):
 def run_sdv(name, dir, vs):
     release = { 'vs2012':'Windows 8',
                 'vs2013':'Windows 8',
-                'vs2015':'Windows 10' }
+                'vs2017':'Windows 10' }
 
     configuration = get_configuration(release[vs], False)
     platform = 'x64'
