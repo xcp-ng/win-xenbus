@@ -42,6 +42,10 @@
 
 #include "messages.h"
 
+#define stringify_literal(_text) #_text
+#define stringify(_text) stringify_literal(_text)
+#define __MODULE__ stringify(PROJECT)
+
 #define MONITOR_NAME        __MODULE__
 #define MONITOR_DISPLAYNAME MONITOR_NAME
 

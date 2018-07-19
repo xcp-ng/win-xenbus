@@ -267,7 +267,7 @@ def run_sdv(name, dir, vs):
             '/p:Inputs="/clean"', os.path.join(vs, name))
 
     msbuild(platform, configuration, 'sdv', name + '.vcxproj',
-            '/p:Inputs="/check:default.sdv"', os.path.join(vs, name))
+            '/p:Inputs="/check:default.sdv /debug"', os.path.join(vs, name))
 
     path = [vs, name, 'sdv', 'SDV.DVL.xml']
     remove_timestamps(os.path.join(*path))

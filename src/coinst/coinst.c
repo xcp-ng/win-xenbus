@@ -43,6 +43,10 @@
 #include <version.h>
 #include <revision.h>
 
+#define stringify_literal(_text) #_text
+#define stringify(_text) stringify_literal(_text)
+#define __MODULE__ stringify(PROJECT)
+
 __user_code;
 
 #define MAXIMUM_BUFFER_SIZE 1024
