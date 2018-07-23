@@ -191,6 +191,41 @@ CachePutObjectToMagazine(
     return STATUS_UNSUCCESSFUL;
 }
 
+static VOID
+CacheInsertSlab(
+    IN  PXENBUS_CACHE       Cache,
+    IN  PXENBUS_CACHE_SLAB  Slab
+    )
+{
+#define INSERT_BEFORE(_Cursor, _New)            \
+        do {                                    \
+            (_New)->Blink = (_Cursor)->Blink;   \
+            (_Cursor)->Blink->Flink = (_New);   \
+                                                \
+            (_Cursor)->Blink = (_New);          \
+            (_New)->Flink = (_Cursor);          \
+        } while (FALSE)
+
+    PLIST_ENTRY Cursor;
+
+    for (Cursor = Cache->SlabList.Flink;
+         Cursor != &Cache->SlabList;
+         Cursor = Cursor->Flink) {
+        PXENBUS_CACHE_SLAB  Next;
+
+        Next = CONTAINING_RECORD(Cursor, XENBUS_CACHE_SLAB, ListEntry);
+
+        if (Next->Allocated > Slab->Allocated) {
+            INSERT_BEFORE(Cursor, &Slab->ListEntry);
+            return;
+        }
+    }
+
+    InsertTailList(&Cache->SlabList, &Slab->ListEntry);
+
+#undef  INSERT_BEFORE
+}
+
 // Must be called with lock held
 static PXENBUS_CACHE_SLAB
 CacheCreateSlab(
@@ -241,7 +276,7 @@ CacheCreateSlab(
             goto fail2;
     }
 
-    InsertHeadList(&Cache->SlabList, &Slab->ListEntry);
+    CacheInsertSlab(Cache, Slab);
     Cache->Count += Slab->Count;
 
     return Slab;
@@ -262,7 +297,7 @@ fail1:
 }
 
 // Must be called with lock held
-static NTSTATUS
+static VOID
 CacheDestroySlab(
     IN  PXENBUS_CACHE       Cache,
     IN  PXENBUS_CACHE_SLAB  Slab
@@ -270,9 +305,7 @@ CacheDestroySlab(
 {
     LONG                    Index;
 
-    // This may not have been previously tested under lock
-    if (Slab->Allocated != 0)
-        return STATUS_UNSUCCESSFUL;
+    ASSERT3U(Slab->Allocated, ==, 0);
 
     ASSERT3U(Cache->Count, >=, Slab->Count);
     Cache->Count -= Slab->Count;
@@ -286,8 +319,6 @@ CacheDestroySlab(
     }
 
     MmFreeContiguousMemory(Slab);
-
-    return STATUS_SUCCESS;
 }
 
 // Must be called with lock held
@@ -420,13 +451,16 @@ CachePut(
 
     CachePutObjectToSlab(Slab, Object);
 
-    if (Slab->Allocated != 0)
-        goto done;
-
     if (!Locked)
         __CacheAcquireLock(Cache);
 
-    (VOID) CacheDestroySlab(Cache, Slab);
+    if (Slab->Allocated == 0) {
+        CacheDestroySlab(Cache, Slab);
+    } else {
+        /* Re-insert to keep slab list ordered */
+        RemoveEntryList(&Slab->ListEntry);
+        CacheInsertSlab(Cache, Slab);
+    }
 
     if (!Locked)
         __CacheReleaseLock(Cache);
@@ -470,7 +504,7 @@ fail1:
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
-        (VOID) CacheDestroySlab(Cache, Slab);
+        CacheDestroySlab(Cache, Slab);
     }
     ASSERT3U(Cache->Count, ==, 0);
 
@@ -493,12 +527,10 @@ __CacheEmpty(
     while (!IsListEmpty(&Cache->SlabList)) {
         PLIST_ENTRY         ListEntry = Cache->SlabList.Flink;
         PXENBUS_CACHE_SLAB  Slab;
-        NTSTATUS            status;
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
-        status = CacheDestroySlab(Cache, Slab);
-        ASSERT(NT_SUCCESS(status));
+        CacheDestroySlab(Cache, Slab);
     }
     ASSERT3U(Cache->Count, ==, 0);
 
