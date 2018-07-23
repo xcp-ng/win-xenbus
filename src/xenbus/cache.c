@@ -57,8 +57,8 @@ typedef struct _XENBUS_CACHE_MAGAZINE {
 
 typedef struct _XENBUS_CACHE_SLAB {
     ULONG           Magic;
+    PXENBUS_CACHE   Cache;
     LIST_ENTRY      ListEntry;
-    ULONG           Size;
     ULONG           Count;
     ULONG           Allocated;
     UCHAR           Buffer[1];
@@ -197,7 +197,6 @@ CacheCreateSlab(
     IN  PXENBUS_CACHE   Cache
     )
 {
-    ULONG               Size;
     PXENBUS_CACHE_SLAB  Slab;
     ULONG               NumberOfBytes;
     LARGE_INTEGER       LowAddress;
@@ -206,11 +205,8 @@ CacheCreateSlab(
     LONG                Index;
     NTSTATUS            status;
 
-    Size = __max(Cache->Size, MINIMUM_OBJECT_SIZE);
-    Size = P2ROUNDUP(Size, sizeof (ULONG_PTR));
-
     NumberOfBytes = P2ROUNDUP(FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer) +
-                              Size,
+                              Cache->Size,
                               PAGE_SIZE);
 
     LowAddress.QuadPart = 0ull;
@@ -231,14 +227,14 @@ CacheCreateSlab(
     RtlZeroMemory(Slab, NumberOfBytes);
 
     Slab->Magic = XENBUS_CACHE_SLAB_MAGIC;
-    Slab->Size = Size;
+    Slab->Cache = Cache;
     Slab->Count = (NumberOfBytes -
                    FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer)) /
-                  Size;
+                  Cache->Size;
     ASSERT(Slab->Count != 0);
 
     for (Index = 0; Index < (LONG)Slab->Count; Index++) {
-        PVOID Object = (PVOID)&Slab->Buffer[Index * Size];
+        PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         status = __CacheCtor(Cache, Object);
         if (!NT_SUCCESS(status))
@@ -252,7 +248,7 @@ CacheCreateSlab(
 
 fail2:
     while (--Index >= 0) {
-        PVOID Object = (PVOID)&Slab->Buffer[Index * Size];
+        PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         __CacheDtor(Cache, Object);
     }
@@ -284,7 +280,7 @@ CacheDestroySlab(
 
     Index = Slab->Count;
     while (--Index >= 0) {
-        PVOID Object = (PVOID)&Slab->Buffer[Index * Slab->Size];
+        PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         __CacheDtor(Cache, Object);
     }
@@ -300,9 +296,12 @@ CacheGetObjectFromSlab(
     IN  PXENBUS_CACHE_SLAB  Slab
     )
 {
+    PXENBUS_CACHE           Cache;
     ULONG                   Free;
     ULONG                   Index;
     ULONG                   Set;
+
+    Cache = Slab->Cache;
 
     Free = ~Slab->Allocated;
     if (!_BitScanForward(&Index, Free) || Index >= Slab->Count)
@@ -311,7 +310,7 @@ CacheGetObjectFromSlab(
     Set = InterlockedBitTestAndSet((LONG *)&Slab->Allocated, Index);
     ASSERT(!Set);
 
-    return (PVOID)&Slab->Buffer[Index * Slab->Size];
+    return (PVOID)&Slab->Buffer[Index * Cache->Size];
 }
 
 // May be called with or without lock held
@@ -321,9 +320,12 @@ CachePutObjectToSlab(
     IN  PVOID               Object
     )
 {
+    PXENBUS_CACHE           Cache;
     ULONG                   Index;
 
-    Index = (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) / Slab->Size;
+    Cache = Slab->Cache;
+
+    Index = (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) / Cache->Size;
     BUG_ON(Index >= Slab->Count);
 
     (VOID) InterlockedBitTestAndReset((LONG *)&Slab->Allocated, Index);
@@ -558,6 +560,9 @@ CacheCreate(
                                 Name);
     if (!NT_SUCCESS(status))
         goto fail2;
+
+    Size = __max(Size, MINIMUM_OBJECT_SIZE);
+    Size = P2ROUNDUP(Size, sizeof (ULONG_PTR));
 
     (*Cache)->Size = Size;
     (*Cache)->Reservation = Reservation;
