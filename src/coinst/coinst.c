@@ -1003,7 +1003,6 @@ SupportDeviceID(
     unsigned int    Revision;
     int             Count;
     DWORD           Index;
-    DWORD           LatestRevision;
     HRESULT         Error;
 
     DeviceID = strrchr(DeviceID, '&');
@@ -1027,10 +1026,9 @@ SupportDeviceID(
     goto fail2;
 
 found:
-    // If major part of the child device's revision does not match the major
-    // part of the latest revision then it means the driver binding will change.
-    LatestRevision = DeviceRevision[ARRAYSIZE(DeviceRevision) - 1];
-    if ((Revision & 0xFF000000) != (LatestRevision & 0xFF000000))
+    // If we don't match the latest revision then it means the driver
+    // binding will change.
+    if (Index < ARRAYSIZE(DeviceRevision) - 1)
         *NewBinding = TRUE;
 
     Log("%x", Revision);
