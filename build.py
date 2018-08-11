@@ -158,17 +158,17 @@ def shell(command, dir):
     print(dir)
     print(command)
     sys.stdout.flush()
-    
-    sub = subprocess.Popen(' '.join(command), cwd=dir,
-                           stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT)
+	
+    with subprocess.Popen(command, cwd=dir, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE) as p:
+        output, errors = p.communicate()
+    lines = output.splitlines()
 
-    for line in sub.stdout:
-        print(line.decode(sys.getdefaultencoding()).rstrip())
+    for line in lines:
+        print(line.rstrip())
 
-    sub.wait()
-
-    return sub.returncode
+    p.wait()	
+		
+    return p.returncode
 
 
 class msbuild_failure(Exception):
@@ -399,14 +399,17 @@ if __name__ == '__main__':
     vs = getVsVersion()
 
     if 'VENDOR_NAME' not in os.environ.keys():
-        os.environ['VENDOR_NAME'] = 'Xen Project'
+        os.environ['VENDOR_NAME'] = 'XCP-ng'
 
     if 'VENDOR_PREFIX' not in os.environ.keys():
-        os.environ['VENDOR_PREFIX'] = 'XP'
+        os.environ['VENDOR_PREFIX'] = 'XCPng'
 
     if 'PRODUCT_NAME' not in os.environ.keys():
-        os.environ['PRODUCT_NAME'] = 'Xen'
+        os.environ['PRODUCT_NAME'] = 'XCP-ng'
 
+    if 'VENDOR_DEVICE_ID' not in os.environ.keys():
+	    os.environ['VENDOR_DEVICE_ID'] = 'C000'
+		
     os.environ['MAJOR_VERSION'] = '8'
     os.environ['MINOR_VERSION'] = '2'
     os.environ['MICRO_VERSION'] = '1'
@@ -453,7 +456,7 @@ if __name__ == '__main__':
         run_sdv('xenfilt', driver, vs)
         run_sdv('xenbus', driver, vs)
 
-    archive(driver + '\\source.tgz', manifest().splitlines(), tgz=True)
-    archive(driver + '.tar', [driver,'revision'])
+    #archive(driver + '\\source.tgz', manifest().splitlines(), tgz=True)
+    #archive(driver + '.tar', [driver,'revision'])
 
 
