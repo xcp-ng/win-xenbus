@@ -507,12 +507,12 @@ LogDebugPrint(
     // If this is not a debug build then apply an aggressive
     // filter to reduce the noise.
 #if !DBG
-    if (Ansi->Length < sizeof ("XEN"))
+    if (Ansi->Length < sizeof ("xen"))
         return;
 
-    if (Ansi->Buffer[0] != 'X' ||
-        Ansi->Buffer[1] != 'E' ||
-        Ansi->Buffer[2] != 'N')
+    if (Ansi->Buffer[0] != 'x' ||
+        Ansi->Buffer[1] != 'e' ||
+        Ansi->Buffer[2] != 'n')
         return;
 #endif
 
