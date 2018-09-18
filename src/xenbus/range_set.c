@@ -213,6 +213,8 @@ RangeSetPop(
 
         if ((ULONGLONG)(Range->End + 1 - Range->Start) >= Count)
             goto found;
+
+        Cursor = Cursor->Flink;
     }
 
     goto fail3;
