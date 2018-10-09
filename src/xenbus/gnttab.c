@@ -327,6 +327,7 @@ GnttabCreateCache(
     IN  PINTERFACE              Interface,
     IN  const CHAR              *Name,
     IN  ULONG                   Reservation,
+    IN  ULONG                   Cap,
     IN  VOID                    (*AcquireLock)(PVOID),
     IN  VOID                    (*ReleaseLock)(PVOID),
     IN  PVOID                   Argument,
@@ -361,6 +362,7 @@ GnttabCreateCache(
                           (*Cache)->Name,
                           sizeof (XENBUS_GNTTAB_ENTRY),
                           Reservation,
+                          Cap,
                           GnttabEntryCtor,
                           GnttabEntryDtor,
                           GnttabAcquireLock,
@@ -397,6 +399,27 @@ fail1:
     Error("fail1 (%08x)\n", status);
 
     return status;
+}
+
+static NTSTATUS
+GnttabCreateCacheVersion1(
+    IN  PINTERFACE              Interface,
+    IN  const CHAR              *Name,
+    IN  ULONG                   Reservation,
+    IN  VOID                    (*AcquireLock)(PVOID),
+    IN  VOID                    (*ReleaseLock)(PVOID),
+    IN  PVOID                   Argument,
+    OUT PXENBUS_GNTTAB_CACHE    *Cache
+    )
+{
+    return GnttabCreateCache(Interface,
+                             Name,
+                             Reservation,
+                             0,
+                             AcquireLock,
+                             ReleaseLock,
+                             Argument,
+                             Cache);
 }
 
 static VOID
@@ -960,7 +983,7 @@ static struct _XENBUS_GNTTAB_INTERFACE_V1   GnttabInterfaceVersion1 = {
     { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V1), 1, NULL, NULL, NULL },
     GnttabAcquire,
     GnttabRelease,
-    GnttabCreateCache,
+    GnttabCreateCacheVersion1,
     GnttabPermitForeignAccess,
     GnttabRevokeForeignAccess,
     GnttabGetReference,
@@ -971,7 +994,7 @@ static struct _XENBUS_GNTTAB_INTERFACE_V2   GnttabInterfaceVersion2 = {
     { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V2), 2, NULL, NULL, NULL },
     GnttabAcquire,
     GnttabRelease,
-    GnttabCreateCache,
+    GnttabCreateCacheVersion1,
     GnttabPermitForeignAccess,
     GnttabRevokeForeignAccess,
     GnttabGetReference,
@@ -982,6 +1005,20 @@ static struct _XENBUS_GNTTAB_INTERFACE_V2   GnttabInterfaceVersion2 = {
 
 static struct _XENBUS_GNTTAB_INTERFACE_V3   GnttabInterfaceVersion3 = {
     { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V3), 3, NULL, NULL, NULL },
+    GnttabAcquire,
+    GnttabRelease,
+    GnttabCreateCacheVersion1,
+    GnttabPermitForeignAccess,
+    GnttabRevokeForeignAccess,
+    GnttabGetReference,
+    GnttabQueryReference,
+    GnttabDestroyCache,
+    GnttabMapForeignPages,
+    GnttabUnmapForeignPages
+};
+
+static struct _XENBUS_GNTTAB_INTERFACE_V4   GnttabInterfaceVersion4 = {
+    { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V4), 4, NULL, NULL, NULL },
     GnttabAcquire,
     GnttabRelease,
     GnttabCreateCache,
@@ -1117,6 +1154,23 @@ GnttabGetInterface(
             break;
 
         *GnttabInterface = GnttabInterfaceVersion3;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 4: {
+        struct _XENBUS_GNTTAB_INTERFACE_V4  *GnttabInterface;
+
+        GnttabInterface = (struct _XENBUS_GNTTAB_INTERFACE_V4 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_GNTTAB_INTERFACE_V4))
+            break;
+
+        *GnttabInterface = GnttabInterfaceVersion4;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;

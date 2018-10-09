@@ -76,6 +76,7 @@ struct _XENBUS_CACHE {
     CHAR                    Name[MAXNAMELEN];
     ULONG                   Size;
     ULONG                   Reservation;
+    ULONG                   Cap;
     NTSTATUS                (*Ctor)(PVOID, PVOID);
     VOID                    (*Dtor)(PVOID, PVOID);
     VOID                    (*AcquireLock)(PVOID);
@@ -234,6 +235,7 @@ CacheCreateSlab(
 {
     PXENBUS_CACHE_SLAB  Slab;
     ULONG               NumberOfBytes;
+    ULONG               Count;
     LARGE_INTEGER       LowAddress;
     LARGE_INTEGER       HighAddress;
     LARGE_INTEGER       Boundary;
@@ -243,6 +245,13 @@ CacheCreateSlab(
     NumberOfBytes = P2ROUNDUP(FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer) +
                               Cache->Size,
                               PAGE_SIZE);
+    Count = (NumberOfBytes - FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer)) /
+            Cache->Size;
+    ASSERT(Count != 0);
+
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    if (Cache->Count + Count > Cache->Cap)
+        goto fail1;
 
     LowAddress.QuadPart = 0ull;
     HighAddress.QuadPart = ~0ull;
@@ -257,31 +266,30 @@ CacheCreateSlab(
 
     status = STATUS_NO_MEMORY;
     if (Slab == NULL)
-        goto fail1;
+        goto fail2;
 
     RtlZeroMemory(Slab, NumberOfBytes);
 
     Slab->Magic = XENBUS_CACHE_SLAB_MAGIC;
     Slab->Cache = Cache;
-    Slab->Count = (NumberOfBytes -
-                   FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer)) /
-                  Cache->Size;
-    ASSERT(Slab->Count != 0);
+    Slab->Count = Count;
 
     for (Index = 0; Index < (LONG)Slab->Count; Index++) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         status = __CacheCtor(Cache, Object);
         if (!NT_SUCCESS(status))
-            goto fail2;
+            goto fail3;
     }
 
     CacheInsertSlab(Cache, Slab);
-    Cache->Count += Slab->Count;
+    Cache->Count += Count;
 
     return Slab;
 
-fail2:
+fail3:
+    Error("fail3\n");
+
     while (--Index >= 0) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
@@ -289,6 +297,9 @@ fail2:
     }
 
     MmFreeContiguousMemory(Slab);
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -566,6 +577,7 @@ CacheCreate(
     IN  const CHAR          *Name,
     IN  ULONG               Size,
     IN  ULONG               Reservation,
+    IN  ULONG               Cap,
     IN  NTSTATUS            (*Ctor)(PVOID, PVOID),
     IN  VOID                (*Dtor)(PVOID, PVOID),
     IN  VOID                (*AcquireLock)(PVOID),
@@ -596,8 +608,12 @@ CacheCreate(
     Size = __max(Size, MINIMUM_OBJECT_SIZE);
     Size = P2ROUNDUP(Size, sizeof (ULONG_PTR));
 
+    if (Cap == 0)
+        Cap = ULONG_MAX;
+
     (*Cache)->Size = Size;
     (*Cache)->Reservation = Reservation;
+    (*Cache)->Cap = Cap;
     (*Cache)->Ctor = Ctor;
     (*Cache)->Dtor = Dtor;
     (*Cache)->AcquireLock = AcquireLock;
@@ -606,10 +622,14 @@ CacheCreate(
 
     InitializeListHead(&(*Cache)->SlabList);
 
+    status = STATUS_INVALID_PARAMETER;
+    if ((*Cache)->Reservation > (*Cache)->Cap)
+        goto fail3;
+
     if ((*Cache)->Reservation != 0) {
         status = __CacheFill(*Cache);
         if (!NT_SUCCESS(status))
-            goto fail3;
+            goto fail4;
     }
 
     (*Cache)->MagazineCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
@@ -617,7 +637,7 @@ CacheCreate(
 
     status = STATUS_NO_MEMORY;
     if ((*Cache)->Magazine == NULL)
-        goto fail4;
+        goto fail5;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     InsertTailList(&Context->List, &(*Cache)->ListEntry);
@@ -627,12 +647,15 @@ CacheCreate(
 
     return STATUS_SUCCESS;
 
-fail4:
-    Error("fail4\n");
+fail5:
+    Error("fail5\n");
 
     (*Cache)->MagazineCount = 0;
 
     __CacheEmpty(*Cache);
+
+fail4:
+    Error("fail4\n");
 
 fail3:
     Error("fail3\n");
@@ -645,6 +668,8 @@ fail3:
     (*Cache)->AcquireLock = NULL;
     (*Cache)->Dtor = NULL;
     (*Cache)->Ctor = NULL;
+    (*Cache)->Cap = 0;
+    (*Cache)->Reservation = 0;
     (*Cache)->Size = 0;
 
 fail2:
@@ -659,6 +684,33 @@ fail1:
     Error("fail1 (%08x)\n", status);
 
     return status;    
+}
+
+static NTSTATUS
+CacheCreateVersion1(
+    IN  PINTERFACE          Interface,
+    IN  const CHAR          *Name,
+    IN  ULONG               Size,
+    IN  ULONG               Reservation,
+    IN  NTSTATUS            (*Ctor)(PVOID, PVOID),
+    IN  VOID                (*Dtor)(PVOID, PVOID),
+    IN  VOID                (*AcquireLock)(PVOID),
+    IN  VOID                (*ReleaseLock)(PVOID),
+    IN  PVOID               Argument,
+    OUT PXENBUS_CACHE       *Cache
+    )
+{
+    return CacheCreate(Interface,
+                       Name,
+                       Size,
+                       Reservation,
+                       0,
+                       Ctor,
+                       Dtor,
+                       AcquireLock,
+                       ReleaseLock,
+                       Argument,
+                       Cache);
 }
 
 static VOID
@@ -696,6 +748,8 @@ CacheDestroy(
     Cache->AcquireLock = NULL;
     Cache->Dtor = NULL;
     Cache->Ctor = NULL;
+    Cache->Cap = 0;
+    Cache->Reservation = 0;
     Cache->Size = 0;
 
     RtlZeroMemory(Cache->Name, sizeof (Cache->Name));
@@ -826,6 +880,16 @@ static struct _XENBUS_CACHE_INTERFACE_V1 CacheInterfaceVersion1 = {
     { sizeof (struct _XENBUS_CACHE_INTERFACE_V1), 1, NULL, NULL, NULL },
     CacheAcquire,
     CacheRelease,
+    CacheCreateVersion1,
+    CacheGet,
+    CachePut,
+    CacheDestroy
+};
+
+static struct _XENBUS_CACHE_INTERFACE_V2 CacheInterfaceVersion2 = {
+    { sizeof (struct _XENBUS_CACHE_INTERFACE_V2), 2, NULL, NULL, NULL },
+    CacheAcquire,
+    CacheRelease,
     CacheCreate,
     CacheGet,
     CachePut,
@@ -893,6 +957,23 @@ CacheGetInterface(
             break;
 
         *CacheInterface = CacheInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 2: {
+        struct _XENBUS_CACHE_INTERFACE_V2   *CacheInterface;
+
+        CacheInterface = (struct _XENBUS_CACHE_INTERFACE_V2 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_CACHE_INTERFACE_V2))
+            break;
+
+        *CacheInterface = CacheInterfaceVersion2;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;

@@ -123,6 +123,20 @@ typedef VOID
     IN  PVOID   Argument
     );
 
+typedef NTSTATUS
+(*XENBUS_CACHE_CREATE_V1)(
+    IN  PINTERFACE                  Interface,
+    IN  const CHAR                  *Name,
+    IN  ULONG                       Size,
+    IN  ULONG                       Reservation,
+    IN  XENBUS_CACHE_CTOR           Ctor,
+    IN  XENBUS_CACHE_DTOR           Dtor,
+    IN  XENBUS_CACHE_ACQUIRE_LOCK   AcquireLock,
+    IN  XENBUS_CACHE_RELEASE_LOCK   ReleaseLock,
+    IN  PVOID                       Argument OPTIONAL,
+    OUT PXENBUS_CACHE               *Cache
+    );
+
 /*! \typedef XENBUS_CACHE_CREATE
     \brief Create a cache of objects of the given \a Size
 
@@ -130,6 +144,7 @@ typedef VOID
     \param Name A name for the cache which will be used in debug output
     \param Size The size of each object in bytes
     \param Reservation The target minimum population of the cache
+    \param Cap The maximum population of the cache
     \param Ctor A callback which is invoked when a new object created
     \param Dtor A callback which is invoked when an object is destroyed
     \param AcquireLock A callback invoked to acquire a spinlock
@@ -146,6 +161,7 @@ typedef NTSTATUS
     IN  const CHAR                  *Name,
     IN  ULONG                       Size,
     IN  ULONG                       Reservation,
+    IN  ULONG                       Cap,
     IN  XENBUS_CACHE_CTOR           Ctor,
     IN  XENBUS_CACHE_DTOR           Dtor,
     IN  XENBUS_CACHE_ACQUIRE_LOCK   AcquireLock,
@@ -211,13 +227,27 @@ struct _XENBUS_CACHE_INTERFACE_V1 {
     INTERFACE               Interface;
     XENBUS_CACHE_ACQUIRE    CacheAcquire;
     XENBUS_CACHE_RELEASE    CacheRelease;
+    XENBUS_CACHE_CREATE_V1  CacheCreateVersion1;
+    XENBUS_CACHE_GET        CacheGet;
+    XENBUS_CACHE_PUT        CachePut;
+    XENBUS_CACHE_DESTROY    CacheDestroy;
+};
+
+/*! \struct _XENBUS_CACHE_INTERFACE_V2
+    \brief CACHE interface version 1
+    \ingroup interfaces
+*/
+struct _XENBUS_CACHE_INTERFACE_V2 {
+    INTERFACE               Interface;
+    XENBUS_CACHE_ACQUIRE    CacheAcquire;
+    XENBUS_CACHE_RELEASE    CacheRelease;
     XENBUS_CACHE_CREATE     CacheCreate;
     XENBUS_CACHE_GET        CacheGet;
     XENBUS_CACHE_PUT        CachePut;
     XENBUS_CACHE_DESTROY    CacheDestroy;
 };
 
-typedef struct _XENBUS_CACHE_INTERFACE_V1 XENBUS_CACHE_INTERFACE, *PXENBUS_CACHE_INTERFACE;
+typedef struct _XENBUS_CACHE_INTERFACE_V2 XENBUS_CACHE_INTERFACE, *PXENBUS_CACHE_INTERFACE;
 
 /*! \def XENBUS_CACHE
     \brief Macro at assist in method invocation
@@ -228,6 +258,6 @@ typedef struct _XENBUS_CACHE_INTERFACE_V1 XENBUS_CACHE_INTERFACE, *PXENBUS_CACHE
 #endif  // _WINDLL
 
 #define XENBUS_CACHE_INTERFACE_VERSION_MIN  1
-#define XENBUS_CACHE_INTERFACE_VERSION_MAX  1
+#define XENBUS_CACHE_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENBUS_CACHE_INTERFACE_H
