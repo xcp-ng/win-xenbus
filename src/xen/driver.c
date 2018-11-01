@@ -49,8 +49,7 @@
 #include "assert.h"
 #include "version.h"
 
-#define DEFAULT_XEN_LOG_LEVEL   (LOG_LEVEL_TRACE |      \
-                                 LOG_LEVEL_CRITICAL)
+#define DEFAULT_XEN_LOG_LEVEL   LOG_LEVEL_CRITICAL
 #define DEFAULT_QEMU_LOG_LEVEL  (LOG_LEVEL_INFO |       \
                                  LOG_LEVEL_WARNING |    \
                                  LOG_LEVEL_ERROR |      \
