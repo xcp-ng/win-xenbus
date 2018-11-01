@@ -141,7 +141,7 @@ typedef VOID
     \param Interface The interface header
     \param Channel The channel handle
     \param InCallback Set to TRUE if this method is invoked in context of the channel callback
-    \param Force Set to TRUE if the unmask must succeed, otherwise set to FALSE and the function will return FALSE if the unmask did not complete.
+    \param Force Set to TRUE if the unmask must succeed, otherwise set to FALSE and the function will return TRUE if the unmask did not complete and there is still an event pending.
 */
 typedef BOOLEAN
 (*XENBUS_EVTCHN_UNMASK)(
