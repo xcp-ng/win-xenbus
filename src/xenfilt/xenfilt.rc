@@ -40,7 +40,7 @@
 #include <version.h>
 
 #define	VER_COMPANYNAME_STR         VENDOR_NAME_STR
-#define VER_LEGALCOPYRIGHT_STR      "Copyright (c) Citrix Systems Inc."
+#define VER_LEGALCOPYRIGHT_STR      "Copyright (c) XCP-ng"
 
 #define VER_PRODUCTNAME_STR         "XENFILT"
 #define VER_PRODUCTVERSION          MAJOR_VERSION,MINOR_VERSION,MICRO_VERSION,BUILD_NUMBER

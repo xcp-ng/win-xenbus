@@ -402,7 +402,7 @@ if __name__ == '__main__':
         os.environ['VENDOR_NAME'] = 'XCP-ng'
 
     if 'VENDOR_PREFIX' not in os.environ.keys():
-        os.environ['VENDOR_PREFIX'] = 'XCPng'
+        os.environ['VENDOR_PREFIX'] = 'XN'
 
     if 'PRODUCT_NAME' not in os.environ.keys():
         os.environ['PRODUCT_NAME'] = 'XCP-ng'
