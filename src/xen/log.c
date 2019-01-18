@@ -43,70 +43,81 @@
 
 #define LOG_BUFFER_SIZE 256
 
+typedef struct _LOG_SLOT {
+    LOG_LEVEL   Level;
+    CHAR        Buffer[LOG_BUFFER_SIZE];
+    ULONG       Offset;
+} LOG_SLOT, *PLOG_SLOT;
+
 struct _LOG_DISPOSITION {
     LOG_LEVEL   Mask;
     VOID        (*Function)(PVOID, PCHAR, ULONG);
     PVOID       Argument;
 };
 
-#define LOG_MAXIMUM_DISPOSITION 8
+#define LOG_NR_SLOTS 32
+#define LOG_NR_DISPOSITIONS 8
 
 typedef struct _LOG_CONTEXT {
     LONG            References;
     BOOLEAN         Enabled;
-    CHAR            Buffer[LOG_BUFFER_SIZE];
-    ULONG           Offset;
-    LOG_DISPOSITION Disposition[LOG_MAXIMUM_DISPOSITION];
+    LOG_SLOT        Slot[LOG_NR_SLOTS];
+    ULONG           Pending;
+    LOG_DISPOSITION Disposition[LOG_NR_DISPOSITIONS];
     HIGH_LOCK       Lock;
+    KDPC            Dpc;
 } LOG_CONTEXT, *PLOG_CONTEXT;
 
 static LOG_CONTEXT  LogContext;
 
-static FORCEINLINE
-__drv_maxIRQL(HIGH_LEVEL)
-__drv_raisesIRQL(HIGH_LEVEL)
-__drv_savesIRQL
-KIRQL
-__LogAcquireBuffer(
+static FORCEINLINE VOID
+__LogFlushSlot(
+    IN  PLOG_CONTEXT    Context,
+    IN  PLOG_SLOT       Slot
+    )
+{
+    ULONG               Index;
+
+    for (Index = 0; Index < LOG_NR_DISPOSITIONS; Index++) {
+        PLOG_DISPOSITION    Disposition = &Context->Disposition[Index];
+
+        if (Slot->Level & Disposition->Mask)
+            Disposition->Function(Disposition->Argument, Slot->Buffer,
+                                  Slot->Offset);
+    }
+
+    RtlZeroMemory(Slot->Buffer, Slot->Offset);
+    Slot->Offset = 0;
+    Slot->Level = 0;
+}
+
+static VOID
+LogFlush(
     IN  PLOG_CONTEXT    Context
     )
 {
-    return __AcquireHighLock(&Context->Lock);
-}
+    ULONG               Index;
 
-static FORCEINLINE VOID
-__drv_maxIRQL(HIGH_LEVEL)
-__drv_requiresIRQL(HIGH_LEVEL)
-__LogReleaseBuffer(
-    IN  PLOG_CONTEXT                Context,
-    IN  LOG_LEVEL                   Level,
-    IN  __drv_restoresIRQL KIRQL    Irql
-    )
-{
-    ULONG                           Index;
+    for (Index = 0; Index < Context->Pending; Index++)
+    {
+        PLOG_SLOT   Slot = &Context->Slot[Index];
 
-    for (Index = 0; Index < LOG_MAXIMUM_DISPOSITION; Index++) {
-        PLOG_DISPOSITION    Disposition = &Context->Disposition[Index];
-
-        if (Level & Disposition->Mask)
-            Disposition->Function(Disposition->Argument, Context->Buffer, Context->Offset);
+        __LogFlushSlot(Context, Slot);
     }
 
-    RtlZeroMemory(Context->Buffer, Context->Offset);
-    Context->Offset = 0;
-
-    ReleaseHighLock(&Context->Lock, Irql);
+    Context->Pending = 0;
 }
 
 static FORCEINLINE VOID
 __LogPut(
-    IN  PLOG_CONTEXT    Context,
-    IN  CHAR            Character
+    IN  PLOG_SLOT   Slot,
+    IN  CHAR        Character
     )
 {
-    ASSERT(Context->Offset < LOG_BUFFER_SIZE);
+    if (Slot->Offset >= LOG_BUFFER_SIZE)
+        return;
 
-    Context->Buffer[Context->Offset++] = Character;
+    Slot->Buffer[Slot->Offset++] = Character;
 }
 
 static PCHAR
@@ -170,14 +181,14 @@ LogFormatNumber(
         } while (FALSE)
 
 static VOID
-LogWriteBuffer(
-    IN  PLOG_CONTEXT    Context, 
-    IN  LONG            Count,
-    IN  const CHAR      *Format,
-    IN  va_list         Arguments
+LogWriteSlot(
+    IN  PLOG_SLOT   Slot,
+    IN  LONG        Count,
+    IN  const CHAR  *Format,
+    IN  va_list     Arguments
     )
 {
-    CHAR                Character;
+    CHAR            Character;
 
     while ((Character = *Format++) != '\0') {
         UCHAR   Pad = 0;
@@ -187,7 +198,7 @@ LogWriteBuffer(
         BOOLEAN OppositeJustification = FALSE;
         
         if (Character != '%') {
-            __LogPut(Context, Character);
+            __LogPut(Slot, Character);
             goto loop;
         }
 
@@ -236,13 +247,13 @@ LogWriteBuffer(
                 WCHAR   Value;
                 Value = va_arg(Arguments, WCHAR);
 
-                __LogPut(Context, (CHAR)Value);
+                __LogPut(Slot, (CHAR)Value);
             } else { 
                 CHAR    Value;
 
                 Value = va_arg(Arguments, CHAR);
 
-                __LogPut(Context, Value);
+                __LogPut(Slot, Value);
             }
             break;
         }
@@ -269,15 +280,15 @@ LogWriteBuffer(
             Length = (ULONG)strlen(Buffer);
             if (!OppositeJustification) {
                 while (Pad > Length) {
-                    __LogPut(Context, (ZeroPrefix) ? '0' : ' ');
+                    __LogPut(Slot, (ZeroPrefix) ? '0' : ' ');
                     --Pad;
                 }
             }
             for (Index = 0; Index < Length; Index++)
-                __LogPut(Context, Buffer[Index]);
+                __LogPut(Slot, Buffer[Index]);
             if (OppositeJustification) {
                 while (Pad > Length) {
-                    __LogPut(Context, ' ');
+                    __LogPut(Slot, ' ');
                     --Pad;
                 }
             }
@@ -297,17 +308,17 @@ LogWriteBuffer(
 
                 if (OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
 
                 for (Index = 0; Index < Length; Index++)
-                    __LogPut(Context, (CHAR)Value[Index]);
+                    __LogPut(Slot, (CHAR)Value[Index]);
 
                 if (!OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
@@ -323,17 +334,17 @@ LogWriteBuffer(
 
                 if (OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
 
                 for (Index = 0; Index < Length; Index++)
-                    __LogPut(Context, Value[Index]);
+                    __LogPut(Slot, Value[Index]);
 
                 if (!OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
@@ -358,17 +369,17 @@ LogWriteBuffer(
 
                 if (OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
 
                 for (Index = 0; Index < Length; Index++)
-                    __LogPut(Context, (CHAR)Buffer[Index]);
+                    __LogPut(Slot, (CHAR)Buffer[Index]);
 
                 if (!OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
@@ -388,17 +399,17 @@ LogWriteBuffer(
 
                 if (OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
 
                 for (Index = 0; Index < Length; Index++)
-                    __LogPut(Context, Buffer[Index]);
+                    __LogPut(Slot, Buffer[Index]);
 
                 if (!OppositeJustification) {
                     while (Pad > Length) {
-                        __LogPut(Context, ' ');
+                        __LogPut(Slot, ' ');
                         --Pad;
                     }
                 }
@@ -407,7 +418,7 @@ LogWriteBuffer(
             break;
         }
         default:
-            __LogPut(Context, Character);
+            __LogPut(Slot, Character);
             break;
         }
 
@@ -427,16 +438,25 @@ LogCchVPrintf(
     )
 {
     PLOG_CONTEXT    Context = &LogContext;
+    PLOG_SLOT       Slot;
     KIRQL           Irql;
 
-    Irql = __LogAcquireBuffer(Context);
+    AcquireHighLock(&Context->Lock, &Irql);
 
-    LogWriteBuffer(Context,
-                   __min(Count, LOG_BUFFER_SIZE),
-                   Format,
-                   Arguments);
+    if (Context->Pending == ARRAYSIZE(Context->Slot))
+        LogFlush(Context);
 
-    __LogReleaseBuffer(Context, Level, Irql);
+    Slot = &Context->Slot[Context->Pending++];
+
+    Slot->Level = Level;
+    LogWriteSlot(Slot,
+                 __min(Count, LOG_BUFFER_SIZE),
+                 Format,
+                 Arguments);
+
+    LogFlush(Context);
+
+    ReleaseHighLock(&Context->Lock, Irql);
 }
 
 XEN_API
@@ -488,6 +508,33 @@ typedef VOID
     ULONG           Level
     );
 
+static
+_Function_class_(KDEFERRED_ROUTINE)
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_requires_min_(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
+_IRQL_requires_same_
+VOID
+LogDpc(
+    IN  PKDPC       Dpc,
+    IN  PVOID       _Context,
+    IN  PVOID       Argument1,
+    IN  PVOID       Argument2
+    )
+{
+    PLOG_CONTEXT    Context = &LogContext;
+    KIRQL           Irql;
+
+    UNREFERENCED_PARAMETER(_Context);
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+
+    AcquireHighLock(&Context->Lock, &Irql);
+    LogFlush(Context);
+    ReleaseHighLock(&Context->Lock, Irql);
+}
+
 static VOID
 LogDebugPrint(
     IN  PANSI_STRING    Ansi,
@@ -497,7 +544,7 @@ LogDebugPrint(
 {
     PLOG_CONTEXT        Context = &LogContext;
     KIRQL               Irql;
-    ULONG               Index;
+    PLOG_SLOT           Slot;
 
     UNREFERENCED_PARAMETER(ComponentId);
 
@@ -518,14 +565,18 @@ LogDebugPrint(
 
     AcquireHighLock(&Context->Lock, &Irql);
 
-    for (Index = 0; Index < LOG_MAXIMUM_DISPOSITION; Index++) {
-        PLOG_DISPOSITION    Disposition = &Context->Disposition[Index];
+    if (Context->Pending == ARRAYSIZE(Context->Slot))
+        LogFlush(Context);
 
-        if ((1 << Level) & Disposition->Mask)
-            Disposition->Function(Disposition->Argument, Ansi->Buffer, Ansi->Length);
-    }
+    Slot = &Context->Slot[Context->Pending++];
+
+    Slot->Level = 1 << Level;
+    RtlCopyMemory(Slot->Buffer, Ansi->Buffer, Ansi->Length);
+    Slot->Offset = Ansi->Length;
 
     ReleaseHighLock(&Context->Lock, Irql);
+
+    KeInsertQueueDpc(&Context->Dpc, NULL, NULL);
 }
 
 VOID
@@ -540,6 +591,7 @@ LogTeardown(
         Context->Enabled = FALSE;
     }
 
+    RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
     RtlZeroMemory(&Context->Lock, sizeof (HIGH_LOCK));
 
     (VOID) InterlockedDecrement(&Context->References);
@@ -567,7 +619,7 @@ LogAddDisposition(
     AcquireHighLock(&Context->Lock, &Irql);
 
     status = STATUS_UNSUCCESSFUL;
-    for (Index = 0; Index < LOG_MAXIMUM_DISPOSITION; Index++) {
+    for (Index = 0; Index < LOG_NR_DISPOSITIONS; Index++) {
         *Disposition = &Context->Disposition[Index];
 
         if ((*Disposition)->Mask == 0) {
@@ -612,7 +664,7 @@ LogRemoveDisposition(
 
     AcquireHighLock(&Context->Lock, &Irql);
 
-    for (Index = 0; Index < LOG_MAXIMUM_DISPOSITION; Index++) {
+    for (Index = 0; Index < LOG_NR_DISPOSITIONS; Index++) {
         if (&Context->Disposition[Index] != Disposition)
             continue;
 
@@ -748,6 +800,8 @@ LogInitialize(
         goto fail1;
 
     InitializeHighLock(&Context->Lock);
+
+    KeInitializeDpc(&Context->Dpc, LogDpc, NULL);
 
     if (__LogDbgPrintCallbackEnable()) {
         status = DbgSetDebugPrintCallback(LogDebugPrint, TRUE);
