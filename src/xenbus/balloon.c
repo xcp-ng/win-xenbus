@@ -489,15 +489,13 @@ BalloonReleasePfnArray(
         status = XENBUS_RANGE_SET(Get,
                                   &Context->RangeSetInterface,
                                   Context->RangeSet,
-                                  1,
-                                  (LONGLONG)Context->PfnArray[Index]);
+                                  (LONGLONG)Context->PfnArray[Index],
+                                  1);
         ASSERT(NT_SUCCESS(status));
-
-        Context->PfnArray[Index] = 0;
     }
 
 done:
-    ASSERT(IsZeroMemory(Context->PfnArray, Requested * sizeof (PFN_NUMBER)));
+    ASSERT(IsZeroMemory(Context->PfnArray, Count * sizeof (PFN_NUMBER)));
 
     KeQuerySystemTime(&End);
     TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
