@@ -56,6 +56,9 @@ __user_code;
 #define SERVICE_KEY(_Driver)    \
         SERVICES_KEY ## "\\" ## #_Driver
 
+#define PARAMETERS_KEY(_Driver) \
+        SERVICE_KEY(_Driver) ## "\\Parameters"
+
 #define UNPLUG_KEY \
         SERVICE_KEY(XEN) ## "\\Unplug"
 
@@ -1136,6 +1139,291 @@ fail1:
 }
 
 static BOOLEAN
+GetDeviceInstanceID(
+    IN  HDEVINFO            DeviceInfoSet,
+    IN  PSP_DEVINFO_DATA    DeviceInfoData,
+    OUT PTCHAR              *DeviceID,
+    OUT PTCHAR              *InstanceID
+    )
+{
+    DWORD                   DeviceInstanceIDLength;
+    PTCHAR                  DeviceInstanceID;
+    DWORD                   Index;
+    PTCHAR                  Prefix;
+    DWORD                   InstanceIDLength;
+    HRESULT                 Result;
+    HRESULT                 Error;
+
+    if (!SetupDiGetDeviceInstanceId(DeviceInfoSet,
+                                    DeviceInfoData,
+                                    NULL,
+                                    0,
+                                    &DeviceInstanceIDLength)) {
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+            goto fail1;
+    }
+
+    DeviceInstanceIDLength += sizeof (TCHAR);
+
+    DeviceInstanceID = calloc(1, DeviceInstanceIDLength);
+    if (DeviceInstanceID == NULL)
+        goto fail2;
+
+    if (!SetupDiGetDeviceInstanceId(DeviceInfoSet,
+                                    DeviceInfoData,
+                                    DeviceInstanceID,
+                                    DeviceInstanceIDLength,
+                                    NULL))
+        goto fail3;
+
+    for (Index = 0; Index < strlen(DeviceInstanceID); Index++)
+        DeviceInstanceID[Index] = (CHAR)toupper(DeviceInstanceID[Index]);
+
+    *DeviceID = DeviceInstanceID;
+
+    Prefix = strrchr(DeviceInstanceID, '\\');
+    assert(Prefix != NULL);
+    *Prefix++ = '\0';
+
+    DeviceInstanceID = strrchr(Prefix, '&');
+    if (DeviceInstanceID != NULL) {
+        *DeviceInstanceID++ = '\0';
+    } else {
+        DeviceInstanceID = Prefix;
+        Prefix = NULL;
+    }
+
+    if (Prefix != NULL)
+        Log("Parent Prefix = %s", Prefix);
+
+    InstanceIDLength = (ULONG)((strlen(DeviceInstanceID) +
+                                1) * sizeof (TCHAR));
+
+    *InstanceID = calloc(1, InstanceIDLength);
+    if (*InstanceID == NULL)
+        goto fail4;
+
+    Result = StringCbPrintf(*InstanceID,
+                            InstanceIDLength,
+                            "%s",
+                            DeviceInstanceID);
+    assert(SUCCEEDED(Result));
+
+    Log("DeviceID = %s", *DeviceID);
+    Log("InstanceID = %s", *InstanceID);
+
+    return TRUE;
+
+fail4:
+    Log("fail4");
+
+    DeviceInstanceID = *DeviceID;
+    *DeviceID = NULL;
+
+fail3:
+    Log("fail3");
+
+    free(DeviceInstanceID);
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+GetActiveDeviceInstanceID(
+    OUT PTCHAR  *DeviceID,
+    OUT PTCHAR  *InstanceID
+    )
+{
+    HKEY        ParametersKey;
+    DWORD       MaxValueLength;
+    DWORD       DeviceIDLength;
+    DWORD       InstanceIDLength;
+    DWORD       Type;
+    HRESULT     Error;
+
+    Error = RegCreateKeyEx(HKEY_LOCAL_MACHINE,
+                           PARAMETERS_KEY(XENFILT),
+                           0,
+                           NULL,
+                           REG_OPTION_NON_VOLATILE,
+                           KEY_ALL_ACCESS,
+                           NULL,
+                           &ParametersKey,
+                           NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    Error = RegQueryInfoKey(ParametersKey,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            &MaxValueLength,
+                            NULL,
+                            NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail2;
+    }
+
+    DeviceIDLength = MaxValueLength + sizeof (TCHAR);
+
+    *DeviceID = calloc(1, DeviceIDLength);
+    if (*DeviceID == NULL)
+        goto fail3;
+
+    Error = RegQueryValueEx(ParametersKey,
+                            "ActiveDeviceID",
+                            NULL,
+                            &Type,
+                            (LPBYTE)*DeviceID,
+                            &DeviceIDLength);
+    if (Error != ERROR_SUCCESS || Type != REG_SZ) {
+        free(*DeviceID);
+        *DeviceID = NULL;
+    }
+
+    InstanceIDLength = MaxValueLength + sizeof (TCHAR);
+
+    *InstanceID = calloc(1, InstanceIDLength);
+    if (*InstanceID == NULL)
+        goto fail4;
+
+    Error = RegQueryValueEx(ParametersKey,
+                            "ActiveInstanceID",
+                            NULL,
+                            &Type,
+                            (LPBYTE)*InstanceID,
+                            &InstanceIDLength);
+    if (Error != ERROR_SUCCESS || Type != REG_SZ) {
+        free(*InstanceID);
+        *InstanceID = NULL;
+    }
+
+    Log("DeviceID = %s", (*DeviceID != NULL) ? *DeviceID : "NOT SET");
+    Log("InstanceID = %s", (*InstanceID != NULL) ? *InstanceID : "NOT SET");
+
+    RegCloseKey(ParametersKey);
+
+    return TRUE;
+
+fail4:
+    Log("fail4");
+
+    if (*DeviceID != NULL) {
+        free(*DeviceID);
+        *DeviceID = NULL;
+    }
+
+fail3:
+    Log("fail3");
+
+fail2:
+    Log("fail2");
+
+    RegCloseKey(ParametersKey);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+IsActiveDevice(
+    IN  HDEVINFO            DeviceInfoSet,
+    IN  PSP_DEVINFO_DATA    DeviceInfoData,
+    OUT PBOOLEAN            ActiveDevice
+    )
+{
+    PTCHAR                  ActiveDeviceID;
+    PTCHAR                  ActiveInstanceID;
+    PTCHAR                  DeviceID;
+    PTCHAR                  InstanceID;
+    HRESULT                 Error;
+    BOOLEAN                 Success;
+
+    Log("====>");
+
+    Success = GetActiveDeviceInstanceID(&ActiveDeviceID, &ActiveInstanceID);
+    if (!Success)
+        goto fail1;
+
+    if (ActiveDeviceID == NULL)
+        goto done;
+
+    assert(ActiveInstanceID != NULL);
+
+    Success = GetDeviceInstanceID(DeviceInfoSet, DeviceInfoData,
+                                  &DeviceID, &InstanceID);
+    if (!Success)
+        goto fail2;
+
+    *ActiveDevice = (_stricmp(ActiveDeviceID, DeviceID) == 0 &&
+                     _stricmp(ActiveInstanceID, InstanceID) == 0) ?
+        TRUE :
+        FALSE;
+
+    free(DeviceID);
+    free(InstanceID);
+
+    free(ActiveDeviceID);
+    free(ActiveInstanceID);
+
+done:
+    Log("<====");
+
+    return TRUE;
+
+fail2:
+    Log("fail2");
+
+    free(ActiveDeviceID);
+    free(ActiveInstanceID);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
 SupportChildDrivers(
     OUT PBOOLEAN    NewBinding
     )
@@ -1430,7 +1718,6 @@ DifInstallPreProcess(
 
     UNREFERENCED_PARAMETER(DeviceInfoSet);
     UNREFERENCED_PARAMETER(DeviceInfoData);
-    UNREFERENCED_PARAMETER(Context);
 
     Log("====>");
 
@@ -1453,10 +1740,7 @@ DifInstallPreProcess(
     if (!Success)
         goto fail4;
 
-    if (NewBinding) {
-        (VOID) ClearUnplugRequest("DISKS");
-        (VOID) ClearUnplugRequest("NICS");
-    }
+    Context->PrivateData = (PVOID)(ULONG_PTR)NewBinding;
 
     Log("<====");
     
@@ -1492,11 +1776,28 @@ DifInstallPostProcess(
     IN  PCOINSTALLER_CONTEXT_DATA   Context
     )
 {
-    UNREFERENCED_PARAMETER(DeviceInfoSet);
-    UNREFERENCED_PARAMETER(DeviceInfoData);
-    UNREFERENCED_PARAMETER(Context);
+    BOOLEAN                         NewBinding;
+    BOOLEAN                         Active;
 
-    Log("<===>");
+    Log("====>");
+
+    NewBinding = (BOOLEAN)(ULONG_PTR)Context->PrivateData;
+
+    Active = TRUE;
+
+    (VOID) IsActiveDevice(DeviceInfoSet,
+                          DeviceInfoData,
+                          &Active);
+
+    Log("Active = %s", Active ? "TRUE" : "FALSE");
+    Log("NewBinding = %s", NewBinding ? "TRUE" : "FALSE");
+
+    if (Active && NewBinding) {
+        (VOID) ClearUnplugRequest("DISKS");
+        (VOID) ClearUnplugRequest("NICS");
+    }
+
+    Log("<====");
 
     return NO_ERROR;
 }
