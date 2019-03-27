@@ -350,7 +350,7 @@ BalloonPopulatePhysmap(
 
     KeQuerySystemTime(&Start);
 
-    Count = MemoryPopulatePhysmap(Requested, PAGE_ORDER_4K, PfnArray);
+    Count = MemoryPopulatePhysmap(PAGE_ORDER_4K, Requested, PfnArray);
 
     KeQuerySystemTime(&End);
     TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
@@ -437,7 +437,7 @@ BalloonDecreaseReservation(
 
     KeQuerySystemTime(&Start);
 
-    Count = MemoryDecreaseReservation(Requested, PAGE_ORDER_4K, PfnArray);
+    Count = MemoryDecreaseReservation(PAGE_ORDER_4K, Requested, PfnArray);
 
     KeQuerySystemTime(&End);
     TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
