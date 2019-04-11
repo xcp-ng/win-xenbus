@@ -34,7 +34,7 @@ Class=System
 ClassGUID={4d36e97d-e325-11ce-bfc1-08002be10318}
 Provider=%Vendor% 
 CatalogFile=xenbus.cat
-DriverVer=01/01/1900,0.0.0.0
+DriverVer=@INF_DATE@,@MAJOR_VERSION@.@MINOR_VERSION@.@MICRO_VERSION@.@BUILD_NUMBER@
 DriverPackageDisplayName=%DiskDesc%
 
 [DestinationDirs] 
