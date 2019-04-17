@@ -35,33 +35,20 @@
       <AdditionalDependencies>$(ProjectDir)..\$(ConfigurationName)\$(Platform)\xen.lib;$(DDK_LIB_PATH)/libcntpr.lib;$(DDK_LIB_PATH)/procgrp.lib;$(DDK_LIB_PATH)/rtlver.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EnableCOMDATFolding>false</EnableCOMDATFolding>
     </Link>
-    <Inf>
-      <SpecifyArchitecture>true</SpecifyArchitecture>
-      <SpecifyDriverVerDirectiveVersion>true</SpecifyDriverVerDirectiveVersion>
-      <TimeStamp>$(MAJOR_VERSION).$(MINOR_VERSION).$(MICRO_VERSION).$(BUILD_NUMBER)</TimeStamp>
-      <EnableVerbose>true</EnableVerbose>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
     <ClCompile>
       <PreprocessorDefinitions>__i386__;%(PreprocessorDefinitions);_X86_</PreprocessorDefinitions>
     </ClCompile>
-    <Inf>
-      <Architecture>x86</Architecture>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
     <ClCompile>
       <PreprocessorDefinitions>__x86_64__;%(PreprocessorDefinitions);_AMD64_</PreprocessorDefinitions>
     </ClCompile>
-    <Inf>
-      <Architecture>amd64</Architecture>
-    </Inf>
   </ItemDefinitionGroup>
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />
     <FilesToPackage Include="$(OutDir)$(TargetName).pdb" />
-    <FilesToPackage Include="@(Inf->'%(CopyOutput)')" Condition="'@(Inf)'!=''" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\common\registry.c" />
@@ -90,9 +77,6 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\src\xenbus\xenbus.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Inf Include="..\xenbus.inf" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

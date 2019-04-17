@@ -66,9 +66,9 @@ xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.ex
 xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll,xenbus_monitor.dll
 
 [Manufacturer] 
-%Vendor%=Inst,NT$ARCH$
+%Vendor%=Inst,NT@INF_ARCH@
 
-[Inst.NT$ARCH$]
+[Inst.NT@INF_ARCH@]
 ; DisplayName		Section		DeviceID
 ; -----------		-------		--------
 

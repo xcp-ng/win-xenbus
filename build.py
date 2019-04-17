@@ -24,9 +24,7 @@ def next_build_number():
     return build_number
 
 
-def make_header():
-    now = datetime.datetime.now()
-
+def make_header(now):
     file = open('include\\version.h', 'w')
 
     file.write('#define VENDOR_NAME_STR\t\t"' + os.environ['VENDOR_NAME'] + '"\n')
@@ -69,11 +67,15 @@ def make_header():
     file.close()
 
 
-def copy_inf(vs, name):
+def copy_inf(now, vs, arch, name):
+    inf_arch = { 'x86':'x86',
+                 'x64':'amd64' }
     src = open('src\\%s.inf' % name, 'r')
     dst = open('%s\\%s.inf' % (vs, name), 'w')
 
     for line in src:
+        line = re.sub('@INF_DATE@', now.strftime("%m/%d/%Y"), line)
+        line = re.sub('@INF_ARCH@', inf_arch[arch], line)
         line = re.sub('@MAJOR_VERSION@', os.environ['MAJOR_VERSION'], line)
         line = re.sub('@MINOR_VERSION@', os.environ['MINOR_VERSION'], line)
         line = re.sub('@MICRO_VERSION@', os.environ['MICRO_VERSION'], line)
@@ -387,6 +389,7 @@ def main():
     sdv = { 'nosdv': False, None: True }
     driver = 'xenbus'
     vs = getVsVersion()
+    now = datetime.datetime.now()
 
     if 'VENDOR_NAME' not in os.environ.keys():
         os.environ['VENDOR_NAME'] = 'Xen Project'
@@ -422,8 +425,7 @@ def main():
     print("BUILD_NUMBER\t\t%s" % os.environ['BUILD_NUMBER'])
     print()
 
-    make_header()
-    copy_inf(vs, driver)
+    make_header(now)
 
     symstore_del(driver, 30)
 
@@ -432,9 +434,11 @@ def main():
 
     shutil.rmtree(driver, ignore_errors=True)
 
+    copy_inf(now, vs, 'x86', driver)
     build_sln(driver, release[vs], 'x86', debug[sys.argv[1]], vs)
     copy_package(driver, release[vs], 'x86', debug[sys.argv[1]], vs)
 
+    copy_inf(now, vs, 'x64', driver)
     build_sln(driver, release[vs], 'x64', debug[sys.argv[1]], vs)
     copy_package(driver, release[vs], 'x64', debug[sys.argv[1]], vs)
 
