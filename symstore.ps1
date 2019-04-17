@@ -1,45 +1,36 @@
 #
-# Wrapper script Symbol Server
+# Store symbols for archived build
 #
 param(
-	[string]$DriverName = "xenbus",
 	[string]$SymbolServer = "c:\symbols",
-	[switch]$Free,
-	[switch]$Checked
+	[Parameter(Mandatory = $true)]
+	[string]$Arch
 )
 
 Function Add-Symbols {
 	param(
 		[string]$DriverName,
-		[string]$DriverPath,
+		[string]$ArchivePath,
 		[string]$SymbolServer,
 		[string]$Arch
 	)
 
+	Write-Host Store symbols from (Resolve-Path $ArchivePath)
+
 	$cwd = Get-Location
-	Set-Location $DriverPath
+	Set-Location $ArchivePath
 
-	$symstore = [string]::Format("{0}Debuggers\{1}\symstore.exe", $env:WDKContentRoot, $Arch)
+	$path = Join-Path -Path ([string]::Format("{0}Debuggers", $env:WDKContentRoot)) -ChildPath $Arch
+	$symstore = Join-Path -Path $path -ChildPath "symstore.exe"
 
-	$inffile=[string]::Format("{0}.inf", $DriverName)
-	$Version=(Get-Content -Path $inffile | Select-String "DriverVer").Line.Split(',')[1]
+	$inffile = [string]::Format("{0}.inf", $DriverName)
+	$Version = (Get-Content -Path $inffile | Select-String "DriverVer").Line.Split(',')[1]
 
-	Write-Host $symstore "add" "/s" $SymbolServer "/r" "/f" "*.pdb" "/t" $DriverName "/v" $Version
 	Get-ChildItem -Path "." -Include "*.pdb" -Name | Write-Host
 	& $symstore "add" "/s" $SymbolServer "/r" "/f" "*.pdb" "/t" $DriverName "/v" $Version
 
 	Set-Location $cwd
 }
 
-if ($Free -or -not $Checked) {
-	$driverpath = [string]::Format("{0}\x64", $DriverName)
-	Add-Symbols $DriverName $driverpath $SymbolServer "x64"
-	$driverpath = [string]::Format("{0}\x86", $DriverName)
-	Add-Symbols $DriverName $driverpath $SymbolServer "x86"
-}
-if ($Checked) {
-	$driverpath = [string]::Format("{0}-checked\x64", $DriverName)
-	Add-Symbols $DriverName $driverpath $SymbolServer "x64"
-	$driverpath = [string]::Format("{0}-checked\x86", $DriverName)
-	Add-Symbols $DriverName $driverpath $SymbolServer "x86"
-}
+$archivepath = Join-Path -Path (Resolve-Path "xenbus") -ChildPath $Arch
+Add-Symbols "xenbus" $archivepath $SymbolServer $Arch
