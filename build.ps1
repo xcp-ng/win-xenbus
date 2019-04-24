@@ -57,15 +57,26 @@ if ($Type -ne "free" -and $Type -ne "checked") {
 }
 
 if ([string]::IsNullOrEmpty($Env:VENDOR_NAME)) {
-   Set-Item -Path Env:VENDOR_NAME -Value 'Xen Project'
+	Set-Item -Path Env:VENDOR_NAME -Value 'Xen Project'
 }
 
 if ([string]::IsNullOrEmpty($Env:VENDOR_PREFIX)) {
-   Set-Item -Path Env:VENDOR_PREFIX -Value 'XP'
+	Set-Item -Path Env:VENDOR_PREFIX -Value 'XP'
 }
 
 if ([string]::IsNullOrEmpty($Env:PRODUCT_NAME)) {
-   Set-Item -Path Env:PRODUCT_NAME -Value 'Xen'
+	Set-Item -Path Env:PRODUCT_NAME -Value 'Xen'
+}
+
+if ([string]::IsNullOrEmpty($Env:BUILD_NUMBER)) {
+	if (Test-Path ".build_number") {
+		$BuildNum = Get-Content -Path ".build_number"
+		Set-Content -Path ".build_number" -Value ([int]$BuildNum + 1)
+	} else {
+		$BuildNum = '0'
+		Set-Content -Path ".build_number" -Value '1'
+	}
+	Set-Item -Path Env:BUILD_NUMBER -Value $BuildNum
 }
 
 Set-Item -Path Env:MAJOR_VERSION -Value '9'
@@ -77,11 +88,4 @@ Build "x64" $Type
 
 if ($Sdv) {
 	SdvBuild
-}
-
-if (Test-Path ".build_number") {
-	$TheBuildNum = Get-Content -Path ".build_number"
-	Set-Content -Path ".build_number" -Value ([int]$TheBuildNum + 1)
-} else {
-	Set-Content -Path ".build_number" -Value "1"
 }

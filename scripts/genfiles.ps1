@@ -54,18 +54,6 @@ if ($GitRevision) {
 	Set-Content -Path ".revision" -Value $GitRevision
 }
 
-# if ".build_number" doesnt exist, BUILD_NUMBER = 0
-# since this can called by the vcxproj, do not autoincrement the build number
-# as this will mean x64 and Win32 builds have different numbers!
-if (Test-Path ".build_number") {
-	$TheBuildNum = Get-Content -Path ".build_number"
-} else {
-	Set-Content -Path ".build_number" -Value "0"
-}
-if (-not $TheBuildNum) {
-	$TheBuildNum = '0'
-}
-
 # [ordered] makes output easier to parse by humans
 $Replacements = [ordered]@{
 	# values determined from the build environment
@@ -77,9 +65,9 @@ $Replacements = [ordered]@{
 	'MAJOR_VERSION' = $Env:MAJOR_VERSION;
 	'MINOR_VERSION' = $Env:MINOR_VERSION;
 	'MICRO_VERSION' = $Env:MICRO_VERSION;
+	'BUILD_NUMBER' = $Env:BUILD_NUMBER;
 
 	# generated values
-	'BUILD_NUMBER' = $TheBuildNum;
 	'GIT_REVISION' = $GitRevision;
 
 	'INF_DATE' = $InfDate;
