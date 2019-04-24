@@ -60,24 +60,6 @@ Function Run-MSBuildSDV {
 	Set-Location $basepath
 }
 
-Function Copy-To-Archive {
-	param(
-		[string]$ArtifactPath,
-		[string]$ArchivePath
-	)
-
-	if (-Not (Test-Path -Path $ArtifactPath)) {
-                return
-	}
-
-	if (-Not (Test-Path -Path $ArchivePath)) {
-		New-Item -Name $ArchivePath -ItemType Directory | Out-Null
-	}
-
-	$src = Join-Path -Path $ArtifactPath -ChildPath "package"
-	Get-ChildItem -Path $src -File | Copy-Item -Destination $ArchivePath
-}
-
 #
 # Script Body
 #
@@ -85,21 +67,15 @@ Function Copy-To-Archive {
 $configuration = @{ "free" = "$ConfigurationBase Release"; "checked" = "$ConfigurationBase Debug"; "sdv" = "$ConfigurationBase Release"; }
 $platform = @{ "x86" = "Win32"; "x64" = "x64" }
 $solutionpath = Resolve-Path $SolutionDir
-$artifactpath = Join-Path -Path $solutionpath -ChildPath (Join-Path -Path $configuration[$Type].Replace(' ', '') -Childpath $platform[$Arch])
-$archivepath = Join-Path -Path (Resolve-Path "xenbus") -ChildPath $Arch
 
 if ($Type -eq "free") {
 	Run-MSBuild $solutionpath "xenbus.sln" $configuration["free"] $platform[$Arch]
-	Copy-To-Archive $artifactpath $archivepath
 }
 elseif ($Type -eq "checked") {
 	Run-MSBuild $solutionpath "xenbus.sln" $configuration["checked"] $platform[$Arch]
-	Copy-To-Archive $artifactpath $archivepath
 }
 elseif ($Type -eq "sdv") {
 	Run-MSBuildSDV $solutionpath "xen" $configuration["sdv"] $platform[$Arch]
 	Run-MSBuildSDV $solutionpath "xenfilt" $configuration["sdv"] $platform[$Arch]
 	Run-MSBuildSDV $solutionpath "xenbus" $configuration["sdv"] $platform[$Arch]
-
-	Get-ChildItem -Path $artifactpath -Include "*.DVL.XML" -File -Recurse | Copy-Item -Destination $archivepath
 }
