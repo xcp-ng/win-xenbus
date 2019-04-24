@@ -2,21 +2,20 @@
 # Generate version.h and xenbus.inf
 #
 param(
+	[string]$Platform = "Win32",
 	[string]$SolutionDir = "vs2017",
-	[string]$ConfigFile = $null,
-	[Parameter(Mandatory = $true)]
-	[string]$Arch
+	[string]$IncludeDir = "include",
+	[string]$SourceDir = "src"
 )
 
 # Copy $InFileName -> $OutFileName replacing $Token$_.Key$Token with $_.Value from
-# either $ConfigFile or $Replacements
+# $Replacements
 Function Copy-FileWithReplacements {
 	param(
 		[Parameter(Mandatory = $true)]
 		[string]$InFileName,
 		[Parameter(Mandatory = $true)]
 		[string]$OutFileName,
-		[string]$ConfigFile,
 		[hashtable]$Replacements,
 		[string]$Token = "@"
 	)
@@ -24,21 +23,10 @@ Function Copy-FileWithReplacements {
 	Write-Host "Copy-FileWithReplacements"
 	Write-Host $InFileName" -> "$OutFileName
 
-	if ($ConfigFile) {
-		$List = Get-Content $ConfigFile | Out-String | iex
-		$List | Out-String | Write-Host
-	} elseif ($Replacements) {
-		$List = $Replacements
-	} else {
-		Write-Host "Invalid Arguments, ConfigFile or Replacements must be set"
-		Write-Host
-		Exit -1
-	}
-
-	(Get-Content $InFileName) | 
+	(Get-Content $InFileName) |
 	ForEach-Object {
 		$line = $_
-		$List.GetEnumerator() | ForEach-Object {
+		$Replacements.GetEnumerator() | ForEach-Object {
 			$key = [string]::Format("{0}{1}{2}", $Token, $_.Name, $Token)
 			if (([string]::IsNullOrEmpty($_.Value)) -and ($line.Contains($key))) {
 				Write-Host "Skipping Line Containing " $_.Name
@@ -54,13 +42,10 @@ Function Copy-FileWithReplacements {
 #
 # Script Body
 #
-$cwd = Get-Location
-Set-Location $PSScriptRoot
-
 $TheYear = Get-Date -UFormat "%Y"
 $TheMonth = Get-Date -UFormat "%m"
 $TheDay = Get-Date -UFormat "%d"
-$InfArch = @{ "x86" = "x86"; "x64" = "amd64" }
+$InfArch = @{ "Win32" = "x86"; "x64" = "amd64" }
 $InfDate = Get-Date -UFormat "%m/%d/%Y"
 
 # if GitRevision is $null, GIT_REVISION will be excluded from the Copy-FileWithReplacements
@@ -83,43 +68,36 @@ if (-not $TheBuildNum) {
 
 # [ordered] makes output easier to parse by humans
 $Replacements = [ordered]@{
-	# default parameters, may be overridden in config.ps1
-	'VENDOR_NAME' = 'Xen Project';
-	'PRODUCT_NAME' = 'Xen';
-	'VENDOR_DEVICE_ID' = $null; # must define this replacement, or @VENDOR_DEVICE_ID@ will remain in OutFileName
-	'VENDOR_PREFIX' = 'XP';
+	# values determined from the build environment
+	'VENDOR_NAME' = $Env:VENDOR_NAME;
+	'PRODUCT_NAME' = $Env:PRODUCT_NAME;
+	'VENDOR_DEVICE_ID' = $Env:VENDOR_DEVICE_ID;
+	'VENDOR_PREFIX' = $Env:VENDOR_PREFIX;
 
-	'MAJOR_VERSION' = '9';
-	'MINOR_VERSION' = '0';
-	'MICRO_VERSION' = '0';
+	'MAJOR_VERSION' = $Env:MAJOR_VERSION;
+	'MINOR_VERSION' = $Env:MINOR_VERSION;
+	'MICRO_VERSION' = $Env:MICRO_VERSION;
 
-	# generated values (should not be in config.ps1)
+	# generated values
 	'BUILD_NUMBER' = $TheBuildNum;
 	'GIT_REVISION' = $GitRevision;
 
 	'INF_DATE' = $InfDate;
-	'INF_ARCH' = $InfArch[$Arch];
+	'INF_ARCH' = $InfArch[$Platform];
 	'YEAR' = $TheYear;
 	'MONTH' = $TheMonth;
 	'DAY' = $TheDay
 }
 
-if ($ConfigFile -and (Test-Path -Path $ConfigFile)) {
-	$config = Resolve-Path $ConfigFile | Get-Content | Out-String | iex
-	$config.GetEnumerator() | % { $Replacements[$_.Key] = $_.Value }
-}
-
 $Replacements | Out-String | Write-Host
 
-$includepath = Resolve-Path "include"
+$includepath = Resolve-Path $IncludeDir
 $src = Join-Path -Path $includepath -ChildPath "version.tmpl"
 $dst = Join-Path -Path $includepath -ChildPath "version.h"
 Copy-FileWithReplacements $src $dst -Replacements $Replacements
 
-$sourcepath = Resolve-Path "src"
+$sourcepath = Resolve-Path $SourceDir
 $solutionpath = Resolve-Path $SolutionDir
 $src = Join-Path -Path $sourcepath -ChildPath "xenbus.inf"
 $dst = Join-Path -Path $solutionpath -ChildPath "xenbus.inf"
 Copy-FileWithReplacements $src $dst -Replacements $Replacements
-
-Set-Location $cwd

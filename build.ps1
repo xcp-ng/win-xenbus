@@ -24,12 +24,6 @@ Function Build {
 
 	$params = @{
 		SolutionDir = $solutiondir[$visualstudioversion];
-		Arch = $Arch;
-	}
-	& ".\genfiles.ps1" @params
-
-	$params = @{
-		SolutionDir = $solutiondir[$visualstudioversion];
 		ConfigurationBase = $configurationbase[$visualstudioversion];
 		Arch = $Arch;
 		Type = $Type
@@ -50,12 +44,6 @@ Function SdvBuild {
 
 	$params = @{
 		SolutionDir = $solutiondir[$visualstudioversion];
-		Arch = $arch;
-	}
-	& ".\genfiles.ps1" @params
-
-	$params = @{
-		SolutionDir = $solutiondir[$visualstudioversion];
 		ConfigurationBase = $configurationbase[$visualstudioversion];
 		Arch = $arch;
 		Type = "sdv"
@@ -67,6 +55,22 @@ if ($Type -ne "free" -and $Type -ne "checked") {
 	Write-Host "Invalid Type"
 	Exit -1
 }
+
+if ([string]::IsNullOrEmpty($Env:VENDOR_NAME)) {
+   Set-Item -Path Env:VENDOR_NAME -Value 'Xen Project'
+}
+
+if ([string]::IsNullOrEmpty($Env:VENDOR_PREFIX)) {
+   Set-Item -Path Env:VENDOR_PREFIX -Value 'XP'
+}
+
+if ([string]::IsNullOrEmpty($Env:PRODUCT_NAME)) {
+   Set-Item -Path Env:PRODUCT_NAME -Value 'Xen'
+}
+
+Set-Item -Path Env:MAJOR_VERSION -Value '9'
+Set-Item -Path Env:MINOR_VERSION -Value '0'
+Set-Item -Path Env:MICRO_VERSION -Value '0'
 
 Build "x86" $Type
 Build "x64" $Type
