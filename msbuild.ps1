@@ -43,10 +43,12 @@ Function Run-MSBuildSDV {
 	)
 
 	$basepath = Get-Location
+	$versionpath = Join-Path -Path $SolutionPath -ChildPath "version"
 	$projpath = Join-Path -Path $SolutionPath -ChildPath $Name
 	Set-Location $projpath
 
 	$project = [string]::Format("{0}.vcxproj", $Name)
+	Run-MSBuild $versionpath "version.vcxproj" $Configuration $Platform "Build"
 	Run-MSBuild $projpath $project $Configuration $Platform "Build"
 	Run-MSBuild $projpath $project $Configuration $Platform "sdv" "/clean"
 	Run-MSBuild $projpath $project $Configuration $Platform "sdv" "/check:default.sdv /debug"
@@ -56,6 +58,8 @@ Function Run-MSBuildSDV {
 	if (Test-Path -Path $refine -PathType Leaf) {
 		Run-MSBuild $projpath $project $Configuration $Platform "sdv" "/refine"
 	}
+
+	Copy-Item "*DVL*" -Destination $SolutionPath
 
 	Set-Location $basepath
 }
@@ -75,7 +79,15 @@ elseif ($Type -eq "checked") {
 	Run-MSBuild $solutionpath "xenbus.sln" $configuration["checked"] $platform[$Arch]
 }
 elseif ($Type -eq "sdv") {
+	$archivepath = "xenbus"
+
+	if (-Not (Test-Path -Path $archivepath)) {
+		New-Item -Name $archivepath -ItemType Directory | Out-Null
+	}
+
 	Run-MSBuildSDV $solutionpath "xen" $configuration["sdv"] $platform[$Arch]
 	Run-MSBuildSDV $solutionpath "xenfilt" $configuration["sdv"] $platform[$Arch]
 	Run-MSBuildSDV $solutionpath "xenbus" $configuration["sdv"] $platform[$Arch]
+
+	Copy-Item -Path (Join-Path -Path $SolutionPath -ChildPath "*DVL*") -Destination $archivepath
 }
