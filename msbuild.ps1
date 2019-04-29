@@ -70,6 +70,8 @@ $configuration = @{ "free" = "$ConfigurationBase Release"; "checked" = "$Configu
 $platform = @{ "x86" = "Win32"; "x64" = "x64" }
 $solutionpath = Resolve-Path $SolutionDir
 
+Set-ExecutionPolicy -Scope CurrentUser -Force Bypass
+
 if ($Type -eq "free") {
 	Run-MSBuild $solutionpath "xenbus.sln" $configuration["free"] $platform[$Arch]
 }
