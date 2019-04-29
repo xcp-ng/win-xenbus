@@ -21,6 +21,7 @@ Function Run-MSBuild {
 	)
 
 	$c = "msbuild.exe"
+	$c += " /m:4"
 	$c += [string]::Format(" /p:Configuration=""{0}""", $Configuration)
 	$c += [string]::Format(" /p:Platform=""{0}""", $Platform)
 	$c += [string]::Format(" /t:""{0}"" ", $Target)
