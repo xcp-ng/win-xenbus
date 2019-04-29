@@ -20,18 +20,16 @@ Function Run-MSBuild {
 		[string]$Inputs = ""
 	)
 
-	$c = [string]::Format("/p:Configuration=`"{0}`"", $Configuration)
-	$p = [string]::Format("/p:Platform=`"{0}`"", $Platform)
-	$t = [string]::Format("/t:`"{0}`"", $Target)
-	$s = Join-Path -Path $SolutionPath -ChildPath $Name
+	$c = "msbuild.exe"
+	$c += [string]::Format(" /p:Configuration=""{0}""", $Configuration)
+	$c += [string]::Format(" /p:Platform=""{0}""", $Platform)
+	$c += [string]::Format(" /t:""{0}"" ", $Target)
 	if ($Inputs) {
-		$i = [string]::Format("/p:Inputs=`"{0}`"", $Inputs)
-		Write-Host "msbuild.exe" "/m:1" $c $p $t $i $s
-		& "msbuild.exe" "/m:1" $c $p $t $s $i
-	} else {
-		Write-Host "msbuild.exe" "/m:1" $c $p $t $s
-		& "msbuild.exe" "/m:1" $c $p $t $s
+		$c += [string]::Format(" /p:Inputs=""{0}"" ", $Inputs)
 	}
+	$c += Join-Path -Path $SolutionPath -ChildPath $Name
+
+	Invoke-Expression $c
 }
 
 Function Run-MSBuildSDV {
