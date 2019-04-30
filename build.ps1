@@ -20,7 +20,7 @@ Function Build {
 
 	$visualstudioversion = $Env:VisualStudioVersion
 	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; }
-	$configurationbase = @{ "14.0" = "Windows 10"; "15.0" = "Windows 10"; }
+	$configurationbase = @{ "14.0" = "Windows 8"; "15.0" = "Windows 8"; }
 
 	$params = @{
 		SolutionDir = $solutiondir[$visualstudioversion];
@@ -29,11 +29,6 @@ Function Build {
 		Type = $Type
 		}
 	& ".\msbuild.ps1" @params
-
-	$params = @{
-		Arch = $Arch;
-	}
-	& ".\symstore.ps1" @params
 }
 
 Function SdvBuild {
