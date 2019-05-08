@@ -42,9 +42,9 @@ Function Copy-FileWithReplacements {
 #
 # Script Body
 #
-$TheYear = Get-Date -UFormat "%Y"
-$TheMonth = Get-Date -UFormat "%m"
-$TheDay = Get-Date -UFormat "%d"
+$TheYear = [int](Get-Date -UFormat "%Y")
+$TheMonth = [int](Get-Date -UFormat "%m")
+$TheDay = [int](Get-Date -UFormat "%d")
 $InfArch = @{ "Win32" = "x86"; "x64" = "amd64" }
 $InfDate = Get-Date -UFormat "%m/%d/%Y"
 
