@@ -203,7 +203,7 @@ FiltersUninstallClass(
     HANDLE          Key;
     ULONG           Type;
     ULONG           Count;
-    PANSI_STRING    Old;
+    PANSI_STRING    Old = NULL;
     ULONG           Index;
     PANSI_STRING    New;
     NTSTATUS        status;

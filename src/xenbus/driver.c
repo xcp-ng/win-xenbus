@@ -296,9 +296,6 @@ DriverRemoveFunctionDeviceObject(
     RemoveEntryList(&Dx->ListEntry);
     ASSERT3U(Driver.References, !=, 0);
     References = --Driver.References;
-
-    if (References == 1)
-        FiltersUninstall();
 }
 
 //
@@ -772,6 +769,10 @@ DriverEntry(
         __DriverRequestReboot();
         goto done;
     }
+
+    // Remove the filters from the registry. They will be re-instated by
+    // the first successful AddDevice.
+    FiltersUninstall();
 
     DriverObject->DriverExtension->AddDevice = DriverAddDevice;
 
