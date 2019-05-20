@@ -306,12 +306,14 @@ DriverRemoveFunctionDeviceObject(
 
 NTSTATUS
 DriverGetActive(
-    OUT PCHAR       DeviceID,
-    OUT PCHAR       InstanceID
+    IN  const CHAR  *Key,
+    OUT PCHAR       *Value
     )
 {
     HANDLE          ActiveKey;
+    CHAR            Name[MAXNAMELEN];
     PANSI_STRING    Ansi;
+    ULONG           Length;
     NTSTATUS        status;
 
     Trace("====>\n");
@@ -325,30 +327,25 @@ DriverGetActive(
     if (!NT_SUCCESS(status))
         goto fail1;
 
+    status = RtlStringCbPrintfA(Name, MAXNAMELEN, "Active%s", Key);
+    ASSERT(NT_SUCCESS(status));
+
     status = RegistryQuerySzValue(ActiveKey,
-                                  "ActiveDeviceID",
+                                  Name,
                                   NULL,
                                   &Ansi);
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = RtlStringCbPrintfA(DeviceID,
-                                MAX_DEVICE_ID_LEN,
-                                "%Z",
-                                &Ansi[0]);
-    ASSERT(NT_SUCCESS(status));
+    Length = Ansi[0].Length + sizeof (CHAR);
+    *Value = __AllocatePoolWithTag(PagedPool, Length, 'SUB');
 
-    RegistryFreeSzValue(Ansi);
-
-    status = RegistryQuerySzValue(ActiveKey,
-                                  "ActiveInstanceID",
-                                  NULL,
-                                  &Ansi);
-    if (!NT_SUCCESS(status))
+    status = STATUS_NO_MEMORY;
+    if (*Value == NULL)
         goto fail3;
 
-    status = RtlStringCbPrintfA(InstanceID,
-                                MAX_DEVICE_ID_LEN,
+    status = RtlStringCbPrintfA(*Value,
+                                Length,
                                 "%Z",
                                 &Ansi[0]);
     ASSERT(NT_SUCCESS(status));
@@ -362,8 +359,7 @@ DriverGetActive(
     return STATUS_SUCCESS;
 
 fail3:
-    if (status != STATUS_OBJECT_NAME_NOT_FOUND)
-        Error("fail3\n");
+    Error("fail3\n");
 
 fail2:
     if (status != STATUS_OBJECT_NAME_NOT_FOUND)
@@ -455,7 +451,8 @@ fail1:
 NTSTATUS
 DriverSetActive(
     IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID
+    IN  PCHAR   InstanceID,
+    IN  PCHAR   LocationInformation
     )
 {
     HANDLE      ActiveKey;
@@ -498,13 +495,25 @@ DriverSetActive(
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    Info("%s\\%s\n", DeviceID, InstanceID);
+    RtlInitAnsiString(&Ansi[0], LocationInformation);
+
+    status = RegistryUpdateSzValue(ActiveKey,
+                                   "ActiveLocationInformation",
+                                   REG_SZ,
+                                   Ansi);
+    if (!NT_SUCCESS(status))
+        goto fail5;
+
+    Info("%s\\%s: %s\n", DeviceID, InstanceID, LocationInformation);
 
     RegistryCloseKey(ActiveKey);
 
     Trace("<====\n");
 
     return STATUS_SUCCESS;
+
+fail5:
+    Error("fail5\n");
 
 fail4:
     Error("fail4\n");

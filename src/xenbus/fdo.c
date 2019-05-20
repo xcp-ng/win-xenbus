@@ -552,13 +552,15 @@ static NTSTATUS
 FdoQueryId(
     IN  PXENBUS_FDO         Fdo,
     IN  BUS_QUERY_ID_TYPE   Type,
-    OUT PCHAR               Id
+    OUT PCHAR               *Id
     )
 {
     KEVENT                  Event;
     IO_STATUS_BLOCK         StatusBlock;
     PIRP                    Irp;
     PIO_STACK_LOCATION      StackLocation;
+    PWCHAR                  Buffer;
+    ULONG                   Length;
     NTSTATUS                status;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
@@ -598,15 +600,109 @@ FdoQueryId(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = RtlStringCbPrintfA(Id,
-                                MAXNAMELEN,
-                                "%ws",
-                                (PWCHAR)StatusBlock.Information);
+    Buffer = (PWCHAR)StatusBlock.Information;
+    Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
+
+    *Id = __AllocatePoolWithTag(PagedPool, Length, 'SUB');
+
+    status = STATUS_NO_MEMORY;
+    if (*Id == NULL)
+        goto fail3;
+
+    status = RtlStringCbPrintfA(*Id, Length, "%ws", Buffer);
     ASSERT(NT_SUCCESS(status));
+
+    ExFreePool(Buffer);
+
+    return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
 
     ExFreePool((PVOID)StatusBlock.Information);
 
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__drv_requiresIRQL(PASSIVE_LEVEL)
+static NTSTATUS
+FdoQueryDeviceText(
+    IN  PXENBUS_FDO         Fdo,
+    IN  DEVICE_TEXT_TYPE    Type,
+    OUT PCHAR               *Text
+    )
+{
+    KEVENT                  Event;
+    IO_STATUS_BLOCK         StatusBlock;
+    PIRP                    Irp;
+    PIO_STACK_LOCATION      StackLocation;
+    PWCHAR                  Buffer;
+    ULONG                   Length;
+    NTSTATUS                status;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    RtlZeroMemory(&StatusBlock, sizeof(IO_STATUS_BLOCK));
+
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP,
+                                       Fdo->LowerDeviceObject,
+                                       NULL,
+                                       0,
+                                       NULL,
+                                       &Event,
+                                       &StatusBlock);
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Irp == NULL)
+        goto fail1;
+
+    StackLocation = IoGetNextIrpStackLocation(Irp);
+    StackLocation->MinorFunction = IRP_MN_QUERY_DEVICE_TEXT;
+
+    StackLocation->Parameters.QueryDeviceText.DeviceTextType = Type;
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+
+    status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    if (status == STATUS_PENDING) {
+        (VOID) KeWaitForSingleObject(&Event,
+                                     Executive,
+                                     KernelMode,
+                                     FALSE,
+                                     NULL);
+        status = StatusBlock.Status;
+    }
+
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Buffer = (PWCHAR)StatusBlock.Information;
+    Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
+
+    *Text = __AllocatePoolWithTag(PagedPool, Length, 'SUB');
+
+    status = STATUS_NO_MEMORY;
+    if (*Text == NULL)
+        goto fail3;
+
+    status = RtlStringCbPrintfA(*Text, Length, "%ws", Buffer);
+    ASSERT(NT_SUCCESS(status));
+
+    ExFreePool(Buffer);
+
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    ExFreePool((PVOID)StatusBlock.Information);
 
 fail2:
     Error("fail2\n");
@@ -622,43 +718,55 @@ FdoSetActive(
     IN  PXENBUS_FDO Fdo
     )
 {
-    CHAR            DeviceID[MAX_DEVICE_ID_LEN];
-    CHAR            InstanceID[MAX_DEVICE_ID_LEN];
-    CHAR            ActiveDeviceID[MAX_DEVICE_ID_LEN];
-    CHAR            ActiveInstanceID[MAX_DEVICE_ID_LEN];
+    PCHAR           DeviceID;
+    PCHAR           InstanceID;
+    PCHAR           ActiveDeviceID;
+    PCHAR           LocationInformation;
     NTSTATUS        status;
 
     status = FdoQueryId(Fdo,
                         BusQueryDeviceID,
-                        DeviceID);
+                        &DeviceID);
     if (!NT_SUCCESS(status))
         goto fail1;
 
     status = FdoQueryId(Fdo,
                         BusQueryInstanceID,
-                        InstanceID);
+                        &InstanceID);
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = DriverGetActive(ActiveDeviceID,
-                             ActiveInstanceID);
+    status = FdoQueryDeviceText(Fdo,
+                                DeviceTextLocationInformation,
+                                &LocationInformation);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+    status = DriverGetActive("DeviceID", &ActiveDeviceID);
     if (NT_SUCCESS(status)) {
-        if (_stricmp(DeviceID, ActiveDeviceID) != 0)
-            goto done;
+        Fdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ? TRUE : FALSE;
+        ExFreePool(ActiveDeviceID);
     } else {
-        status = DriverSetActive(DeviceID,
-                                 InstanceID);
-        if (!NT_SUCCESS(status))
-            goto done;
+        status = DriverSetActive(DeviceID, InstanceID, LocationInformation);
+        if (NT_SUCCESS(status))
+            Fdo->Active = TRUE;
     }
 
-    Fdo->Active = TRUE;
+    ExFreePool(LocationInformation);
+    ExFreePool(InstanceID);
+    ExFreePool(DeviceID);
 
-done:
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    ExFreePool(InstanceID);
 
 fail2:
     Error("fail2\n");
+
+    ExFreePool(DeviceID);
 
 fail1:
     Error("fail1 (%08x)\n", status);

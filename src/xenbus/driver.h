@@ -66,14 +66,15 @@ DriverReleaseMutex(
 
 extern NTSTATUS
 DriverGetActive(
-    OUT PCHAR   DeviceID,
-    OUT PCHAR   InstanceID
+    IN  const CHAR  *Key,
+    OUT PCHAR       *Value
     );
 
 NTSTATUS
 DriverSetActive(
     IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID
+    IN  PCHAR   InstanceID,
+    IN  PCHAR   LocationInformation
     );
 
 NTSTATUS
