@@ -67,6 +67,7 @@ struct _XENFILT_PDO {
 
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     PXENFILT_EMULATED_OBJECT        EmulatedObject;
+    BOOLEAN                         Active;
 };
 
 static FORCEINLINE PVOID
@@ -250,46 +251,108 @@ __PdoGetFdo(
     return Pdo->Fdo;
 }
 
-static VOID
-PdoSetDeviceInstance(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PCHAR           DeviceID,
-    IN  PCHAR           InstanceID
+static NTSTATUS
+PdoSetDeviceInformation(
+    IN  PXENFILT_PDO    Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
-    CHAR                ActiveDeviceID[MAX_DEVICE_ID_LEN];
-    CHAR                ActiveInstanceID[MAX_DEVICE_ID_LEN];
+    PCHAR               DeviceID;
+    PCHAR               ActiveDeviceID;
+    PCHAR               InstanceID;
+    PCHAR               LocationInformation;
     NTSTATUS            status;
 
-    status = DriverGetActive(ActiveDeviceID,
-                             ActiveInstanceID);
+    status = DriverQueryId(Pdo->LowerDeviceObject,
+                           BusQueryDeviceID,
+                           &DeviceID);
     if (!NT_SUCCESS(status))
-        goto done;
+        goto fail1;
 
-    if (_stricmp(DeviceID, ActiveDeviceID) != 0)
-        goto done;
+    status = DriverGetActive("DeviceID",
+                             &ActiveDeviceID);
+    if (NT_SUCCESS(status)) {
+        Pdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ?
+                      TRUE :
+                      FALSE;
 
-    if (_stricmp(InstanceID, ActiveInstanceID) != 0) {
-        Warning("(%s) '%s' -> '%s'\n",
-                Dx->DeviceID,
-                InstanceID,
-                ActiveInstanceID);
-        InstanceID = ActiveInstanceID;
+        ExFreePool(ActiveDeviceID);
+    } else {
+        Pdo->Active = FALSE;
     }
 
-done:
-    status = RtlStringCbPrintfA(Dx->DeviceID,
-                                MAX_DEVICE_ID_LEN,
-                                "%s",
-                                DeviceID);
-    ASSERT(NT_SUCCESS(status));
+    if (Pdo->Active) {
+        status = DriverGetActive("InstanceID",
+                                 &InstanceID);
+        if (!NT_SUCCESS(status))
+            goto fail2;
 
-    status = RtlStringCbPrintfA(Dx->InstanceID,
-                                MAX_DEVICE_ID_LEN,
-                                "%s",
-                                InstanceID);
-    ASSERT(NT_SUCCESS(status));
+        status = DriverGetActive("LocationInformation",
+                                 &LocationInformation);
+        if (!NT_SUCCESS(status))
+            goto fail3;
+    } else {
+        status = DriverQueryId(Pdo->LowerDeviceObject,
+                               BusQueryInstanceID,
+                               &InstanceID);
+        if (!NT_SUCCESS(status))
+            InstanceID = NULL;
+
+        status = DriverQueryDeviceText(Pdo->LowerDeviceObject,
+                                       DeviceTextLocationInformation,
+                                       &LocationInformation);
+        if (!NT_SUCCESS(status))
+            LocationInformation = NULL;
+    }
+
+    Dx->DeviceID = DeviceID;
+    Dx->InstanceID = InstanceID;
+    Dx->LocationInformation = LocationInformation;
+
+    return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    ASSERT(Pdo->Active);
+    ExFreePool(InstanceID);
+
+fail2:
+    Error("fail2\n");
+
+    ASSERT(Pdo->Active);
+    ExFreePool(DeviceID);
+
+    Pdo->Active = FALSE;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+PdoClearDeviceInformation(
+    IN  PXENFILT_PDO    Pdo
+    )
+{
+    PXENFILT_DX         Dx = Pdo->Dx;
+
+    if (Dx->LocationInformation != NULL) {
+        ExFreePool(Dx->LocationInformation);
+        Dx->LocationInformation = NULL;
+    }
+
+    if (Dx->InstanceID != NULL) {
+        ExFreePool(Dx->InstanceID);
+        Dx->InstanceID = NULL;
+    }
+
+    ASSERT(Dx->DeviceID != NULL);
+    ExFreePool(Dx->DeviceID);
+    Dx->DeviceID = NULL;
+
+    Pdo->Active = FALSE;
 }
 
 static FORCEINLINE PCHAR
@@ -299,6 +362,7 @@ __PdoGetDeviceID(
 {
     PXENFILT_DX         Dx = Pdo->Dx;
 
+    ASSERT(Dx->DeviceID != NULL);
     return Dx->DeviceID;
 }
 
@@ -309,7 +373,19 @@ __PdoGetInstanceID(
 {
     PXENFILT_DX         Dx = Pdo->Dx;
 
-    return Dx->InstanceID;
+    return (Dx->InstanceID != NULL) ?
+           Dx->InstanceID : "";
+}
+
+static FORCEINLINE PCHAR
+__PdoGetLocationInformation(
+    IN  PXENFILT_PDO    Pdo
+    )
+{
+    PXENFILT_DX         Dx = Pdo->Dx;
+
+    return (Dx->LocationInformation != NULL) ?
+           Dx->LocationInformation : "";
 }
 
 static FORCEINLINE VOID
@@ -317,14 +393,20 @@ __PdoSetName(
     IN  PXENFILT_PDO    Pdo
     )
 {
-    PXENFILT_DX         Dx = Pdo->Dx;
     NTSTATUS            status;
 
-    status = RtlStringCbPrintfA(Pdo->Name,
-                                MAXNAMELEN,
-                                "%s\\%s",
-                                Dx->DeviceID,
-                                Dx->InstanceID);
+    if (strlen(__PdoGetInstanceID(Pdo)) == 0)
+        status = RtlStringCbPrintfA(Pdo->Name,
+                                    MAXNAMELEN,
+                                    "%s",
+                                    __PdoGetDeviceID(Pdo));
+    else
+        status = RtlStringCbPrintfA(Pdo->Name,
+                                    MAXNAMELEN,
+                                    "%s\\%s",
+                                    __PdoGetDeviceID(Pdo),
+                                    __PdoGetInstanceID(Pdo));
+
     ASSERT(NT_SUCCESS(status));
 }
 
@@ -974,13 +1056,104 @@ fail1:
 }
 
 static NTSTATUS
+PdoQueryDeviceText(
+    IN  PXENFILT_PDO    Pdo,
+    IN  PIRP            Irp
+    )
+{
+    PIO_STACK_LOCATION  StackLocation;
+    UNICODE_STRING      Text;
+    NTSTATUS            status;
+
+    status = IoAcquireRemoveLock(&Pdo->Dx->RemoveLock, Irp);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = PdoForwardIrpSynchronously(Pdo, Irp);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+
+    RtlZeroMemory(&Text, sizeof (UNICODE_STRING));
+
+    switch (StackLocation->Parameters.QueryDeviceText.DeviceTextType) {
+    case DeviceTextLocationInformation:
+        Text.MaximumLength =
+            (USHORT)(strlen(__PdoGetLocationInformation(Pdo)) *
+                     sizeof (WCHAR));
+
+        Trace("DeviceTextLocationInformation\n");
+        break;
+
+    default:
+        goto done;
+    }
+
+    status = STATUS_OBJECT_NAME_NOT_FOUND;
+    if (Text.MaximumLength == 0)
+        goto fail3;
+
+    Text.MaximumLength += sizeof (WCHAR);
+    Text.Buffer = __AllocatePoolWithTag(PagedPool,
+                                        Text.MaximumLength,
+                                        'TLIF');
+
+    status = STATUS_NO_MEMORY;
+    if (Text.Buffer == NULL)
+        goto fail4;
+
+    switch (StackLocation->Parameters.QueryDeviceText.DeviceTextType) {
+    case DeviceTextLocationInformation:
+        status = RtlStringCbPrintfW(Text.Buffer,
+                                    Text.MaximumLength,
+                                    L"%hs",
+                                    __PdoGetLocationInformation(Pdo));
+        ASSERT(NT_SUCCESS(status));
+
+        break;
+
+    default:
+        ASSERT(FALSE);
+        break;
+    }
+
+    Text.Length = (USHORT)(wcslen(Text.Buffer) * sizeof (WCHAR));
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    Trace("- %wZ\n", &Text);
+
+    ExFreePool((PVOID)Irp->IoStatus.Information);
+    Irp->IoStatus.Information = (ULONG_PTR)Text.Buffer;
+
+done:
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    return STATUS_SUCCESS;
+
+fail4:
+fail3:
+fail2:
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
+
+fail1:
+    Irp->IoStatus.Status = status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    return status;
+}
+
+static NTSTATUS
 PdoQueryId(
     IN  PXENFILT_PDO    Pdo,
     IN  PIRP            Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
-    PWCHAR              Buffer;
     UNICODE_STRING      Id;
     NTSTATUS            status;
 
@@ -994,49 +1167,55 @@ PdoQueryId(
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
 
+    RtlZeroMemory(&Id, sizeof (UNICODE_STRING));
+
     switch (StackLocation->Parameters.QueryId.IdType) {
     case BusQueryInstanceID:
+        Id.MaximumLength = (USHORT)(strlen(__PdoGetInstanceID(Pdo)) *
+                                    sizeof (WCHAR));
+
         Trace("BusQueryInstanceID\n");
-        Id.MaximumLength = MAX_DEVICE_ID_LEN * sizeof (WCHAR);
         break;
 
     case BusQueryDeviceID:
+        Id.MaximumLength = (USHORT)(strlen(__PdoGetDeviceID(Pdo)) *
+                                    sizeof (WCHAR));
+
         Trace("BusQueryDeviceID\n");
-        Id.MaximumLength = MAX_DEVICE_ID_LEN * sizeof (WCHAR);
         break;
 
     default:
         goto done;
     }
 
-    Buffer = __AllocatePoolWithTag(PagedPool, Id.MaximumLength, 'TLIF');
-
-    status = STATUS_NO_MEMORY;
-    if (Buffer == NULL)
+    status = STATUS_OBJECT_NAME_NOT_FOUND;
+    if (Id.MaximumLength == 0)
         goto fail3;
 
-    Id.Buffer = Buffer;
-    Id.Length = 0;
+    Id.MaximumLength += sizeof (WCHAR);
+    Id.Buffer = __AllocatePoolWithTag(PagedPool, Id.MaximumLength, 'TLIF');
+
+    status = STATUS_NO_MEMORY;
+    if (Id.Buffer == NULL)
+        goto fail4;
 
     switch (StackLocation->Parameters.QueryId.IdType) {
     case BusQueryInstanceID:
-        status = RtlStringCbPrintfW(Buffer,
+        status = RtlStringCbPrintfW(Id.Buffer,
                                     Id.MaximumLength,
                                     L"%hs",
                                     __PdoGetInstanceID(Pdo));
         ASSERT(NT_SUCCESS(status));
 
-        Buffer += wcslen(Buffer);
         break;
 
     case BusQueryDeviceID:
-        status = RtlStringCbPrintfW(Buffer,
+        status = RtlStringCbPrintfW(Id.Buffer,
                                     Id.MaximumLength,
                                     L"%hs",
                                     __PdoGetDeviceID(Pdo));
         ASSERT(NT_SUCCESS(status));
 
-        Buffer += wcslen(Buffer);
         break;
 
     default:
@@ -1044,8 +1223,7 @@ PdoQueryId(
         break;
     }
 
-    Id.Length = (USHORT)((ULONG_PTR)Buffer - (ULONG_PTR)Id.Buffer);
-    Buffer = Id.Buffer;
+    Id.Length = (USHORT)(wcslen(Id.Buffer) * sizeof (WCHAR));
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
@@ -1062,6 +1240,7 @@ done:
 
     return STATUS_SUCCESS;
 
+fail4:
 fail3:
 fail2:
     IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
@@ -1165,6 +1344,10 @@ PdoDispatchPnp(
 
     case IRP_MN_QUERY_INTERFACE:
         status = PdoQueryInterface(Pdo, Irp);
+        break;
+
+    case IRP_MN_QUERY_DEVICE_TEXT:
+        status = PdoQueryDeviceText(Pdo, Irp);
         break;
 
     case IRP_MN_QUERY_ID:
@@ -1922,8 +2105,6 @@ NTSTATUS
 PdoCreate(
     PXENFILT_FDO                    Fdo,
     PDEVICE_OBJECT                  PhysicalDeviceObject,
-    PCHAR                           DeviceID,
-    PCHAR                           InstanceID,
     XENFILT_EMULATED_OBJECT_TYPE    Type
     )
 {
@@ -1987,21 +2168,24 @@ PdoCreate(
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    status = EmulatedAddObject(DriverGetEmulatedContext(),
-                               DeviceID,
-                               InstanceID,
-                               Pdo->Type,
-                               &Pdo->EmulatedObject);
+    status = PdoSetDeviceInformation(Pdo);
     if (!NT_SUCCESS(status))
         goto fail6;
 
-    PdoSetDeviceInstance(Pdo, DeviceID, InstanceID);
+    status = EmulatedAddObject(DriverGetEmulatedContext(),
+                               __PdoGetDeviceID(Pdo),
+                               __PdoGetInstanceID(Pdo),
+                               Pdo->Type,
+                               &Pdo->EmulatedObject);
+    if (!NT_SUCCESS(status))
+        goto fail7;
 
     __PdoSetName(Pdo);
 
-    Info("%p (%s)\n",
+    Info("%p (%s) %s\n",
          FilterDeviceObject,
-         __PdoGetName(Pdo));
+         __PdoGetName(Pdo),
+         Pdo->Active ? "[ACTIVE]" : "");
 
     Dx->Pdo = Pdo;
 
@@ -2015,6 +2199,11 @@ PdoCreate(
     FdoAddPhysicalDeviceObject(Fdo, Pdo);
 
     return STATUS_SUCCESS;
+
+fail7:
+    Error("fail7\n");
+
+    PdoClearDeviceInformation(Pdo);
 
 fail6:
     Error("fail6\n");
@@ -2088,6 +2277,8 @@ PdoDestroy(
     EmulatedRemoveObject(DriverGetEmulatedContext(),
                          Pdo->EmulatedObject);
     Pdo->EmulatedObject = NULL;
+
+    PdoClearDeviceInformation(Pdo);
 
     ThreadAlert(Pdo->DevicePowerThread);
     ThreadJoin(Pdo->DevicePowerThread);

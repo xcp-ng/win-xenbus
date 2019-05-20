@@ -212,20 +212,17 @@ FdoGetPhysicalDeviceObject(
     return __FdoGetPhysicalDeviceObject(Fdo);
 }
 
-static FORCEINLINE VOID
+static FORCEINLINE NTSTATUS
 __FdoSetDeviceID(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PCHAR           DeviceID
+    IN  PXENFILT_FDO    Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
-    NTSTATUS            status;
 
-    status = RtlStringCbPrintfA(Dx->DeviceID,
-                                MAX_DEVICE_ID_LEN,
-                                "%s",
-                                DeviceID);
-    ASSERT(NT_SUCCESS(status));
+    return DriverQueryId(Fdo->PhysicalDeviceObject,
+                         BusQueryDeviceID,
+                         &Dx->DeviceID);
+
 }
 
 static FORCEINLINE PCHAR
@@ -239,19 +236,26 @@ __FdoGetDeviceID(
 }
 
 static FORCEINLINE VOID
-__FdoSetInstanceID(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PCHAR           InstanceID
+__FdoClearDeviceID(
+    IN  PXENFILT_FDO    Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
-    NTSTATUS            status;
 
-    status = RtlStringCbPrintfA(Dx->InstanceID,
-                                MAX_DEVICE_ID_LEN,
-                                "%s",
-                                InstanceID);
-    ASSERT(NT_SUCCESS(status));
+    ExFreePool(Dx->DeviceID);
+    Dx->DeviceID = NULL;
+}
+
+static FORCEINLINE NTSTATUS
+__FdoSetInstanceID(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    PXENFILT_DX         Dx = Fdo->Dx;
+
+    return DriverQueryId(Fdo->PhysicalDeviceObject,
+                         BusQueryInstanceID,
+                         &Dx->InstanceID);
 }
 
 static FORCEINLINE PCHAR
@@ -262,6 +266,17 @@ __FdoGetInstanceID(
     PXENFILT_DX         Dx = Fdo->Dx;
 
     return Dx->InstanceID;
+}
+
+static FORCEINLINE VOID
+__FdoClearInstanceID(
+    IN  PXENFILT_FDO    Fdo
+    )
+{
+    PXENFILT_DX         Dx = Fdo->Dx;
+
+    ExFreePool(Dx->InstanceID);
+    Dx->InstanceID = NULL;
 }
 
 static FORCEINLINE VOID
@@ -383,143 +398,6 @@ FdoHasEnumerated(
     return Fdo->Enumerated;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoQueryIdCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PKEVENT             Event = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-    UNREFERENCED_PARAMETER(Irp);
-
-    KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
-
-    return STATUS_MORE_PROCESSING_REQUIRED;
-}
-
-static NTSTATUS
-FdoQueryId(
-    IN  PXENFILT_FDO        Fdo,
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  BUS_QUERY_ID_TYPE   Type,
-    OUT PCHAR               Id
-    )
-{
-    PIRP                    Irp;
-    KEVENT                  Event;
-    PIO_STACK_LOCATION      StackLocation;
-    NTSTATUS                status;
-
-    UNREFERENCED_PARAMETER(Fdo);
-
-    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
-
-    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
-
-    status = STATUS_INSUFFICIENT_RESOURCES;
-    if (Irp == NULL)
-        goto fail1;
-
-    StackLocation = IoGetNextIrpStackLocation(Irp);
-
-    StackLocation->MajorFunction = IRP_MJ_PNP;
-    StackLocation->MinorFunction = IRP_MN_QUERY_ID;
-    StackLocation->Flags = 0;
-    StackLocation->Parameters.QueryId.IdType = Type;
-    StackLocation->DeviceObject = DeviceObject;
-    StackLocation->FileObject = NULL;
-
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
-
-    IoSetCompletionRoutine(Irp,
-                           FdoQueryIdCompletion,
-                           &Event,
-                           TRUE,
-                           TRUE,
-                           TRUE);
-
-    // Default completion status
-    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-
-    status = IoCallDriver(DeviceObject, Irp);
-    if (status == STATUS_PENDING) {
-        (VOID) KeWaitForSingleObject(&Event,
-                                     Executive,
-                                     KernelMode,
-                                     FALSE,
-                                     NULL);
-        status = Irp->IoStatus.Status;
-    } else {
-        ASSERT3U(status, ==, Irp->IoStatus.Status);
-    }
-
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = RtlStringCbPrintfA(Id,
-                                MAX_DEVICE_ID_LEN,
-                                "%ws",
-                                (PWCHAR)Irp->IoStatus.Information);
-    ASSERT(NT_SUCCESS(status));
-
-    ExFreePool((PVOID)Irp->IoStatus.Information);
-
-    IoFreeIrp(Irp);
-
-    return STATUS_SUCCESS;
-
-fail2:
-    IoFreeIrp(Irp);
-
-fail1:
-    return status;
-}
-
-static NTSTATUS
-FdoAddDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PDEVICE_OBJECT  PhysicalDeviceObject
-    )
-{
-    CHAR                DeviceID[MAX_DEVICE_ID_LEN];
-    CHAR                InstanceID[MAX_DEVICE_ID_LEN];
-    NTSTATUS            status;
-
-    status = FdoQueryId(Fdo,
-                        PhysicalDeviceObject,
-                        BusQueryDeviceID,
-                        DeviceID);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = FdoQueryId(Fdo,
-                        PhysicalDeviceObject,
-                        BusQueryInstanceID,
-                        InstanceID);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = PdoCreate(Fdo,
-                       PhysicalDeviceObject,
-                       DeviceID,
-                       InstanceID,
-                       Fdo->Type);
-    if (!NT_SUCCESS(status))
-        goto fail3;
-
-    return STATUS_SUCCESS;
-
-fail3:
-fail2:
-fail1:
-    return status;
-}
-
 static VOID
 FdoEnumerate(
     IN  PXENFILT_FDO        Fdo,
@@ -588,7 +466,7 @@ FdoEnumerate(
     for (Index = 0; Index < Count; Index++) {
 #pragma warning(suppress:6385)  // Reading invalid data from 'PhysicalDeviceObject'
         if (PhysicalDeviceObject[Index] != NULL) {
-            (VOID) FdoAddDevice(Fdo, PhysicalDeviceObject[Index]);
+            (VOID) PdoCreate(Fdo, PhysicalDeviceObject[Index], Fdo->Type);
             ObDereferenceObject(PhysicalDeviceObject[Index]);
         }
     }
@@ -2076,8 +1954,6 @@ FdoDispatch(
 NTSTATUS
 FdoCreate(
     IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
-    IN  PCHAR                           DeviceID,
-    IN  PCHAR                           InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type
     )
 {
@@ -2140,13 +2016,19 @@ FdoCreate(
     if (!NT_SUCCESS(status))
         goto fail5;
 
+    status = __FdoSetDeviceID(Fdo);
+    if (!NT_SUCCESS(status))
+        goto fail6;
+
+    status = __FdoSetInstanceID(Fdo);
+    if (!NT_SUCCESS(status))
+        goto fail7;
+
+    __FdoSetName(Fdo);
+
     InitializeMutex(&Fdo->Mutex);
     InitializeListHead(&Fdo->List);
     Fdo->References = 1;
-
-    __FdoSetDeviceID(Fdo, DeviceID);
-    __FdoSetInstanceID(Fdo, InstanceID);
-    __FdoSetName(Fdo);
 
     Info("%p (%s)\n",
          FilterDeviceObject,
@@ -2164,6 +2046,18 @@ FdoCreate(
     DriverAddFunctionDeviceObject(Fdo);
 
     return STATUS_SUCCESS;
+
+fail7:
+    Error("fail7\n");
+
+    __FdoClearDeviceID(Fdo);
+
+fail6:
+    Error("fail6\n");
+
+    ThreadAlert(Fdo->DevicePowerThread);
+    ThreadJoin(Fdo->DevicePowerThread);
+    Fdo->DevicePowerThread = NULL;
 
 fail5:
     Error("fail5\n");
@@ -2222,10 +2116,13 @@ FdoDestroy(
          FilterDeviceObject,
          __FdoGetName(Fdo));
 
-    RtlZeroMemory(Fdo->Name, sizeof (Fdo->Name));
-
     RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&Fdo->Mutex, sizeof (MUTEX));
+
+    RtlZeroMemory(Fdo->Name, sizeof (Fdo->Name));
+
+    __FdoClearInstanceID(Fdo);
+    __FdoClearDeviceID(Fdo);
 
     ThreadAlert(Fdo->DevicePowerThread);
     ThreadJoin(Fdo->DevicePowerThread);

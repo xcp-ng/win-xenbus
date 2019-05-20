@@ -54,8 +54,8 @@ DriverReleaseMutex(
 
 extern NTSTATUS
 DriverGetActive(
-    OUT PCHAR   DeviceID,
-    OUT PCHAR   InstanceID
+    IN  const CHAR  *Key,
+    OUT PCHAR       *Value
     );
 
 typedef enum _XENFILT_FILTER_STATE {
@@ -74,6 +74,20 @@ DriverGetFilterState(
     VOID
     );
 
+extern NTSTATUS
+DriverQueryId(
+    IN  PDEVICE_OBJECT      PhysicalDeviceObject,
+    IN  BUS_QUERY_ID_TYPE   Type,
+    OUT PCHAR               *Id
+    );
+
+extern NTSTATUS
+DriverQueryDeviceText(
+    IN  PDEVICE_OBJECT      LowerDeviceObject,
+    IN  DEVICE_TEXT_TYPE    Type,
+    OUT PCHAR               *Text
+    );
+
 #include "emulated.h"
 
 PXENFILT_EMULATED_CONTEXT
@@ -86,8 +100,6 @@ typedef struct _XENFILT_PDO XENFILT_PDO, *PXENFILT_PDO;
 
 #include "pdo.h"
 #include "fdo.h"
-
-#define MAX_DEVICE_ID_LEN   200
 
 extern VOID
 DriverAddFunctionDeviceObject(
@@ -112,8 +124,9 @@ typedef struct _XENFILT_DX {
     SYSTEM_POWER_STATE  SystemPowerState;
     DEVICE_POWER_STATE  DevicePowerState;
 
-    CHAR                DeviceID[MAX_DEVICE_ID_LEN];
-    CHAR                InstanceID[MAX_DEVICE_ID_LEN];
+    PCHAR               DeviceID;
+    PCHAR               InstanceID;
+    PCHAR               LocationInformation;
 
     IO_REMOVE_LOCK      RemoveLock;
 

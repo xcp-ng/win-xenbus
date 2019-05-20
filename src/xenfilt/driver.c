@@ -226,14 +226,18 @@ DriverRemoveFunctionDeviceObject(
     --Driver.References;
 }
 
+#define MAXNAMELEN  128
+
 static FORCEINLINE NTSTATUS
 __DriverGetActive(
-    OUT PCHAR       DeviceID,
-    OUT PCHAR       InstanceID
+    IN  const CHAR  *Key,
+    OUT PCHAR       *Value
     )
 {
     HANDLE          ParametersKey;
+    CHAR            Name[MAXNAMELEN];
     PANSI_STRING    Ansi;
+    ULONG           Length;
     NTSTATUS        status;
 
     Trace("====>\n");
@@ -242,30 +246,25 @@ __DriverGetActive(
 
     ParametersKey = __DriverGetParametersKey();
 
+    status = RtlStringCbPrintfA(Name, MAXNAMELEN, "Active%s", Key);
+    ASSERT(NT_SUCCESS(status));
+
     status = RegistryQuerySzValue(ParametersKey,
-                                  "ActiveDeviceID",
+                                  Name,
                                   NULL,
                                   &Ansi);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = RtlStringCbPrintfA(DeviceID,
-                                MAX_DEVICE_ID_LEN,
-                                "%Z",
-                                &Ansi[0]);
-    ASSERT(NT_SUCCESS(status));
+    Length = Ansi[0].Length + sizeof (CHAR);
+    *Value = __AllocatePoolWithTag(PagedPool, Length, 'TLIF');
 
-    RegistryFreeSzValue(Ansi);
-
-    status = RegistryQuerySzValue(ParametersKey,
-                                  "ActiveInstanceID",
-                                  NULL,
-                                  &Ansi);
-    if (!NT_SUCCESS(status))
+    status = STATUS_NO_MEMORY;
+    if (*Value == NULL)
         goto fail2;
 
-    status = RtlStringCbPrintfA(InstanceID,
-                                MAX_DEVICE_ID_LEN,
+    status = RtlStringCbPrintfA(*Value,
+                                Length,
                                 "%Z",
                                 &Ansi[0]);
     ASSERT(NT_SUCCESS(status));
@@ -280,18 +279,19 @@ fail2:
     Error("fail2\n");
 
 fail1:
-    Error("fail1 (%08x)\n", status);
+    if (status != STATUS_OBJECT_NAME_NOT_FOUND)
+        Error("fail1 (%08x)\n", status);
 
     return status;
 }
 
 NTSTATUS
 DriverGetActive(
-    OUT PCHAR       DeviceID,
-    OUT PCHAR       InstanceID
+    IN  const CHAR  *Key,
+    OUT PCHAR       *Value
     )
 {
-    return __DriverGetActive(DeviceID, InstanceID);
+    return __DriverGetActive(Key, Value);
 }
 
 static BOOLEAN
@@ -299,8 +299,7 @@ DriverIsActivePresent(
     VOID
     )
 {
-    CHAR        ActiveDeviceID[MAX_DEVICE_ID_LEN];
-    CHAR        ActiveInstanceID[MAX_DEVICE_ID_LEN];
+    PCHAR       ActiveDeviceID;
     BOOLEAN     Present;
     NTSTATUS    status;
 
@@ -310,8 +309,8 @@ DriverIsActivePresent(
 
     Present = FALSE;
 
-    status = __DriverGetActive(ActiveDeviceID,
-                               ActiveInstanceID);
+    status = __DriverGetActive("DeviceID",
+                               &ActiveDeviceID);
     if (!NT_SUCCESS(status))
         goto done;
 
@@ -319,6 +318,8 @@ DriverIsActivePresent(
                                &Driver.EmulatedInterface,
                                ActiveDeviceID,
                                NULL);
+
+    ExFreePool(ActiveDeviceID);
 
 done:
     XENFILT_EMULATED(Release, &Driver.EmulatedInterface);
@@ -452,7 +453,7 @@ DriverUnload(
 __drv_functionClass(IO_COMPLETION_ROUTINE)
 __drv_sameIRQL
 static NTSTATUS
-DriverQueryIdCompletion(
+DriverQueryCompletion(
     IN  PDEVICE_OBJECT  DeviceObject,
     IN  PIRP            Irp,
     IN  PVOID           Context
@@ -468,22 +469,23 @@ DriverQueryIdCompletion(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static FORCEINLINE NTSTATUS
+NTSTATUS
 DriverQueryId(
-    IN  PDEVICE_OBJECT      PhysicalDeviceObject,
+    IN  PDEVICE_OBJECT      DeviceObject,
     IN  BUS_QUERY_ID_TYPE   Type,
-    OUT PCHAR               Id
+    OUT PCHAR               *Id
     )
 {
-    PDEVICE_OBJECT          DeviceObject;
     PIRP                    Irp;
     KEVENT                  Event;
     PIO_STACK_LOCATION      StackLocation;
+    PWCHAR                  Buffer;
+    ULONG                   Length;
     NTSTATUS                status;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    DeviceObject = IoGetAttachedDeviceReference(PhysicalDeviceObject);
+    ObReferenceObject(DeviceObject);
 
     Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
 
@@ -503,7 +505,7 @@ DriverQueryId(
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
     IoSetCompletionRoutine(Irp,
-                           DriverQueryIdCompletion,
+                           DriverQueryCompletion,
                            &Event,
                            TRUE,
                            TRUE,
@@ -527,18 +529,116 @@ DriverQueryId(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    status = RtlStringCbPrintfA(Id,
-                                MAX_DEVICE_ID_LEN,
-                                "%ws",
-                                (PWCHAR)Irp->IoStatus.Information);
+    Buffer = (PWCHAR)Irp->IoStatus.Information;
+    Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
+
+    *Id = __AllocatePoolWithTag(PagedPool, Length, 'TLIF');
+
+    status = STATUS_NO_MEMORY;
+    if (*Id == NULL)
+        goto fail3;
+
+    status = RtlStringCbPrintfA(*Id, Length, "%ws", Buffer);
     ASSERT(NT_SUCCESS(status));
 
-    ExFreePool((PVOID)Irp->IoStatus.Information);
-
+    ExFreePool(Buffer);
     IoFreeIrp(Irp);
     ObDereferenceObject(DeviceObject);
 
     return STATUS_SUCCESS;
+
+fail3:
+    ExFreePool(Buffer);
+
+fail2:
+    IoFreeIrp(Irp);
+
+fail1:
+    ObDereferenceObject(DeviceObject);
+
+    return status;
+}
+
+NTSTATUS
+DriverQueryDeviceText(
+    IN  PDEVICE_OBJECT      DeviceObject,
+    IN  DEVICE_TEXT_TYPE    Type,
+    OUT PCHAR               *Text
+    )
+{
+    PIRP                    Irp;
+    KEVENT                  Event;
+    PIO_STACK_LOCATION      StackLocation;
+    PWCHAR                  Buffer;
+    ULONG                   Length;
+    NTSTATUS                status;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    ObReferenceObject(DeviceObject);
+
+    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
+
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    if (Irp == NULL)
+        goto fail1;
+
+    StackLocation = IoGetNextIrpStackLocation(Irp);
+
+    StackLocation->MajorFunction = IRP_MJ_PNP;
+    StackLocation->MinorFunction = IRP_MN_QUERY_DEVICE_TEXT;
+    StackLocation->Flags = 0;
+    StackLocation->Parameters.QueryDeviceText.DeviceTextType = Type;
+    StackLocation->DeviceObject = DeviceObject;
+    StackLocation->FileObject = NULL;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+
+    IoSetCompletionRoutine(Irp,
+                           DriverQueryCompletion,
+                           &Event,
+                           TRUE,
+                           TRUE,
+                           TRUE);
+
+    // Default completion status
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+
+    status = IoCallDriver(DeviceObject, Irp);
+    if (status == STATUS_PENDING) {
+        (VOID) KeWaitForSingleObject(&Event,
+                                     Executive,
+                                     KernelMode,
+                                     FALSE,
+                                     NULL);
+        status = Irp->IoStatus.Status;
+    } else {
+        ASSERT3U(status, ==, Irp->IoStatus.Status);
+    }
+
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Buffer = (PWCHAR)Irp->IoStatus.Information;
+    Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
+
+    *Text = __AllocatePoolWithTag(PagedPool, Length, 'TLIF');
+
+    status = STATUS_NO_MEMORY;
+    if (*Text == NULL)
+        goto fail3;
+
+    status = RtlStringCbPrintfA(*Text, Length, "%ws", Buffer);
+    ASSERT(NT_SUCCESS(status));
+
+    ExFreePool(Buffer);
+    IoFreeIrp(Irp);
+    ObDereferenceObject(DeviceObject);
+
+    return STATUS_SUCCESS;
+
+fail3:
+    ExFreePool(Buffer);
 
 fail2:
     IoFreeIrp(Irp);
@@ -576,26 +676,19 @@ DriverAddDevice(
     )
 {
     HANDLE              ParametersKey;
-    CHAR                DeviceID[MAX_DEVICE_ID_LEN];
-    CHAR                InstanceID[MAX_DEVICE_ID_LEN];
+    PCHAR               DeviceID;
     PANSI_STRING        Type;
     NTSTATUS            status;
 
     ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
 
-    ParametersKey = __DriverGetParametersKey();
-
     status = DriverQueryId(PhysicalDeviceObject,
                            BusQueryDeviceID,
-                           DeviceID);
+                           &DeviceID);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = DriverQueryId(PhysicalDeviceObject,
-                           BusQueryInstanceID,
-                           InstanceID);
-    if (!NT_SUCCESS(status))
-        goto fail2;
+    ParametersKey = __DriverGetParametersKey();
 
     status = RegistryQuerySzValue(ParametersKey,
                                   DeviceID,
@@ -605,25 +698,26 @@ DriverAddDevice(
         __DriverAcquireMutex();
 
         status = FdoCreate(PhysicalDeviceObject,
-                           DeviceID,
-                           InstanceID,
                            DriverGetEmulatedType(Type));
 
         if (!NT_SUCCESS(status))
-            goto fail3;
+            goto fail2;
 
         __DriverReleaseMutex();
 
         RegistryFreeSzValue(Type);
     }
 
+    ExFreePool(DeviceID);
+
     return STATUS_SUCCESS;
 
-fail3:
-        __DriverReleaseMutex();
-
 fail2:
+    __DriverReleaseMutex();
+
 fail1:
+    ExFreePool(DeviceID);
+
     return status;
 }
 

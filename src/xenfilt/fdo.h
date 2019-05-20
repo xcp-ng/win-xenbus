@@ -43,8 +43,6 @@ typedef struct _XENFILT_FDO XENFILT_FDO, *PXENFILT_FDO;
 extern NTSTATUS
 FdoCreate(
     IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
-    IN  PCHAR                           DeviceID,
-    IN  PCHAR                           InstanceID,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type
     );
 
