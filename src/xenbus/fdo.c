@@ -2701,12 +2701,13 @@ update:
                         NULL,
                         "drivers",
                         Distribution,
-                        "%s %s %u.%u.%u %s",
+                        "%s %s %u.%u.%u.%u %s",
                         Vendor,
                         Product,
                         MAJOR_VERSION,
                         MINOR_VERSION,
                         MICRO_VERSION,
+                        BUILD_NUMBER,
                         ATTRIBUTES
                         );
 
