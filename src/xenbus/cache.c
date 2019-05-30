@@ -59,8 +59,9 @@ typedef struct _XENBUS_CACHE_SLAB {
     ULONG           Magic;
     PXENBUS_CACHE   Cache;
     LIST_ENTRY      ListEntry;
-    ULONG           Count;
-    ULONG           Allocated;
+    USHORT          MaximumOccupancy;
+    USHORT          CurrentOccupancy;
+    ULONG           *Mask;
     UCHAR           Buffer[1];
 } XENBUS_CACHE_SLAB, *PXENBUS_CACHE_SLAB;
 
@@ -216,7 +217,7 @@ CacheInsertSlab(
 
         Next = CONTAINING_RECORD(Cursor, XENBUS_CACHE_SLAB, ListEntry);
 
-        if (Next->Allocated > Slab->Allocated) {
+        if (Next->CurrentOccupancy > Slab->CurrentOccupancy) {
             INSERT_BEFORE(Cursor, &Slab->ListEntry);
             return;
         }
@@ -239,6 +240,7 @@ CacheCreateSlab(
     LARGE_INTEGER       LowAddress;
     LARGE_INTEGER       HighAddress;
     LARGE_INTEGER       Boundary;
+    ULONG               Size;
     LONG                Index;
     NTSTATUS            status;
 
@@ -272,14 +274,21 @@ CacheCreateSlab(
 
     Slab->Magic = XENBUS_CACHE_SLAB_MAGIC;
     Slab->Cache = Cache;
-    Slab->Count = Count;
+    Slab->MaximumOccupancy = (USHORT)Count;
 
-    for (Index = 0; Index < (LONG)Slab->Count; Index++) {
+    Size = P2ROUNDUP(Count, BITS_PER_ULONG);
+    Size /= 8;
+
+    Slab->Mask = __CacheAllocate(Size);
+    if (Slab->Mask == NULL)
+        goto fail3;
+
+    for (Index = 0; Index < (LONG)Slab->MaximumOccupancy; Index++) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         status = __CacheCtor(Cache, Object);
         if (!NT_SUCCESS(status))
-            goto fail3;
+            goto fail4;
     }
 
     CacheInsertSlab(Cache, Slab);
@@ -287,14 +296,19 @@ CacheCreateSlab(
 
     return Slab;
 
-fail3:
-    Error("fail3\n");
+fail4:
+    Error("fail4\n");
 
     while (--Index >= 0) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         __CacheDtor(Cache, Object);
     }
+
+    __CacheFree(Slab->Mask);
+
+fail3:
+    Error("fail3\n");
 
     MmFreeContiguousMemory(Slab);
 
@@ -316,20 +330,83 @@ CacheDestroySlab(
 {
     LONG                    Index;
 
-    ASSERT3U(Slab->Allocated, ==, 0);
+    ASSERT3U(Slab->CurrentOccupancy, ==, 0);
 
-    ASSERT3U(Cache->Count, >=, Slab->Count);
-    Cache->Count -= Slab->Count;
+    ASSERT3U(Cache->Count, >=, Slab->MaximumOccupancy);
+    Cache->Count -= Slab->MaximumOccupancy;
     RemoveEntryList(&Slab->ListEntry);
 
-    Index = Slab->Count;
+    Index = Slab->MaximumOccupancy;
     while (--Index >= 0) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         __CacheDtor(Cache, Object);
     }
 
+    __CacheFree(Slab->Mask);
+
     MmFreeContiguousMemory(Slab);
+}
+
+static FORCEINLINE ULONG
+__CacheMaskScan(
+    IN  ULONG   *Mask,
+    IN  ULONG   Maximum
+    )
+{
+    ULONG       Size;
+    ULONG       Index;
+
+    Size = P2ROUNDUP(Maximum, BITS_PER_ULONG);
+    Size /= sizeof (ULONG);
+    ASSERT(Size != 0);
+
+    for (Index = 0; Index < Size; Index++) {
+        ULONG   Free = ~Mask[Index];
+        ULONG   Bit;
+
+        if (!_BitScanForward(&Bit, Free))
+            continue;
+
+        Bit += Index * BITS_PER_ULONG;
+        return Bit;
+    }
+
+    BUG("CACHE SCAN FAILED");
+    return ~0u;
+}
+
+static FORCEINLINE VOID
+__CacheMaskSet(
+    IN  ULONG   *Mask,
+    IN  ULONG   Bit
+    )
+{
+    ULONG       Index = Bit / BITS_PER_ULONG;
+
+    Mask[Index] |= 1u << (Bit % BITS_PER_ULONG);
+}
+
+static FORCEINLINE BOOLEAN
+__CacheMaskTest(
+    IN  ULONG   *Mask,
+    IN  ULONG   Bit
+    )
+{
+    ULONG       Index = Bit / BITS_PER_ULONG;
+
+    return (Mask[Index] & (1u << (Bit % BITS_PER_ULONG))) ? TRUE : FALSE;
+}
+
+static FORCEINLINE VOID
+__CacheMaskClear(
+    IN  ULONG   *Mask,
+    IN  ULONG   Bit
+    )
+{
+    ULONG       Index = Bit / BITS_PER_ULONG;
+
+    Mask[Index] &= ~(1u << (Bit % BITS_PER_ULONG));
 }
 
 // Must be called with lock held
@@ -339,20 +416,25 @@ CacheGetObjectFromSlab(
     )
 {
     PXENBUS_CACHE           Cache;
-    ULONG                   Free;
     ULONG                   Index;
-    ULONG                   Set;
+    PVOID                   Object;
 
     Cache = Slab->Cache;
 
-    Free = ~Slab->Allocated;
-    if (!_BitScanForward(&Index, Free) || Index >= Slab->Count)
+    ASSERT3U(Slab->CurrentOccupancy, <=, Slab->MaximumOccupancy);
+    if (Slab->CurrentOccupancy == Slab->MaximumOccupancy)
         return NULL;
 
-    Set = InterlockedBitTestAndSet((LONG *)&Slab->Allocated, Index);
-    ASSERT(!Set);
+    Index = __CacheMaskScan(Slab->Mask, Slab->MaximumOccupancy);
 
-    return (PVOID)&Slab->Buffer[Index * Cache->Size];
+    __CacheMaskSet(Slab->Mask, Index);
+    Slab->CurrentOccupancy++;
+
+    Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
+    ASSERT3U(Index, ==, (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) /
+             Cache->Size);
+
+    return Object;
 }
 
 // Must be called with lock held
@@ -368,9 +450,13 @@ CachePutObjectToSlab(
     Cache = Slab->Cache;
 
     Index = (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) / Cache->Size;
-    BUG_ON(Index >= Slab->Count);
+    BUG_ON(Index >= Slab->MaximumOccupancy);
 
-    (VOID) InterlockedBitTestAndReset((LONG *)&Slab->Allocated, Index);
+    ASSERT(Slab->CurrentOccupancy != 0);
+    --Slab->CurrentOccupancy;
+
+    ASSERT(__CacheMaskTest(Slab->Mask, Index));
+    __CacheMaskClear(Slab->Mask, Index);
 }
 
 static PVOID
@@ -465,7 +551,7 @@ CachePut(
 
     CachePutObjectToSlab(Slab, Object);
 
-    if (Slab->Allocated == 0) {
+    if (Slab->CurrentOccupancy == 0) {
         CacheDestroySlab(Cache, Slab);
     } else {
         /* Re-insert to keep slab list ordered */
