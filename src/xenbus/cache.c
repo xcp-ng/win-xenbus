@@ -355,7 +355,7 @@ CacheGetObjectFromSlab(
     return (PVOID)&Slab->Buffer[Index * Cache->Size];
 }
 
-// May be called with or without lock held
+// Must be called with lock held
 static VOID
 CachePutObjectToSlab(
     IN  PXENBUS_CACHE_SLAB  Slab,
@@ -460,10 +460,10 @@ CachePut(
     Slab = (PXENBUS_CACHE_SLAB)PAGE_ALIGN(Object);
     ASSERT3U(Slab->Magic, ==, XENBUS_CACHE_SLAB_MAGIC);
 
-    CachePutObjectToSlab(Slab, Object);
-
     if (!Locked)
         __CacheAcquireLock(Cache);
+
+    CachePutObjectToSlab(Slab, Object);
 
     if (Slab->Allocated == 0) {
         CacheDestroySlab(Cache, Slab);
@@ -554,7 +554,11 @@ __CacheFlushMagazines(
     IN  PXENBUS_CACHE   Cache
     )
 {
+    KIRQL               Irql;
     ULONG               Index;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+    __CacheAcquireLock(Cache);
 
     for (Index = 0; Index < Cache->MagazineCount; Index++) {
         PXENBUS_CACHE_MAGAZINE  Magazine = &Cache->Magazine[Index];
@@ -569,6 +573,9 @@ __CacheFlushMagazines(
             CachePutObjectToSlab(Slab, Object);
         }
     }
+
+    __CacheReleaseLock(Cache);
+    KeLowerIrql(Irql);
 }
 
 static NTSTATUS
