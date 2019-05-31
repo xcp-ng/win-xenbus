@@ -373,7 +373,6 @@ __CacheMaskScan(
     }
 
     BUG("CACHE SCAN FAILED");
-    return ~0u;
 }
 
 static FORCEINLINE VOID
