@@ -257,7 +257,7 @@ __DriverGetActive(
         goto fail1;
 
     Length = Ansi[0].Length + sizeof (CHAR);
-    *Value = __AllocatePoolWithTag(PagedPool, Length, 'TLIF');
+    *Value = __AllocatePoolWithTag(NonPagedPool, Length, 'TLIF');
 
     status = STATUS_NO_MEMORY;
     if (*Value == NULL)
