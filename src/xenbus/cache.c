@@ -369,10 +369,11 @@ __CacheMaskScan(
             continue;
 
         Bit += Index * BITS_PER_ULONG;
-        return Bit;
+        if (Bit < Maximum)
+            return Bit;
     }
 
-    BUG("CACHE SCAN FAILED");
+    return Maximum;
 }
 
 static FORCEINLINE VOID
@@ -425,6 +426,7 @@ CacheGetObjectFromSlab(
         return NULL;
 
     Index = __CacheMaskScan(Slab->Mask, Slab->MaximumOccupancy);
+    BUG_ON(Index >= Slab->MaximumOccupancy);
 
     __CacheMaskSet(Slab->Mask, Index);
     Slab->CurrentOccupancy++;
