@@ -745,6 +745,10 @@ FdoSetActive(
     status = DriverGetActive("DeviceID", &ActiveDeviceID);
     if (NT_SUCCESS(status)) {
         Fdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ? TRUE : FALSE;
+
+        if (Fdo->Active)
+            (VOID) DriverUpdateActive(DeviceID, InstanceID, LocationInformation);
+
         ExFreePool(ActiveDeviceID);
     } else {
         status = DriverSetActive(DeviceID, InstanceID, LocationInformation);

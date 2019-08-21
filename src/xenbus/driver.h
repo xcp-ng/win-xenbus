@@ -78,6 +78,13 @@ DriverSetActive(
     );
 
 NTSTATUS
+DriverUpdateActive(
+    IN  PCHAR   DeviceID,
+    IN  PCHAR   InstanceID,
+    IN  PCHAR   LocationInformation
+    );
+
+NTSTATUS
 DriverClearActive(
     VOID
     );

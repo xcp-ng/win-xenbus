@@ -533,6 +533,90 @@ fail1:
 }
 
 NTSTATUS
+DriverUpdateActive(
+    IN  PCHAR   DeviceID,
+    IN  PCHAR   InstanceID,
+    IN  PCHAR   LocationInformation
+    )
+{
+    HANDLE      ActiveKey;
+    ANSI_STRING Ansi[2];
+    PCHAR       ActiveInstanceID;
+    PCHAR       ActiveLocationInformation;
+    NTSTATUS    status;
+
+    Trace("====>\n");
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    status = RegistryOpenSubKey(NULL,
+                                ACTIVE_PATH,
+                                KEY_ALL_ACCESS,
+                                &ActiveKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = STATUS_UNSUCCESSFUL;
+    if (__DriverIsDeviceLegacy(DeviceID) &&
+        __DriverIsVendorDevicePresent())
+        goto fail2;
+
+    RtlZeroMemory(Ansi, sizeof (ANSI_STRING) * 2);
+
+    status = DriverGetActive("InstanceID", &ActiveInstanceID);
+    if (NT_SUCCESS(status)) {
+        ExFreePool(ActiveInstanceID);
+    } else {
+        RtlInitAnsiString(&Ansi[0], InstanceID);
+
+        status = RegistryUpdateSzValue(ActiveKey,
+                                       "ActiveInstanceID",
+                                       REG_SZ,
+                                       Ansi);
+        if (!NT_SUCCESS(status))
+            goto fail3;
+    }
+
+    status = DriverGetActive("LocationInformation", &ActiveLocationInformation);
+    if (NT_SUCCESS(status)) {
+        ExFreePool(ActiveLocationInformation);
+    } else {
+        RtlInitAnsiString(&Ansi[0], LocationInformation);
+
+        status = RegistryUpdateSzValue(ActiveKey,
+                                       "ActiveLocationInformation",
+                                       REG_SZ,
+                                       Ansi);
+        if (!NT_SUCCESS(status))
+            goto fail4;
+    }
+
+    Info("%s\\%s: %s\n", DeviceID, InstanceID, LocationInformation);
+
+    RegistryCloseKey(ActiveKey);
+
+    Trace("<====\n");
+
+    return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(ActiveKey);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+NTSTATUS
 DriverClearActive(
     VOID
     )

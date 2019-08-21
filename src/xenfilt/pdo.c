@@ -289,8 +289,13 @@ PdoSetDeviceInformation(
 
         status = DriverGetActive("LocationInformation",
                                  &LocationInformation);
-        if (!NT_SUCCESS(status))
-            goto fail3;
+        if (!NT_SUCCESS(status)) {
+            status = DriverQueryDeviceText(Pdo->LowerDeviceObject,
+                                           DeviceTextLocationInformation,
+                                           &LocationInformation);
+            if (!NT_SUCCESS(status))
+                LocationInformation = NULL;
+        }
     } else {
         status = DriverQueryId(Pdo->LowerDeviceObject,
                                BusQueryInstanceID,
@@ -310,12 +315,6 @@ PdoSetDeviceInformation(
     Dx->LocationInformation = LocationInformation;
 
     return STATUS_SUCCESS;
-
-fail3:
-    Error("fail3\n");
-
-    ASSERT(Pdo->Active);
-    ExFreePool(InstanceID);
 
 fail2:
     Error("fail2\n");
