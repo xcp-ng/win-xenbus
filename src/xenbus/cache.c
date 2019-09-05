@@ -294,9 +294,6 @@ CacheCreateSlab(
     PXENBUS_CACHE_SLAB  Slab;
     ULONG               NumberOfBytes;
     ULONG               Count;
-    LARGE_INTEGER       LowAddress;
-    LARGE_INTEGER       HighAddress;
-    LARGE_INTEGER       Boundary;
     ULONG               Size;
     LONG                Index;
     NTSTATUS            status;
@@ -312,16 +309,8 @@ CacheCreateSlab(
     if (Cache->Count + Count > Cache->Cap)
         goto fail1;
 
-    LowAddress.QuadPart = 0ull;
-    HighAddress.QuadPart = ~0ull;
-    Boundary.QuadPart = 0ull;
-
-    Slab = MmAllocateContiguousMemorySpecifyCacheNode((SIZE_T)NumberOfBytes,
-                                                      LowAddress,
-                                                      HighAddress,
-                                                      Boundary,
-                                                      MmCached,
-                                                      MM_ANY_NODE_OK);
+    Slab = __CacheAllocate(NumberOfBytes);
+    ASSERT3P(Slab, ==, PAGE_ALIGN(Slab));
 
     status = STATUS_NO_MEMORY;
     if (Slab == NULL)
@@ -367,7 +356,7 @@ fail4:
 fail3:
     Error("fail3\n");
 
-    MmFreeContiguousMemory(Slab);
+    __CacheFree(Slab);
 
 fail2:
     Error("fail2\n");
@@ -412,8 +401,7 @@ CacheDestroySlab(
     }
 
     __CacheFree(Slab->Mask);
-
-    MmFreeContiguousMemory(Slab);
+    __CacheFree(Slab);
 }
 
 static FORCEINLINE ULONG
