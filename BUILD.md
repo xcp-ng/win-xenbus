@@ -1,45 +1,30 @@
 Building the XenBus Package
 ===========================
 
-First you'll need a device driver build environment for Windows 10.
-This means:
+First you'll need a device driver build environment for Windows 10. Happily
+Microsoft has made this easy with the introduction of the 'EWDK'. This is an
+ISO containing all the build environment you need.
 
-*   Visual Studio 2015 (Any SKU, including Express or Community)
-*   Windows Driver Kit 10
+The package should support building with the following EWDKs:
 
-Install Visual Studio first (you only need install MFC for C++) and then
-the WDK. Set an environment variable called VS to the base of the Visual
-Studio Installation (e.g. C:\Program Files\Microsoft Visual Studio 14.0) and
-a variable called KIT to the base of the WDK
-(e.g. C:\Program Files\Windows Kits\10). Also set an environment variable
-called SYMBOL\_SERVER to point at a location where driver symbols can be
-stored. This can be local directory e.g. C:\Symbols.
+- EWDK for Windows 10, version 1809 with Visual Studio Build Tools 15.8.9
 
-You will also need to acquire the DIFx re-distributable package from one
-of the older WDKs (as it appears not to be present in WDK10), so that the
-driver build can copy dpinst.exe into the output.
-Set the environment variable DPINST_REDIST to the base dpinst directory
-- the directory under which the x86 and x64 sub-directories containing
-dpinst.exe can be found
-(e.g. C:\Program Files (x86)\Windows Kits\8.1\Redist\DIFx\dpinst\EngMui)
+Once you have downloaded the ISO, open it and you should see a file called:
 
-Next you'll need a 3.x version of python (which you can get from
-http://www.python.org). Make sure python.exe is somewhere on your default
-path.
+LaunchBuildEnv.cmd
 
-Now fire up a Command Prompt and navigate to the base of your git repository.
-At the prompt type:
+Run this and it should give you a build environment command prompt. From
+within this shell navigate to the root of your checked out repository
+and run:
 
-    build.py checked
+powershell ./build.ps1
 
-This will create a debug build of the driver. To create a non-debug build
-type:
+This will then prompt you for whether you want a 'free' (non-debug) or a
+'checked' (debug) build and then proceed to build all x86 and x64 drivers.
 
-    build.py free
-
-Note that Static Driver Verifier is run by default as part of the build
-process. This can be very time consuming. If you don't want to run the
-verifier then you can add the 'nosdv' keyword to the end of your command
-e.g.:
-
-    build.py free nosdv
+NOTE: Because the EWDKs do not contain the 'dpinst' re-distributable driver
+installer utility, this will not be included in the built driver package
+by default. However, if you set the environment variable DPINST_REDIST to
+point to a directory with x86 and x64 sub-directories containing 32- and
+64-bit dpinst.exe binaries (respectively) then these will be copied into
+the built packages, making installation more convenient.
