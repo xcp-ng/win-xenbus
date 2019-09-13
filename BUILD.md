@@ -7,6 +7,7 @@ ISO containing all the build environment you need.
 
 The package should support building with the following EWDKs:
 
+- EWDK for Windows 10, version 1903 with Visual Studio Build Tools 16.0
 - EWDK for Windows 10, version 1809 with Visual Studio Build Tools 15.8.9
 
 Once you have downloaded the ISO, open it and you should see a file called:

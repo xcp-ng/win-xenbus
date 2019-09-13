@@ -2,7 +2,7 @@
 # Wrapper script for MSBuild
 #
 param(
-	[string]$SolutionDir = "vs2017",
+	[string]$SolutionDir = "vs2019",
 	[string]$ConfigurationBase = "Windows 10",
 	[Parameter(Mandatory = $true)]
 	[string]$Arch,
