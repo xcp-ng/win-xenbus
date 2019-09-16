@@ -113,16 +113,20 @@ XenTouch(
     CHAR            Extra[XEN_EXTRAVERSION_LEN];
     NTSTATUS        status;
 
+    status = STATUS_INCOMPATIBLE_DRIVER_BLOCKED;
     if (MajorVersion != MAJOR_VERSION ||
         MinorVersion != MINOR_VERSION ||
         MicroVersion != MICRO_VERSION ||
         BuildNumber != BUILD_NUMBER)
         goto fail1;
 
-    if (Reference++ != 0)
+    if (Reference != 0)
         goto done;
 
     status = XenVersion(&Major, &Minor);
+    if (status == STATUS_NOT_IMPLEMENTED)
+        goto fail2;
+
     ASSERT(NT_SUCCESS(status));
 
     status = XenVersionExtra(Extra);
@@ -136,12 +140,16 @@ XenTouch(
               __XEN_INTERFACE_VERSION__);
 
 done:
+    Reference++;
+
     return STATUS_SUCCESS;
 
+fail2:
 fail1:
-    Info("MODULE '%s' NOT COMPATIBLE (REBOOT REQUIRED)\n", Name);
+    if (status == STATUS_INCOMPATIBLE_DRIVER_BLOCKED)
+        Info("MODULE '%s' NOT COMPATIBLE (REBOOT REQUIRED)\n", Name);
 
-    return STATUS_INCOMPATIBLE_DRIVER_BLOCKED;
+    return status;
 }
 
 static VOID
@@ -249,25 +257,23 @@ DllInitialize(
     if (!NT_SUCCESS(status))
         goto fail7;
 
-    status = HypercallInitialize();
-    if (!NT_SUCCESS(status))
-        goto fail8;
+    HypercallInitialize();
 
     status = BugCheckInitialize();
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail8;
 
     status = ModuleInitialize();
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail9;
 
     status = ProcessInitialize();
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail10;
 
     status = UnplugInitialize();
     if (!NT_SUCCESS(status))
-        goto fail12;
+        goto fail11;
 
     RegistryCloseKey(ParametersKey);
 
@@ -277,23 +283,20 @@ DllInitialize(
 
     return STATUS_SUCCESS;
 
-fail12:
-    Error("fail12\n");
-
-    ProcessTeardown();
-
 fail11:
     Error("fail11\n");
 
-    ModuleTeardown();
+    ProcessTeardown();
 
 fail10:
     Error("fail10\n");
 
-    BugCheckTeardown();
+    ModuleTeardown();
 
 fail9:
     Error("fail9\n");
+
+    BugCheckTeardown();
 
     HypercallTeardown();
 

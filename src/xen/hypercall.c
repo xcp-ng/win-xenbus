@@ -50,6 +50,7 @@ static ULONG        XenBaseLeaf = 0x40000000;
 
 static PHYSICAL_ADDRESS HypercallPage[MAXIMUM_HYPERCALL_PAGE_COUNT];
 static ULONG            HypercallPageCount;
+static BOOLEAN          HypercallPageInitialized;
 
 typedef UCHAR           HYPERCALL_GATE[32];
 typedef HYPERCALL_GATE  *PHYPERCALL_GATE;
@@ -74,9 +75,11 @@ HypercallPopulate(
 
         __writemsr(HypercallMsr, HypercallPage[Index].QuadPart);
     }
+
+    HypercallPageInitialized = TRUE;
 }
 
-NTSTATUS
+VOID
 HypercallInitialize(
     VOID
     )
@@ -86,9 +89,7 @@ HypercallInitialize(
     ULONG       ECX = 'DEAD';
     ULONG       EDX = 'DEAD';
     ULONG_PTR   Index;
-    NTSTATUS    status;
 
-    status = STATUS_UNSUCCESSFUL;
     for (;;) {
         CHAR    Signature[13] = {0};
 
@@ -103,8 +104,11 @@ HypercallInitialize(
             
         XenBaseLeaf += 0x100;
         
-        if (XenBaseLeaf > 0x40000100)
-            goto fail1;
+        if (XenBaseLeaf > 0x40000100) {
+            LogPrintf(LOG_LEVEL_INFO,
+                      "XEN: BASE CPUID LEAF NOT FOUND\n");
+            return;
+        }
     }
 
     LogPrintf(LOG_LEVEL_INFO,
@@ -128,19 +132,12 @@ HypercallInitialize(
     HypercallMsr = EBX;
 
     HypercallPopulate();
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)", status);
-
-    return status;
 }
 
 extern uintptr_t __stdcall hypercall2(uint32_t ord, uintptr_t arg1, uintptr_t arg2);
 extern uintptr_t __stdcall hypercall3(uint32_t ord, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
 
-ULONG_PTR
+LONG_PTR
 __Hypercall(
     ULONG       Ordinal,
     ULONG       Count,
@@ -149,6 +146,9 @@ __Hypercall(
 {
     va_list     Arguments;
     ULONG_PTR   Value;
+
+    if (!HypercallPageInitialized)
+        return -ENOSYS;
 
     va_start(Arguments, Count);
     switch (Count) {

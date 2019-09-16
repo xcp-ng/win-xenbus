@@ -39,12 +39,12 @@
 
 #include <public/xen.h>
 
-extern NTSTATUS
+extern VOID
 HypercallInitialize(
     VOID
     );
 
-extern ULONG_PTR
+extern LONG_PTR
 __Hypercall(
     ULONG       Ordinal,
     ULONG       Count,

@@ -859,7 +859,9 @@ DriverEntry(
                       MICRO_VERSION,
                       BUILD_NUMBER);
     if (!NT_SUCCESS(status)) {
-        __DriverRequestReboot();
+        if (status == STATUS_INCOMPATIBLE_DRIVER_BLOCKED)
+            __DriverRequestReboot();
+
         goto done;
     }
 
