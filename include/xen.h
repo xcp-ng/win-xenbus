@@ -458,4 +458,10 @@ SystemMaximumPhysicalAddress(
     VOID
     );
 
+XEN_API
+BOOLEAN
+SystemRealTimeIsUniversal(
+    VOID
+    );
+
 #endif  // _XEN_H

@@ -63,6 +63,7 @@ typedef struct _SYSTEM_CONTEXT {
     PVOID               PowerStateHandle;
     PVOID               ProcessorChangeHandle;
     PHYSICAL_ADDRESS    MaximumPhysicalAddress;
+    BOOLEAN             RealTimeIsUniversal;
 } SYSTEM_CONTEXT, *PSYSTEM_CONTEXT;
 
 static SYSTEM_CONTEXT   SystemContext;
@@ -912,6 +913,51 @@ SystemDeregisterPowerStateCallback(
     Context->PowerStateHandle = NULL;
 }
 
+static NTSTATUS
+SystemGetTimeInformation(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+    UNICODE_STRING  Unicode;
+    HANDLE          Key;
+    ULONG           RealTimeIsUniversal;
+    NTSTATUS        status;
+
+    RtlInitUnicodeString(&Unicode, L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation");
+
+    status = RegistryOpenKey(NULL, &Unicode, KEY_READ, &Key);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = RegistryQueryDwordValue(Key, "RealTimeIsUniversal",
+                                     &RealTimeIsUniversal);
+    if (!NT_SUCCESS(status)) {
+        if (status != STATUS_OBJECT_NAME_NOT_FOUND)
+            goto fail2;
+
+        RealTimeIsUniversal = 0;
+    }
+
+    Context->RealTimeIsUniversal = RealTimeIsUniversal ? TRUE : FALSE;
+
+    Info("%s\n", Context->RealTimeIsUniversal ? "TRUE" : "FALSE");
+
+    RegistryCloseKey(Key);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(Key);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
 NTSTATUS
 SystemInitialize(
     VOID
@@ -951,7 +997,16 @@ SystemInitialize(
     if (!NT_SUCCESS(status))
         goto fail7;
 
+    status = SystemGetTimeInformation();
+    if (!NT_SUCCESS(status))
+        goto fail8;
+
     return STATUS_SUCCESS;
+
+fail8:
+    Error("fail8\n");
+
+    SystemDeregisterPowerStateCallback();
 
 fail7:
     Error("fail7\n");
@@ -1036,6 +1091,17 @@ SystemMaximumPhysicalAddress(
     PSYSTEM_CONTEXT Context = &SystemContext;
 
     return Context->MaximumPhysicalAddress;
+}
+
+XEN_API
+BOOLEAN
+SystemRealTimeIsUniversal(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+
+    return Context->RealTimeIsUniversal;
 }
 
 VOID

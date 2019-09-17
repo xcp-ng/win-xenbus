@@ -309,11 +309,15 @@ SharedInfoEvtchnUnmask(
     return SharedInfoTestBit(&Shared->evtchn_pending[SelectorBit], PortBit);
 }
 
-static LARGE_INTEGER
+static VOID
 SharedInfoGetTime(
-    IN  PINTERFACE              Interface
+    IN  PINTERFACE              Interface,
+    OUT PLARGE_INTEGER          Time,
+    OUT PBOOLEAN                Local
     )
 {
+#define NS_PER_S 1000000000ull
+
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
     shared_info_t               *Shared;
     ULONG                       WcVersion;
@@ -325,8 +329,7 @@ SharedInfoGetTime(
     ULONGLONG                   SystemTime;
     ULONG                       TscSystemMul;
     CHAR                        TscShift;
-    LARGE_INTEGER               Now;
-    TIME_FIELDS                 Time;
+    TIME_FIELDS                 TimeFields;
     KIRQL                       Irql;
 
     // Make sure we don't suspend
@@ -379,30 +382,44 @@ SharedInfoGetTime(
           NanoSeconds);
 
     Trace("TIME SINCE BOOT: Seconds = %llu NanoSeconds = %llu\n",
-          SystemTime / 1000000000ull,
-          SystemTime % 1000000000ull);
+          SystemTime / NS_PER_S,
+          SystemTime % NS_PER_S);
 
     // Convert wallclock from Unix epoch (1970) to Windows epoch (1601)
     Seconds += 11644473600ull;
 
     // Add in time since host boot
-    Seconds += SystemTime / 1000000000ull;
-    NanoSeconds += SystemTime % 1000000000ull;
+    Seconds += SystemTime / NS_PER_S;
+    NanoSeconds += SystemTime % NS_PER_S;
 
-    // Convert to system time format
-    Now.QuadPart = (Seconds * 10000000ull) + (NanoSeconds / 100ull);
+    Time->QuadPart = ((Seconds * NS_PER_S) + NanoSeconds) / 100;
 
-    RtlTimeToTimeFields(&Now, &Time);
+    RtlTimeToTimeFields(Time, &TimeFields);
 
     Trace("TOD: %04u/%02u/%02u %02u:%02u:%02u\n",
-          Time.Year,
-          Time.Month,
-          Time.Day,
-          Time.Hour,
-          Time.Minute,
-          Time.Second);
+          TimeFields.Year,
+          TimeFields.Month,
+          TimeFields.Day,
+          TimeFields.Hour,
+          TimeFields.Minute,
+          TimeFields.Second);
 
-    return Now;
+    if ( Local )
+        *Local = !SystemRealTimeIsUniversal();
+
+#undef NS_PER_S
+}
+
+static LARGE_INTEGER
+SharedInfoGetTimeVersion2(
+    IN  PINTERFACE  Interface
+    )
+{
+    LARGE_INTEGER   Time;
+
+    SharedInfoGetTime(Interface, &Time, NULL);
+
+    return Time;
 }
 
 static VOID
@@ -672,6 +689,18 @@ static struct _XENBUS_SHARED_INFO_INTERFACE_V2 SharedInfoInterfaceVersion2 = {
     SharedInfoEvtchnAck,
     SharedInfoEvtchnMask,
     SharedInfoEvtchnUnmask,
+    SharedInfoGetTimeVersion2
+};
+
+static struct _XENBUS_SHARED_INFO_INTERFACE_V3 SharedInfoInterfaceVersion3 = {
+    { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V3), 3, NULL, NULL, NULL },
+    SharedInfoAcquire,
+    SharedInfoRelease,
+    SharedInfoUpcallPending,
+    SharedInfoEvtchnPoll,
+    SharedInfoEvtchnAck,
+    SharedInfoEvtchnMask,
+    SharedInfoEvtchnUnmask,
     SharedInfoGetTime
 };
                      
@@ -742,6 +771,23 @@ SharedInfoGetInterface(
             break;
 
         *SharedInfoInterface = SharedInfoInterfaceVersion2;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 3: {
+        struct _XENBUS_SHARED_INFO_INTERFACE_V3 *SharedInfoInterface;
+
+        SharedInfoInterface = (struct _XENBUS_SHARED_INFO_INTERFACE_V3 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V3))
+            break;
+
+        *SharedInfoInterface = SharedInfoInterfaceVersion3;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
