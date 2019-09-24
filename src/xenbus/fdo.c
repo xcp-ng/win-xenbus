@@ -3096,6 +3096,7 @@ FdoDestroyHole(
     PFN_NUMBER      Pfn;
     LONGLONG        Start;
     ULONG           Count;
+    ULONG           Index;
     NTSTATUS        status;
 
     Mdl = Fdo->Mdl;
@@ -3107,9 +3108,18 @@ FdoDestroyHole(
 
     Trace("%08x - %08x\n", Start, Start + Count - 1);
 
-    if (MemoryPopulatePhysmap(PAGE_ORDER_2M, 1, &Pfn) != 1)
-        BUG("FAILED TO RE-POPULATE HOLE");
+    ASSERT3U(Count & ((1u << PAGE_ORDER_2M) - 1), ==, 0);
+    if (MemoryPopulatePhysmap(PAGE_ORDER_2M, 1, &Pfn) == 1)
+        goto done;
 
+    for (Index = 0; Index < Count; Index++) {
+        if (MemoryPopulatePhysmap(PAGE_ORDER_4K, 1, &Pfn) != 1)
+            BUG("FAILED TO RE-POPULATE HOLE");
+
+        Pfn++;
+    }
+
+done:
     status = XENBUS_RANGE_SET(Get,
                               &Fdo->RangeSetInterface,
                               Fdo->RangeSet,
