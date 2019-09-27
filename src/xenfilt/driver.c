@@ -651,17 +651,30 @@ fail1:
 
 static XENFILT_EMULATED_OBJECT_TYPE
 DriverGetEmulatedType(
-    IN  PANSI_STRING                Ansi
+    IN  PCHAR                       DeviceID
     )
 {
+    HANDLE                          ParametersKey;
     XENFILT_EMULATED_OBJECT_TYPE    Type;
+    PANSI_STRING                    Ansi;
+    NTSTATUS                        status;
 
-    if (_strnicmp(Ansi->Buffer, "DEVICE", Ansi->Length) == 0)
-        Type = XENFILT_EMULATED_OBJECT_TYPE_DEVICE;
-    else if (_strnicmp(Ansi->Buffer, "DISK", Ansi->Length) == 0)
-        Type = XENFILT_EMULATED_OBJECT_TYPE_DISK;
-    else
-        Type = XENFILT_EMULATED_OBJECT_TYPE_INVALID;
+    ParametersKey = __DriverGetParametersKey();
+
+    Type = XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
+
+    status = RegistryQuerySzValue(ParametersKey,
+                                  DeviceID,
+                                  NULL,
+                                  &Ansi);
+    if (NT_SUCCESS(status)) {
+        if (_strnicmp(Ansi->Buffer, "PCI", Ansi->Length) == 0)
+            Type = XENFILT_EMULATED_OBJECT_TYPE_PCI;
+        else if (_strnicmp(Ansi->Buffer, "IDE", Ansi->Length) == 0)
+            Type = XENFILT_EMULATED_OBJECT_TYPE_IDE;
+
+        RegistryFreeSzValue(Ansi);
+    }
 
     return Type;
 }
@@ -671,14 +684,13 @@ DRIVER_ADD_DEVICE   DriverAddDevice;
 NTSTATUS
 #pragma prefast(suppress:28152) // Does not clear DO_DEVICE_INITIALIZING
 DriverAddDevice(
-    IN  PDRIVER_OBJECT  DriverObject,
-    IN  PDEVICE_OBJECT  PhysicalDeviceObject
+    IN  PDRIVER_OBJECT              DriverObject,
+    IN  PDEVICE_OBJECT              PhysicalDeviceObject
     )
 {
-    HANDLE              ParametersKey;
-    PCHAR               DeviceID;
-    PANSI_STRING        Type;
-    NTSTATUS            status;
+    PCHAR                           DeviceID;
+    XENFILT_EMULATED_OBJECT_TYPE    Type;
+    NTSTATUS                        status;
 
     ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
 
@@ -686,38 +698,20 @@ DriverAddDevice(
                            BusQueryDeviceID,
                            &DeviceID);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto done;
 
-    ParametersKey = __DriverGetParametersKey();
-
-    status = RegistryQuerySzValue(ParametersKey,
-                                  DeviceID,
-                                  NULL,
-                                  &Type);
-    if (NT_SUCCESS(status)) {
-        __DriverAcquireMutex();
-
-        status = FdoCreate(PhysicalDeviceObject,
-                           DriverGetEmulatedType(Type));
-
-        if (!NT_SUCCESS(status))
-            goto fail2;
-
-        __DriverReleaseMutex();
-
-        RegistryFreeSzValue(Type);
-    }
-
+    Type = DriverGetEmulatedType(DeviceID);
     ExFreePool(DeviceID);
 
-    return STATUS_SUCCESS;
+    status = STATUS_SUCCESS;
+    if (Type == XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN)
+        goto done;
 
-fail2:
+    __DriverAcquireMutex();
+    status = FdoCreate(PhysicalDeviceObject, Type);
     __DriverReleaseMutex();
 
-fail1:
-    ExFreePool(DeviceID);
-
+done:
     return status;
 }
 

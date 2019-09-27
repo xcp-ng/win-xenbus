@@ -91,12 +91,17 @@ __EmulatedFree(
 
 static NTSTATUS
 EmulatedSetObjectDeviceData(
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PCHAR                       DeviceID,
-    IN  PCHAR                       InstanceID
+    IN  PXENFILT_EMULATED_OBJECT        EmulatedObject,
+    IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
+    IN  PCHAR                           DeviceID,
+    IN  PCHAR                           InstanceID
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                            status;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (Type != XENFILT_EMULATED_OBJECT_TYPE_PCI)
+        goto fail1;
 
     status = RtlStringCbPrintfA(EmulatedObject->Data.Device.DeviceID,
                                 MAXNAMELEN,
@@ -111,32 +116,34 @@ EmulatedSetObjectDeviceData(
     ASSERT(NT_SUCCESS(status));
 
     return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }
 
 static NTSTATUS
 EmulatedSetObjectDiskData(
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject,
-    IN  PCHAR                       DeviceID,
-    IN  PCHAR                       InstanceID
+    IN  PXENFILT_EMULATED_OBJECT        EmulatedObject,
+    IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
+    IN  PCHAR                           DeviceID,
+    IN  PCHAR                           InstanceID
     )
 {
-    PCHAR                           End;
-    ULONG                           Controller;
-    ULONG                           Target;
-    ULONG                           Lun;
-    NTSTATUS                        status;
+    PCHAR                               End;
+    ULONG                               Controller;
+    ULONG                               Target;
+    ULONG                               Lun;
+    NTSTATUS                            status;
 
     UNREFERENCED_PARAMETER(DeviceID);
 
-    Controller = strtol(InstanceID, &End, 10);
-
     status = STATUS_INVALID_PARAMETER;
-    if (*End != '.')
+    if (Type != XENFILT_EMULATED_OBJECT_TYPE_IDE)
         goto fail1;
 
-    End++;
-
-    Target = strtol(End, &End, 10);
+    Controller = strtol(InstanceID, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '.')
@@ -144,17 +151,28 @@ EmulatedSetObjectDiskData(
 
     End++;
 
+    Target = strtol(End, &End, 10);
+
+    status = STATUS_INVALID_PARAMETER;
+    if (*End != '.')
+        goto fail3;
+
+    End++;
+
     Lun = strtol(End, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
     if (*End != '\0')
-        goto fail3;
+        goto fail4;
 
     EmulatedObject->Data.Disk.Controller = Controller;
     EmulatedObject->Data.Disk.Target = Target;
     EmulatedObject->Data.Disk.Lun = Lun;
 
     return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
 
 fail3:
     Error("fail3\n");
@@ -189,14 +207,16 @@ EmulatedAddObject(
         goto fail1;
 
     switch (Type) {
-    case XENFILT_EMULATED_OBJECT_TYPE_DEVICE:
+    case XENFILT_EMULATED_OBJECT_TYPE_PCI:
         status = EmulatedSetObjectDeviceData(*EmulatedObject,
+                                             Type,
                                              DeviceID,
                                              InstanceID);
         break;
 
-    case XENFILT_EMULATED_OBJECT_TYPE_DISK:
+    case XENFILT_EMULATED_OBJECT_TYPE_IDE:
         status = EmulatedSetObjectDiskData(*EmulatedObject,
+                                           Type,
                                            DeviceID,
                                            InstanceID);
         break;
@@ -270,7 +290,7 @@ EmulatedIsDevicePresent(
                                            XENFILT_EMULATED_OBJECT,
                                            ListEntry);
 
-        if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_DEVICE &&
+        if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_PCI &&
             _stricmp(DeviceID, EmulatedObject->Data.Device.DeviceID) == 0 &&
             (InstanceID == NULL ||
              _stricmp(InstanceID, EmulatedObject->Data.Device.InstanceID) == 0)) {
@@ -312,7 +332,7 @@ EmulatedIsDiskPresent(
                                            XENFILT_EMULATED_OBJECT,
                                            ListEntry);
 
-        if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_DISK &&
+        if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_IDE &&
             Controller == EmulatedObject->Data.Disk.Controller &&
             Target == EmulatedObject->Data.Disk.Target &&
             Lun == EmulatedObject->Data.Disk.Lun) {

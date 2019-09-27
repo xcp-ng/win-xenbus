@@ -2114,6 +2114,8 @@ PdoCreate(
     PXENFILT_PDO                    Pdo;
     NTSTATUS                        status;
 
+    ASSERT(Type != XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN);
+
     LowerDeviceObject = IoGetAttachedDeviceReference(PhysicalDeviceObject);
     DeviceType = LowerDeviceObject->DeviceType;
     ObDereferenceObject(LowerDeviceObject);
@@ -2221,7 +2223,7 @@ fail5:
 fail4:
     Error("fail4\n");
 
-    Pdo->Type = XENFILT_EMULATED_OBJECT_TYPE_INVALID;
+    Pdo->Type = XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
     Pdo->PhysicalDeviceObject = NULL;
     Pdo->LowerDeviceObject = NULL;
     Pdo->Fdo = NULL;
@@ -2287,7 +2289,7 @@ PdoDestroy(
     ThreadJoin(Pdo->SystemPowerThread);
     Pdo->SystemPowerThread = NULL;
 
-    Pdo->Type = XENFILT_EMULATED_OBJECT_TYPE_INVALID;
+    Pdo->Type = XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
     Pdo->PhysicalDeviceObject = NULL;
     Pdo->LowerDeviceObject = NULL;
     Pdo->Fdo = NULL;
