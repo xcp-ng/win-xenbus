@@ -480,10 +480,25 @@ DriverQueryId(
     KEVENT                  Event;
     PIO_STACK_LOCATION      StackLocation;
     PWCHAR                  Buffer;
-    ULONG                   Length;
     NTSTATUS                status;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    switch (Type) {
+    case BusQueryDeviceID:
+    case BusQueryInstanceID:
+    case BusQueryHardwareIDs:
+    case BusQueryCompatibleIDs:
+        status = STATUS_SUCCESS;
+        break;
+
+    default:
+        status = STATUS_NOT_SUPPORTED;
+        break;
+    }
+
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     ObReferenceObject(DeviceObject);
 
@@ -491,7 +506,7 @@ DriverQueryId(
 
     status = STATUS_INSUFFICIENT_RESOURCES;
     if (Irp == NULL)
-        goto fail1;
+        goto fail2;
 
     StackLocation = IoGetNextIrpStackLocation(Irp);
 
@@ -527,19 +542,78 @@ DriverQueryId(
     }
 
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     Buffer = (PWCHAR)Irp->IoStatus.Information;
-    Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
 
-    *Id = __AllocatePoolWithTag(PagedPool, Length, 'TLIF');
+    switch (Type) {
+    case BusQueryDeviceID:
+    case BusQueryInstanceID: {
+        ULONG   Length;
+        ULONG   Size;
+
+        Length = (ULONG)(wcslen(Buffer));
+        Size = (Length + 1) * sizeof (CHAR);
+
+        *Id = __AllocatePoolWithTag(PagedPool, Size, 'TLIF');
+        if (*Id == NULL)
+            break;
+
+        status = RtlStringCbPrintfA(*Id, Size, "%ws", Buffer);
+        ASSERT(NT_SUCCESS(status));
+
+        break;
+    }
+    case BusQueryHardwareIDs:
+    case BusQueryCompatibleIDs: {
+        ULONG   Index;
+        ULONG   Size;
+
+        Index = 0;
+        for (;;) {
+            ULONG   Length;
+
+            Length = (ULONG)wcslen(&Buffer[Index]);
+            if (Length == 0)
+                break;
+
+            Index += Length + 1;
+        }
+        ASSERT(Index > 0);
+
+        Size = (Index + 1) * sizeof (CHAR);
+
+        *Id = __AllocatePoolWithTag(PagedPool, Size, 'TLIF');
+        if (*Id == NULL)
+            break;
+
+        Index = 0;
+        for (;;) {
+            ULONG   Length;
+
+            Length = (ULONG)wcslen(&Buffer[Index]);
+            if (Length == 0)
+                break;
+
+            status = RtlStringCbPrintfA(*Id + Index, Size, "%ws",
+                                        &Buffer[Index]);
+            ASSERT(NT_SUCCESS(status));
+
+            Index += Length + 1;
+            Size -= Length + 1;
+        }
+
+        break;
+    }
+    default:
+        ASSERT(FALSE);
+        *Id = NULL;
+        break;
+    }
 
     status = STATUS_NO_MEMORY;
     if (*Id == NULL)
-        goto fail3;
-
-    status = RtlStringCbPrintfA(*Id, Length, "%ws", Buffer);
-    ASSERT(NT_SUCCESS(status));
+        goto fail4;
 
     ExFreePool(Buffer);
     IoFreeIrp(Irp);
@@ -547,15 +621,16 @@ DriverQueryId(
 
     return STATUS_SUCCESS;
 
-fail3:
+fail4:
     ExFreePool(Buffer);
 
-fail2:
+fail3:
     IoFreeIrp(Irp);
 
-fail1:
+fail2:
     ObDereferenceObject(DeviceObject);
 
+fail1:
     return status;
 }
 
@@ -651,29 +726,46 @@ fail1:
 
 static XENFILT_EMULATED_OBJECT_TYPE
 DriverGetEmulatedType(
-    IN  PCHAR                       DeviceID
+    IN  PCHAR                       Id
     )
 {
     HANDLE                          ParametersKey;
     XENFILT_EMULATED_OBJECT_TYPE    Type;
-    PANSI_STRING                    Ansi;
-    NTSTATUS                        status;
+    ULONG                           Index;
 
     ParametersKey = __DriverGetParametersKey();
 
     Type = XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
+    Index = 0;
 
-    status = RegistryQuerySzValue(ParametersKey,
-                                  DeviceID,
-                                  NULL,
-                                  &Ansi);
-    if (NT_SUCCESS(status)) {
-        if (_strnicmp(Ansi->Buffer, "PCI", Ansi->Length) == 0)
-            Type = XENFILT_EMULATED_OBJECT_TYPE_PCI;
-        else if (_strnicmp(Ansi->Buffer, "IDE", Ansi->Length) == 0)
-            Type = XENFILT_EMULATED_OBJECT_TYPE_IDE;
+    for (;;) {
+        ULONG           Length;
+        PANSI_STRING    Ansi;
+        NTSTATUS        status;
 
-        RegistryFreeSzValue(Ansi);
+        Length = (ULONG)strlen(&Id[Index]);
+        if (Length == 0)
+            break;
+
+        status = RegistryQuerySzValue(ParametersKey,
+                                      &Id[Index],
+                                      NULL,
+                                      &Ansi);
+        if (NT_SUCCESS(status)) {
+            Info("MATCH: %s -> %Z\n", &Id[Index], Ansi);
+
+            if (_strnicmp(Ansi->Buffer, "PCI", Ansi->Length) == 0)
+                Type = XENFILT_EMULATED_OBJECT_TYPE_PCI;
+            else if (_strnicmp(Ansi->Buffer, "IDE", Ansi->Length) == 0)
+                Type = XENFILT_EMULATED_OBJECT_TYPE_IDE;
+
+            RegistryFreeSzValue(Ansi);
+            break;
+        } else {
+            Trace("NO MATCH: %s\n", &Id[Index]);
+        }
+
+        Index += Length + 1;
     }
 
     return Type;
@@ -688,20 +780,31 @@ DriverAddDevice(
     IN  PDEVICE_OBJECT              PhysicalDeviceObject
     )
 {
-    PCHAR                           DeviceID;
+    PCHAR                           Id;
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     NTSTATUS                        status;
 
     ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
 
-    status = DriverQueryId(PhysicalDeviceObject,
-                           BusQueryDeviceID,
-                           &DeviceID);
-    if (!NT_SUCCESS(status))
-        goto done;
+    Type = XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
 
-    Type = DriverGetEmulatedType(DeviceID);
-    ExFreePool(DeviceID);
+    status = DriverQueryId(PhysicalDeviceObject,
+                           BusQueryHardwareIDs,
+                           &Id);
+    if (NT_SUCCESS(status)) {
+        Type = DriverGetEmulatedType(Id);
+        ExFreePool(Id);
+    }
+
+    if (Type == XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN) {
+        status = DriverQueryId(PhysicalDeviceObject,
+                               BusQueryCompatibleIDs,
+                               &Id);
+        if (NT_SUCCESS(status)) {
+            Type = DriverGetEmulatedType(Id);
+            ExFreePool(Id);
+        }
+    }
 
     status = STATUS_SUCCESS;
     if (Type == XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN)

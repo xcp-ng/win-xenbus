@@ -117,8 +117,8 @@ AddReg = XenFilt_Parameters
 
 [XenFilt_Parameters]
 HKR,"Parameters",,0x00000010
-HKR,"Parameters","ACPI\PNP0A03",0x00000000,"PCI"
-HKR,"Parameters","PCIIDE\IDEChannel",0x00000000,"IDE"
+HKR,"Parameters","*PNP0A03",0x00000000,"PCI"
+HKR,"Parameters","Internal_IDE_Channel",0x00000000,"IDE"
 
 [Monitor_Service]
 DisplayName=%MonitorName%
