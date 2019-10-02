@@ -78,22 +78,26 @@ typedef BOOLEAN
     IN  PCHAR   InstanceID OPTIONAL
     );
 
-/*! \typedef XENFILT_EMULATED_IS_DISK_PRESENT
-    \brief Determine whether a given disk is present in the VM
-
-    \param Interface The interface header
-    \param Controller The controller index of the HBA
-    \param Target The target index of the disk
-    \param Lun The Logical Unit Number of the disk within the target
-    \return TRUE if the specified disk is present in the system or
-    FALSE if it is not
-*/  
 typedef BOOLEAN
-(*XENFILT_EMULATED_IS_DISK_PRESENT)(
+(*XENFILT_EMULATED_IS_DISK_PRESENT_V1)(
     IN  PVOID   Context,
     IN  ULONG   Controller,
     IN  ULONG   Target,
     IN  ULONG   Lun
+    );
+/*! \typedef XENFILT_EMULATED_IS_DISK_PRESENT
+    \brief Determine whether a given emulated disk is present in the VM
+
+    \param Interface The interface header
+    \param Index The disk number of the paravirtual disk which the
+                 emulated device is aliasing
+    \return TRUE if an emulated disk aliasing the specified paravirtual
+    disk index is present in the system or FALSE if not
+*/  
+typedef BOOLEAN
+(*XENFILT_EMULATED_IS_DISK_PRESENT)(
+    IN  PVOID   Context,
+    IN  ULONG   Index
     );
 
 // {959027A1-FCCE-4E78-BCF4-637384F499C5}
@@ -109,10 +113,22 @@ struct _XENFILT_EMULATED_INTERFACE_V1 {
     XENFILT_EMULATED_ACQUIRE            EmulatedAcquire;
     XENFILT_EMULATED_RELEASE            EmulatedRelease;
     XENFILT_EMULATED_IS_DEVICE_PRESENT  EmulatedIsDevicePresent;
+    XENFILT_EMULATED_IS_DISK_PRESENT_V1 EmulatedIsDiskPresentVersion1;
+};
+
+/*! \struct _XENFILT_EMULATED_INTERFACE_V2
+    \brief EMULATED interface version 2
+    \ingroup interfaces
+*/
+struct _XENFILT_EMULATED_INTERFACE_V2 {
+    INTERFACE                           Interface;
+    XENFILT_EMULATED_ACQUIRE            EmulatedAcquire;
+    XENFILT_EMULATED_RELEASE            EmulatedRelease;
+    XENFILT_EMULATED_IS_DEVICE_PRESENT  EmulatedIsDevicePresent;
     XENFILT_EMULATED_IS_DISK_PRESENT    EmulatedIsDiskPresent;
 };
 
-typedef struct _XENFILT_EMULATED_INTERFACE_V1 XENFILT_EMULATED_INTERFACE, *PXENFILT_EMULATED_INTERFACE;
+typedef struct _XENFILT_EMULATED_INTERFACE_V2 XENFILT_EMULATED_INTERFACE, *PXENFILT_EMULATED_INTERFACE;
 
 /*! \def XENFILT_EMULATED
     \brief Macro at assist in method invocation
@@ -123,7 +139,7 @@ typedef struct _XENFILT_EMULATED_INTERFACE_V1 XENFILT_EMULATED_INTERFACE, *PXENF
 #endif  // _WINDLL
 
 #define XENFILT_EMULATED_INTERFACE_VERSION_MIN  1
-#define XENFILT_EMULATED_INTERFACE_VERSION_MAX  1
+#define XENFILT_EMULATED_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENFILT_EMULATED_INTERFACE_H
 

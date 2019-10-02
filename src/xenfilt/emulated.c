@@ -49,9 +49,7 @@ typedef struct _XENFILT_EMULATED_DEVICE_DATA {
 } XENFILT_EMULATED_DEVICE_DATA, *PXENFILT_EMULATED_DEVICE_DATA;
 
 typedef struct _XENFILT_EMULATED_DISK_DATA {
-    ULONG   Controller;
-    ULONG   Target;
-    ULONG   Lun;
+    ULONG   Index;
 } XENFILT_EMULATED_DISK_DATA, *PXENFILT_EMULATED_DISK_DATA;
 
 typedef union _XENFILT_EMULATED_OBJECT_DATA {
@@ -146,7 +144,7 @@ EmulatedSetObjectDiskData(
     Controller = strtol(InstanceID, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
-    if (*End != '.')
+    if (*End != '.' || Controller > 1)
         goto fail2;
 
     End++;
@@ -154,7 +152,7 @@ EmulatedSetObjectDiskData(
     Target = strtol(End, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
-    if (*End != '.')
+    if (*End != '.' || Target > 1)
         goto fail3;
 
     End++;
@@ -165,11 +163,16 @@ EmulatedSetObjectDiskData(
     if (*End != '\0')
         goto fail4;
 
-    EmulatedObject->Data.Disk.Controller = Controller;
-    EmulatedObject->Data.Disk.Target = Target;
-    EmulatedObject->Data.Disk.Lun = Lun;
+    status = STATUS_NOT_SUPPORTED;
+    if (Lun != 0)
+        goto fail5;
+
+    EmulatedObject->Data.Disk.Index = Controller << 1 | Target;
 
     return STATUS_SUCCESS;
+
+fail5:
+    Error("fail5\n");
 
 fail4:
     Error("fail4\n");
@@ -311,16 +314,14 @@ EmulatedIsDevicePresent(
 static BOOLEAN
 EmulatedIsDiskPresent(
     IN  PINTERFACE              Interface,
-    IN  ULONG                   Controller,
-    IN  ULONG                   Target,
-    IN  ULONG                   Lun
+    IN  ULONG                   Index
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
     KIRQL                       Irql;
     PLIST_ENTRY                 ListEntry;
 
-    Trace("====> (%02X:%02X:%02X)\n", Controller, Target, Lun);
+    Trace("====> (%02X)\n", Index);
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -333,9 +334,7 @@ EmulatedIsDiskPresent(
                                            ListEntry);
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_IDE &&
-            Controller == EmulatedObject->Data.Disk.Controller &&
-            Target == EmulatedObject->Data.Disk.Target &&
-            Lun == EmulatedObject->Data.Disk.Lun) {
+            Index == EmulatedObject->Data.Disk.Index) {
             Trace("FOUND\n");
             break;
         }
@@ -348,6 +347,26 @@ EmulatedIsDiskPresent(
     Trace("<====\n");
 
     return (ListEntry != &Context->List) ? TRUE : FALSE;
+}
+
+static BOOLEAN
+EmulatedIsDiskPresentVersion1(
+    IN  PINTERFACE              Interface,
+    IN  ULONG                   Controller,
+    IN  ULONG                   Target,
+    IN  ULONG                   Lun
+    )
+{
+    UNREFERENCED_PARAMETER(Controller);
+    UNREFERENCED_PARAMETER(Lun);
+
+    //
+    // XENVBD erroneously passes the disk number of the PV disk as
+    // the IDE target number (i.e. in can pass a value > 1), with
+    // Controller always set to 0. So, simply treat the Target argument
+    // as the PV disk number and call the new method.
+    //
+    return EmulatedIsDiskPresent(Interface, Target);
 }
 
 NTSTATUS
@@ -395,9 +414,17 @@ static struct _XENFILT_EMULATED_INTERFACE_V1 EmulatedInterfaceVersion1 = {
     EmulatedAcquire,
     EmulatedRelease,
     EmulatedIsDevicePresent,
-    EmulatedIsDiskPresent
+    EmulatedIsDiskPresentVersion1
 };
                      
+static struct _XENFILT_EMULATED_INTERFACE_V2 EmulatedInterfaceVersion2 = {
+    { sizeof (struct _XENFILT_EMULATED_INTERFACE_V2), 2, NULL, NULL, NULL },
+    EmulatedAcquire,
+    EmulatedRelease,
+    EmulatedIsDevicePresent,
+    EmulatedIsDiskPresent
+};
+
 NTSTATUS
 EmulatedInitialize(
     OUT PXENFILT_EMULATED_CONTEXT   *Context
@@ -449,6 +476,23 @@ EmulatedGetInterface(
             break;
 
         *EmulatedInterface = EmulatedInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 2: {
+        struct _XENFILT_EMULATED_INTERFACE_V2   *EmulatedInterface;
+
+        EmulatedInterface = (struct _XENFILT_EMULATED_INTERFACE_V2 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENFILT_EMULATED_INTERFACE_V2))
+            break;
+
+        *EmulatedInterface = EmulatedInterfaceVersion2;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
