@@ -824,11 +824,12 @@ StoreProcessResponse(
     KeMemoryBarrier();
 }
 
-static VOID
+static ULONG
 StorePollLocked(
     IN  PXENBUS_STORE_CONTEXT   Context
     )
 {
+    ULONG                       Count;
     ULONG                       Read;
     ULONG                       Written;
     NTSTATUS                    status;
@@ -836,6 +837,12 @@ StorePollLocked(
     ASSERT3U(KeGetCurrentIrql(), ==, DISPATCH_LEVEL);
 
     Context->Polls++;
+
+    Count = XENBUS_EVTCHN(GetCount,
+                          &Context->EvtchnInterface,
+                          Context->Channel);
+
+    KeMemoryBarrier();
 
     do {
         Read = Written = 0;
@@ -856,6 +863,19 @@ StorePollLocked(
                                  Context->Channel);
 
     } while (Written != 0 || Read != 0);
+
+    return Count;
+}
+
+static FORCEINLINE VOID
+__StorePoll(
+    IN  PXENBUS_STORE_CONTEXT   Context
+    )
+{
+    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
+    if (Context->References != 0)
+        (VOID) StorePollLocked(Context);
+    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
 }
 
 static
@@ -879,11 +899,7 @@ StoreDpc(
     UNREFERENCED_PARAMETER(Argument2);
 
     ASSERT(Context != NULL);
-
-    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-    if (Context->References != 0)
-        StorePollLocked(Context);
-    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
+    __StorePoll(Context);
 }
 
 #define TIME_US(_us)        ((_us) * 10)
@@ -902,6 +918,7 @@ StoreSubmitRequest(
     PXENBUS_STORE_RESPONSE      Response;
     KIRQL                       Irql;
     ULONG                       Count;
+    XENBUS_STORE_REQUEST_STATE  State;
     LARGE_INTEGER               Timeout;
 
     ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_PREPARED);
@@ -916,16 +933,14 @@ StoreSubmitRequest(
 
     Request->State = XENBUS_STORE_REQUEST_SUBMITTED;
 
-    Count = XENBUS_EVTCHN(GetCount,
-                          &Context->EvtchnInterface,
-                          Context->Channel);
+    Count = StorePollLocked(Context);
 
-    StorePollLocked(Context);
     KeMemoryBarrier();
+    State = Request->State;
 
     Timeout.QuadPart = TIME_RELATIVE(TIME_S(XENBUS_STORE_POLL_PERIOD));
 
-    while (Request->State != XENBUS_STORE_REQUEST_COMPLETED) {
+    while (State != XENBUS_STORE_REQUEST_COMPLETED) {
         NTSTATUS    status;
 
         status = XENBUS_EVTCHN(Wait,
@@ -936,12 +951,10 @@ StoreSubmitRequest(
         if (status == STATUS_TIMEOUT)
             Warning("TIMED OUT\n");
 
-        Count = XENBUS_EVTCHN(GetCount,
-                              &Context->EvtchnInterface,
-                              Context->Channel);
+        Count = StorePollLocked(Context);
 
-        StorePollLocked(Context);
         KeMemoryBarrier();
+        State = Request->State;
     }
 
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
@@ -1823,12 +1836,7 @@ StorePoll(
     IN  PINTERFACE          Interface
     )
 {
-    PXENBUS_STORE_CONTEXT   Context = Interface->Context;
-
-    KeAcquireSpinLockAtDpcLevel(&Context->Lock);
-    if (Context->References != 0)
-        StorePollLocked(Context);
-    KeReleaseSpinLockFromDpcLevel(&Context->Lock);
+    __StorePoll(Interface->Context);
 }
 
 #define TIME_US(_us)        ((_us) * 10)
@@ -1898,7 +1906,7 @@ StoreWatchdog(
                 (VOID) XENBUS_EVTCHN(Send,
                                      &Context->EvtchnInterface,
                                      Context->Channel);
-                StorePollLocked(Context);
+                (VOID) StorePollLocked(Context);
             }
 
             KeMemoryBarrier();
@@ -2604,7 +2612,7 @@ StoreRelease(
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
     StoreDisable(Context);
-    StorePollLocked(Context);
+    (VOID) StorePollLocked(Context);
     RtlZeroMemory(&Context->Response, sizeof (XENBUS_STORE_RESPONSE));
 
     XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
