@@ -507,8 +507,6 @@ EvtchnPoll(
 
         KeMemoryBarrier();
         if (!Channel->Closed) {
-            Channel->Count++;
-
             RemoveEntryList(&Channel->PendingListEntry);
             InitializeListHead(&Channel->PendingListEntry);
 
@@ -520,6 +518,16 @@ EvtchnPoll(
             XENBUS_EVTCHN_ABI(PortAck,
                               &Context->EvtchnAbi,
                               Channel->LocalPort);
+
+	    /*
+	     * Make sure the event is ack-ed before Count is incremented
+	     * otherwise there is a small window where EvtchnWait() could
+	     * end up waiting on the incremented value whilst new events
+	     * would be missed (hence Count would not be further
+	     * incremented to wake the waiter).
+	     */
+	    KeMemoryBarrier();
+            Channel->Count++;
 
 #pragma warning(suppress:6387)  // NULL argument
             DoneSomething |= Channel->Callback(NULL, Channel->Argument);
@@ -922,6 +930,8 @@ EvtchnGetCount(
     )
 {
     UNREFERENCED_PARAMETER(Interface);
+
+    KeMemoryBarrier();
 
     return Channel->Count;
 }
