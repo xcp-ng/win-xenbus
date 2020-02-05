@@ -387,8 +387,7 @@ __FdoSetEnumerated(
 {
     Fdo->Enumerated = TRUE;
 
-    if (Fdo->Type == XENFILT_EMULATED_OBJECT_TYPE_PCI)
-        DriverSetFilterState();
+    DriverSetFilterState();
 }
 
 BOOLEAN
