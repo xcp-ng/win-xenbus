@@ -738,7 +738,7 @@ DriverGetEmulatedType(
     Type = XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
     Index = 0;
 
-    for (;;) {
+    do {
         ULONG           Length;
         PANSI_STRING    Ansi;
         NTSTATUS        status;
@@ -760,13 +760,12 @@ DriverGetEmulatedType(
                 Type = XENFILT_EMULATED_OBJECT_TYPE_IDE;
 
             RegistryFreeSzValue(Ansi);
-            break;
         } else {
             Trace("NO MATCH: %s\n", &Id[Index]);
         }
 
         Index += Length + 1;
-    }
+    } while (Type == XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN);
 
     return Type;
 }
