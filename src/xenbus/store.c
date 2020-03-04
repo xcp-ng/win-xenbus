@@ -2611,8 +2611,8 @@ StoreRelease(
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-    StoreDisable(Context);
     (VOID) StorePollLocked(Context);
+    StoreDisable(Context);
     RtlZeroMemory(&Context->Response, sizeof (XENBUS_STORE_RESPONSE));
 
     XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
