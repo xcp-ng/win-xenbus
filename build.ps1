@@ -29,6 +29,10 @@ Function Build {
 		Type = $Type
 		}
 	& ".\msbuild.ps1" @params
+	if ($LASTEXITCODE -ne 0) {
+		Write-Host -ForegroundColor Red "ERROR: Build failed, code:" $LASTEXITCODE
+		Exit $LASTEXITCODE
+	}
 }
 
 Function SdvBuild {
