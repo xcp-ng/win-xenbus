@@ -587,7 +587,7 @@ GnttabQueryReference(
         *Pfn = Context->Table[Reference].frame;
 
     if (ReadOnly != NULL)
-        *ReadOnly = (Context->Table[Reference].frame & GTF_readonly) ? TRUE : FALSE;
+        *ReadOnly = (Context->Table[Reference].flags & GTF_readonly) ? TRUE : FALSE;
 
     return STATUS_SUCCESS;
 
