@@ -192,7 +192,7 @@ __AllocatePages(
                                   SkipBytes,
                                   TotalBytes,
                                   MmCached,
-                                  MM_DONT_ZERO_ALLOCATION);
+                                  MM_ALLOCATE_FULLY_REQUIRED);
 
     status = STATUS_NO_MEMORY;
     if (Mdl == NULL)
@@ -210,10 +210,10 @@ __AllocatePages(
 
     MdlMappedSystemVa = MmMapLockedPagesSpecifyCache(Mdl,
                                                      KernelMode,
-						                             MmCached,
-						                             NULL,
-						                             FALSE,
-						                             NormalPagePriority);
+                                                     MmCached,
+                                                     NULL,
+                                                     FALSE,
+                                                     NormalPagePriority);
 
     status = STATUS_UNSUCCESSFUL;
     if (MdlMappedSystemVa == NULL)
@@ -225,22 +225,14 @@ __AllocatePages(
     ASSERT3P(Mdl->StartVa, ==, MdlMappedSystemVa);
     ASSERT3P(Mdl->MappedSystemVa, ==, MdlMappedSystemVa);
 
-    RtlZeroMemory(MdlMappedSystemVa, Mdl->ByteCount);
-
     return Mdl;
 
 fail3:
-    Error("fail3\n");
-
 fail2:
-    Error("fail2\n");
-
     MmFreePagesFromMdl(Mdl);
     ExFreePool(Mdl);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
-
     return NULL;
 }
 
