@@ -79,9 +79,17 @@ if ([string]::IsNullOrEmpty($Env:BUILD_NUMBER)) {
 	Set-Item -Path Env:BUILD_NUMBER -Value $BuildNum
 }
 
-Set-Item -Path Env:MAJOR_VERSION -Value '9'
-Set-Item -Path Env:MINOR_VERSION -Value '1'
-Set-Item -Path Env:MICRO_VERSION -Value '0'
+if ([string]::IsNullOrEmpty($Env:MAJOR_VERSION)) {
+	Set-Item -Path Env:MAJOR_VERSION -Value '9'
+}
+
+if ([string]::IsNullOrEmpty($Env:MINOR_VERSION)) {
+	Set-Item -Path Env:MINOR_VERSION -Value '1'
+}
+
+if ([string]::IsNullOrEmpty($Env:MICRO_VERSION)) {
+	Set-Item -Path Env:MICRO_VERSION -Value '0'
+}
 
 if ([string]::IsNullOrEmpty($Arch) -or $Arch -eq "x86" -or $Arch -eq "Win32") {
 	Build "x86" $Type
