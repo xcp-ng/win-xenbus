@@ -33,6 +33,7 @@
 #define _COMMON_NAMES_H_
 
 #include <ntddk.h>
+#include <xen.h>
 
 static FORCEINLINE const CHAR *
 PowerStateTypeName(
@@ -470,6 +471,27 @@ ProcessorChangeName(
     return "UNKNOWN";
 
 #undef _PROCESSOR_CHANGE_NAME
+}
+
+static FORCEINLINE const CHAR *
+VirqName(
+    IN  ULONG   Type
+    )
+{
+#define _VIRQ_NAME(_Type) \
+    case VIRQ_ ## _Type:  \
+        return #_Type;
+
+    switch (Type) {
+    _VIRQ_NAME(DEBUG);
+    _VIRQ_NAME(TIMER);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef _VIRQ_NAME
 }
 
 #endif // _COMMON_NAMES_H_

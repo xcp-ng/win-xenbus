@@ -80,6 +80,13 @@ struct _XENBUS_INTERRUPT {
     PVOID               Argument;
 };
 
+typedef struct _XENBUS_VIRQ {
+    PXENBUS_FDO             Fdo;
+    LIST_ENTRY              ListEntry;
+    ULONG                   Type;
+    PXENBUS_EVTCHN_CHANNEL  Channel;
+} XENBUS_VIRQ, *PXENBUS_VIRQ;
+
 struct _XENBUS_FDO {
     PXENBUS_DX                      Dx;
     PDEVICE_OBJECT                  LowerDeviceObject;
@@ -143,7 +150,7 @@ struct _XENBUS_FDO {
     PXENBUS_RANGE_SET               RangeSet;
     LIST_ENTRY                      InterruptList;
 
-    PXENBUS_EVTCHN_CHANNEL          Channel;
+    LIST_ENTRY                      VirqList;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
     PLOG_DISPOSITION                LogDisposition;
 };
@@ -2491,27 +2498,6 @@ FdoDestroyInterrupt(
     RtlZeroMemory(&Fdo->InterruptList, sizeof (LIST_ENTRY));
 }
 
-static
-_Function_class_(KSERVICE_ROUTINE)
-_IRQL_requires_(HIGH_LEVEL)
-_IRQL_requires_same_
-BOOLEAN
-FdoEvtchnCallback(
-    IN  PKINTERRUPT         InterruptObject,
-    IN  PVOID               Argument
-    )
-{
-    PXENBUS_FDO             Fdo = Argument;
-
-    UNREFERENCED_PARAMETER(InterruptObject);
-
-    ASSERT(Fdo != NULL);
-
-    XENBUS_DEBUG(Trigger, &Fdo->DebugInterface, NULL);
-
-    return TRUE;
-}
-
 static FORCEINLINE BOOLEAN
 __FdoMatchDistribution(
     IN  PXENBUS_FDO Fdo,
@@ -2767,6 +2753,141 @@ FdoOutputBuffer(
                           (ULONG)(Cursor - FdoOutBuffer));
 }
 
+static
+_Function_class_(KSERVICE_ROUTINE)
+_IRQL_requires_(HIGH_LEVEL)
+_IRQL_requires_same_
+BOOLEAN
+FdoVirqCallback(
+    IN  PKINTERRUPT InterruptObject,
+    IN  PVOID       Argument
+    )
+{
+    PXENBUS_VIRQ    Virq = Argument;
+    PXENBUS_FDO     Fdo;
+
+    UNREFERENCED_PARAMETER(InterruptObject);
+
+    ASSERT(Virq != NULL);
+    Fdo = Virq->Fdo;
+
+    ASSERT3U(Virq->Type, ==, VIRQ_DEBUG);
+    XENBUS_DEBUG(Trigger, &Fdo->DebugInterface, NULL);
+
+    return TRUE;
+}
+
+static FORCEINLINE VOID
+__FdoVirqDestroy(
+    IN  PXENBUS_VIRQ    Virq
+    )
+{
+    PXENBUS_FDO         Fdo = Virq->Fdo;
+
+    Info("%s\n", VirqName(Virq->Type));
+
+    XENBUS_EVTCHN(Close,
+                  &Fdo->EvtchnInterface,
+                  Virq->Channel);
+
+    __FdoFree(Virq);
+}
+
+static FORCEINLINE NTSTATUS
+__FdoVirqCreate(
+    IN  PXENBUS_FDO     Fdo,
+    IN  ULONG           Type,
+    OUT PXENBUS_VIRQ    *Virq
+    )
+{
+    NTSTATUS            status;
+
+    *Virq = __FdoAllocate(sizeof (XENBUS_VIRQ));
+
+    status = STATUS_NO_MEMORY;
+    if (*Virq == NULL)
+        goto fail1;
+
+    (*Virq)->Fdo = Fdo;
+    (*Virq)->Type = Type;
+    (*Virq)->Channel = XENBUS_EVTCHN(Open,
+                                     &Fdo->EvtchnInterface,
+                                     XENBUS_EVTCHN_TYPE_VIRQ,
+                                     FdoVirqCallback,
+                                     *Virq,
+                                     Type);
+
+    status = STATUS_UNSUCCESSFUL;
+    if ((*Virq)->Channel == NULL)
+        goto fail2;
+
+    (VOID) XENBUS_EVTCHN(Unmask,
+                         &Fdo->EvtchnInterface,
+                         (*Virq)->Channel,
+                         FALSE,
+                         TRUE);
+
+    Info("%s\n", VirqName((*Virq)->Type));
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    __FdoFree(*Virq);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+FdoVirqTeardown(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    while (!IsListEmpty(&Fdo->VirqList)) {
+        PLIST_ENTRY     ListEntry;
+        PXENBUS_VIRQ    Virq;
+
+        ListEntry = RemoveHeadList(&Fdo->VirqList);
+        ASSERT(ListEntry != &Fdo->VirqList);
+
+        RtlZeroMemory(ListEntry, sizeof (LIST_ENTRY));
+
+        Virq = CONTAINING_RECORD(ListEntry, XENBUS_VIRQ, ListEntry);
+
+        __FdoVirqDestroy(Virq);
+    }
+
+    RtlZeroMemory(&Fdo->VirqList, sizeof (LIST_ENTRY));
+}
+
+static NTSTATUS
+FdoVirqInitialize(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    PXENBUS_VIRQ    Virq;
+    NTSTATUS        status;
+
+    InitializeListHead(&Fdo->VirqList);
+
+    status = __FdoVirqCreate(Fdo, VIRQ_DEBUG, &Virq);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    InsertTailList(&Fdo->VirqList, &Virq->ListEntry);
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
 static FORCEINLINE NTSTATUS
 __FdoD3ToD0(
     IN  PXENBUS_FDO Fdo
@@ -2780,22 +2901,9 @@ __FdoD3ToD0(
 
     (VOID) FdoSetDistribution(Fdo);
 
-    Fdo->Channel = XENBUS_EVTCHN(Open,
-                                 &Fdo->EvtchnInterface,
-                                 XENBUS_EVTCHN_TYPE_VIRQ,
-                                 FdoEvtchnCallback,
-                                 Fdo,
-                                 VIRQ_DEBUG);
-
-    status = STATUS_UNSUCCESSFUL;
-    if (Fdo->Channel == NULL)
+    status = FdoVirqInitialize(Fdo);
+    if (!NT_SUCCESS(status))
         goto fail1;
-
-    (VOID) XENBUS_EVTCHN(Unmask,
-                         &Fdo->EvtchnInterface,
-                         Fdo->Channel,
-                         FALSE,
-                         TRUE);
 
     status = LogAddDisposition(DriverGetConsoleLogLevel(),
                                FdoOutputBuffer,
@@ -2880,10 +2988,7 @@ fail2:
     LogRemoveDisposition(Fdo->LogDisposition);
     Fdo->LogDisposition = NULL;
 
-    XENBUS_EVTCHN(Close,
-                  &Fdo->EvtchnInterface,
-                  Fdo->Channel);
-    Fdo->Channel = NULL;
+    FdoVirqTeardown(Fdo);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -2932,10 +3037,7 @@ __FdoD0ToD3(
     LogRemoveDisposition(Fdo->LogDisposition);
     Fdo->LogDisposition = NULL;
 
-    XENBUS_EVTCHN(Close,
-                  &Fdo->EvtchnInterface,
-                  Fdo->Channel);
-    Fdo->Channel = NULL;
+    FdoVirqTeardown(Fdo);
 
     FdoClearDistribution(Fdo);
 
