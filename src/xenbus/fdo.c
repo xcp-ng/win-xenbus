@@ -2797,9 +2797,11 @@ static FORCEINLINE NTSTATUS
 __FdoVirqCreate(
     IN  PXENBUS_FDO     Fdo,
     IN  ULONG           Type,
+    IN  ULONG           Cpu,
     OUT PXENBUS_VIRQ    *Virq
     )
 {
+    PROCESSOR_NUMBER    ProcNumber;
     NTSTATUS            status;
 
     *Virq = __FdoAllocate(sizeof (XENBUS_VIRQ));
@@ -2810,12 +2812,18 @@ __FdoVirqCreate(
 
     (*Virq)->Fdo = Fdo;
     (*Virq)->Type = Type;
+
+    status = KeGetProcessorNumberFromIndex(Cpu, &ProcNumber);
+    ASSERT(NT_SUCCESS(status));
+
     (*Virq)->Channel = XENBUS_EVTCHN(Open,
                                      &Fdo->EvtchnInterface,
                                      XENBUS_EVTCHN_TYPE_VIRQ,
                                      FdoVirqCallback,
                                      *Virq,
-                                     Type);
+                                     Type,
+                                     ProcNumber.Group,
+                                     ProcNumber.Number);
 
     status = STATUS_UNSUCCESSFUL;
     if ((*Virq)->Channel == NULL)
@@ -2827,7 +2835,8 @@ __FdoVirqCreate(
                          FALSE,
                          TRUE);
 
-    Info("%s\n", VirqName((*Virq)->Type));
+    Info("%s: CPU %u:%u\n", VirqName((*Virq)->Type),
+         ProcNumber.Group, ProcNumber.Number);
 
     return STATUS_SUCCESS;
 
@@ -2874,7 +2883,7 @@ FdoVirqInitialize(
 
     InitializeListHead(&Fdo->VirqList);
 
-    status = __FdoVirqCreate(Fdo, VIRQ_DEBUG, &Virq);
+    status = __FdoVirqCreate(Fdo, VIRQ_DEBUG, 0, &Virq);
     if (!NT_SUCCESS(status))
         goto fail1;
 

@@ -138,13 +138,18 @@ __EvtchnFree(
 
 static NTSTATUS
 EvtchnOpenFixed(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Count,
     IN  va_list                 Arguments
     )
 {
     ULONG                       LocalPort;
     BOOLEAN                     Mask;
 
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(Count, ==, 2);
     LocalPort = va_arg(Arguments, ULONG);
     Mask = va_arg(Arguments, BOOLEAN);
 
@@ -156,7 +161,9 @@ EvtchnOpenFixed(
 
 static NTSTATUS
 EvtchnOpenUnbound(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Count,
     IN  va_list                 Arguments
     )
 {
@@ -165,6 +172,9 @@ EvtchnOpenUnbound(
     ULONG                       LocalPort;
     NTSTATUS                    status;
 
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(Count, ==, 2);
     RemoteDomain = va_arg(Arguments, USHORT);
     Mask = va_arg(Arguments, BOOLEAN);
 
@@ -187,7 +197,9 @@ fail1:
 
 static NTSTATUS
 EvtchnOpenInterDomain(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Count,
     IN  va_list                 Arguments
     )
 {
@@ -197,6 +209,9 @@ EvtchnOpenInterDomain(
     ULONG                       LocalPort;
     NTSTATUS                    status;
 
+    UNREFERENCED_PARAMETER(Context);
+
+    ASSERT3U(Count, ==, 3);
     RemoteDomain = va_arg(Arguments, USHORT);
     RemotePort = va_arg(Arguments, ULONG);
     Mask = va_arg(Arguments, BOOLEAN);
@@ -223,25 +238,62 @@ fail1:
 
 static NTSTATUS
 EvtchnOpenVirq(
+    IN  PXENBUS_EVTCHN_CONTEXT  Context,
     IN  PXENBUS_EVTCHN_CHANNEL  Channel,
+    IN  ULONG                   Count,
     IN  va_list                 Arguments
     )
 {
     ULONG                       Index;
+    USHORT                      Group;
+    UCHAR                       Number;
+    PROCESSOR_NUMBER            ProcNumber;
+    ULONG                       Cpu;
+    PXENBUS_EVTCHN_PROCESSOR    Processor;
+    unsigned int                vcpu_id;
     ULONG                       LocalPort;
     NTSTATUS                    status;
 
     Index = va_arg(Arguments, ULONG);
 
-    status = EventChannelBindVirq(Index, &LocalPort);
-    if (!NT_SUCCESS(status))
+    if (Count == 1) {
+        Group = 0;
+        Number = 0;
+    } else {
+        ASSERT3U(Count, ==, 3);
+
+        Group = va_arg(Arguments, USHORT);
+        Number = va_arg(Arguments, UCHAR);
+    }
+
+    RtlZeroMemory(&ProcNumber, sizeof (PROCESSOR_NUMBER));
+    ProcNumber.Group = Group;
+    ProcNumber.Number = Number;
+
+    Cpu = KeGetProcessorIndexFromNumber(&ProcNumber);
+
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
+    Processor = &Context->Processor[Cpu];
+
+    status = STATUS_NOT_SUPPORTED;
+    if (!Processor->UpcallEnabled)
         goto fail1;
+
+    status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
+    ASSERT(NT_SUCCESS(status));
+
+    status = EventChannelBindVirq(Index, vcpu_id, &LocalPort);
+    if (!NT_SUCCESS(status))
+        goto fail2;
 
     Channel->Parameters.Virq.Index = Index;
 
     Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -292,19 +344,22 @@ EvtchnOpen(
     va_start(Arguments, Argument);
     switch (Type) {
     case XENBUS_EVTCHN_TYPE_FIXED:
-        status = EvtchnOpenFixed(Channel, Arguments);
+        status = EvtchnOpenFixed(Context, Channel, 2, Arguments);
         break;
 
     case XENBUS_EVTCHN_TYPE_UNBOUND:
-        status = EvtchnOpenUnbound(Channel, Arguments);
+        status = EvtchnOpenUnbound(Context, Channel, 2, Arguments);
         break;
 
     case XENBUS_EVTCHN_TYPE_INTER_DOMAIN:
-        status = EvtchnOpenInterDomain(Channel, Arguments);
+        status = EvtchnOpenInterDomain(Context, Channel, 3, Arguments);
         break;
 
     case XENBUS_EVTCHN_TYPE_VIRQ:
-        status = EvtchnOpenVirq(Channel, Arguments);
+        // Processor information only specified from version 9 onwards
+        status = EvtchnOpenVirq(Context, Channel,
+                                (Interface->Version < 9) ? 1 : 3,
+                                Arguments);
         break;
 
     default:
@@ -1762,6 +1817,21 @@ static struct _XENBUS_EVTCHN_INTERFACE_V8 EvtchnInterfaceVersion8 = {
     EvtchnClose,
 };
 
+static struct _XENBUS_EVTCHN_INTERFACE_V9 EvtchnInterfaceVersion9 = {
+    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V9), 9, NULL, NULL, NULL },
+    EvtchnAcquire,
+    EvtchnRelease,
+    EvtchnOpen,
+    EvtchnBind,
+    EvtchnUnmask,
+    EvtchnSend,
+    EvtchnTrigger,
+    EvtchnGetCount,
+    EvtchnWait,
+    EvtchnGetPort,
+    EvtchnClose,
+};
+
 NTSTATUS
 EvtchnInitialize(
     IN  PXENBUS_FDO             Fdo,
@@ -1948,6 +2018,23 @@ EvtchnGetInterface(
             break;
 
         *EvtchnInterface = EvtchnInterfaceVersion8;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 9: {
+        struct _XENBUS_EVTCHN_INTERFACE_V9  *EvtchnInterface;
+
+        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V9 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V9))
+            break;
+
+        *EvtchnInterface = EvtchnInterfaceVersion9;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;

@@ -177,8 +177,9 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindVirq(
-    IN  ULONG   Virq,
-    OUT ULONG   *LocalPort
+    IN  ULONG           Virq,
+    IN  unsigned int    vcpu_id,
+    OUT ULONG           *LocalPort
     );
 
 __checkReturn

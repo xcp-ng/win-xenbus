@@ -145,6 +145,7 @@ XEN_API
 NTSTATUS
 EventChannelBindVirq(
     IN  ULONG               Virq,
+    IN  unsigned int        vcpu_id,
     OUT ULONG               *LocalPort
     )
 {
@@ -153,7 +154,7 @@ EventChannelBindVirq(
     NTSTATUS                status;
 
     op.virq = Virq;
-    op.vcpu = 0;
+    op.vcpu = vcpu_id;
 
     rc = EventChannelOp(EVTCHNOP_bind_virq, &op);
 
