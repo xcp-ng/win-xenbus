@@ -442,17 +442,17 @@ EvtchnPollCallback(
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Argument;
-    ULONG                       Index;
+    ULONG                       Cpu;
     PXENBUS_EVTCHN_PROCESSOR    Processor;
     PXENBUS_EVTCHN_CHANNEL      Channel;
     BOOLEAN                     Pending;
     NTSTATUS                    status;
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
-    Index = KeGetCurrentProcessorNumberEx(NULL);
+    Cpu = KeGetCurrentProcessorNumberEx(NULL);
 
-    ASSERT3U(Index, <, Context->ProcessorCount);
-    Processor = &Context->Processor[Index];
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
+    Processor = &Context->Processor[Cpu];
 
     status = HashTableLookup(Context->Table,
                              LocalPort,
@@ -475,7 +475,7 @@ done:
 static BOOLEAN
 EvtchnPoll(
     IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  ULONG                   Index,
+    IN  ULONG                   Cpu,
     IN  PLIST_ENTRY             List
     )
 {
@@ -483,12 +483,12 @@ EvtchnPoll(
     BOOLEAN                     DoneSomething;
     PLIST_ENTRY                 ListEntry;
 
-    ASSERT3U(Index, <, Context->ProcessorCount);
-    Processor = &Context->Processor[Index];
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
+    Processor = &Context->Processor[Cpu];
 
     (VOID) XENBUS_EVTCHN_ABI(Poll,
                              &Context->EvtchnAbi,
-                             Index,
+                             Cpu,
                              EvtchnPollCallback,
                              Context);
 
@@ -545,7 +545,7 @@ EvtchnPoll(
 static VOID
 EvtchnFlush(
     IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  ULONG                   Index
+    IN  ULONG                   Cpu
     )
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor;
@@ -553,8 +553,8 @@ EvtchnFlush(
     PXENBUS_INTERRUPT           Interrupt;
     KIRQL                       Irql;
 
-    ASSERT3U(Index, <, Context->ProcessorCount);
-    Processor = &Context->Processor[Index];
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
+    Processor = &Context->Processor[Cpu];
 
     Interrupt = (Processor->UpcallEnabled) ?
                 Processor->Interrupt :
@@ -563,7 +563,7 @@ EvtchnFlush(
     InitializeListHead(&List);
 
     Irql = FdoAcquireInterruptLock(Context->Fdo, Interrupt);
-    (VOID) EvtchnPoll(Context, Index, &List);
+    (VOID) EvtchnPoll(Context, Cpu, &List);
     FdoReleaseInterruptLock(Context->Fdo, Interrupt, Irql);
 
     while (!IsListEmpty(&List)) {
@@ -600,21 +600,21 @@ EvtchnDpc(
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = _Context;
-    ULONG                   Index;
+    ULONG                   Cpu;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
-    Index = KeGetCurrentProcessorNumberEx(NULL);
+    Cpu = KeGetCurrentProcessorNumberEx(NULL);
 
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
 
     if (Context->References == 0)
         goto done;
 
-    EvtchnFlush(Context, Index);
+    EvtchnFlush(Context, Cpu);
 
 done:
     KeReleaseSpinLockFromDpcLevel(&Context->Lock);
@@ -629,7 +629,7 @@ EvtchnTrigger(
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
     KIRQL                       Irql;
     PROCESSOR_NUMBER            ProcNumber;
-    ULONG                       Index;
+    ULONG                       Cpu;
     PXENBUS_EVTCHN_PROCESSOR    Processor;
     PXENBUS_INTERRUPT           Interrupt;
     BOOLEAN                     Pending;
@@ -640,10 +640,10 @@ EvtchnTrigger(
     ProcNumber = Channel->ProcNumber;
     KeReleaseSpinLock(&Channel->Lock, Irql);
 
-    Index = KeGetProcessorIndexFromNumber(&ProcNumber);
+    Cpu = KeGetProcessorIndexFromNumber(&ProcNumber);
 
-    ASSERT3U(Index, <, Context->ProcessorCount);
-    Processor = &Context->Processor[Index];
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
+    Processor = &Context->Processor[Cpu];
 
     Interrupt = (Processor->UpcallEnabled) ?
                 Processor->Interrupt :
@@ -675,7 +675,7 @@ EvtchnBind(
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
     PROCESSOR_NUMBER            ProcNumber;
-    ULONG                       Index;
+    ULONG                       Cpu;
     PXENBUS_EVTCHN_PROCESSOR    Processor;
     ULONG                       LocalPort;
     unsigned int                vcpu_id;
@@ -688,10 +688,10 @@ EvtchnBind(
     ProcNumber.Group = Group;
     ProcNumber.Number = Number;
 
-    Index = KeGetProcessorIndexFromNumber(&ProcNumber);
+    Cpu = KeGetProcessorIndexFromNumber(&ProcNumber);
 
-    ASSERT3U(Index, <, Context->ProcessorCount);
-    Processor = &Context->Processor[Index];
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
+    Processor = &Context->Processor[Cpu];
 
     status = STATUS_NOT_SUPPORTED;
     if (!Processor->UpcallEnabled)
@@ -708,7 +708,7 @@ EvtchnBind(
 
     LocalPort = Channel->LocalPort;
 
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
     ASSERT(NT_SUCCESS(status));
 
     status = EventChannelBindVirtualCpu(LocalPort, vcpu_id);
@@ -1026,19 +1026,19 @@ EvtchnInterruptCallback(
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Argument;
-    ULONG                   Index;
+    ULONG                   Cpu;
     BOOLEAN                 DoneSomething;
 
     UNREFERENCED_PARAMETER(InterruptObject);
 
     ASSERT3U(KeGetCurrentIrql(), >=, DISPATCH_LEVEL);
-    Index = KeGetCurrentProcessorNumberEx(NULL);
+    Cpu = KeGetCurrentProcessorNumberEx(NULL);
 
     DoneSomething = FALSE;
     while (XENBUS_SHARED_INFO(UpcallPending,
                               &Context->SharedInfoInterface,
-                              Index))
-        DoneSomething |= EvtchnPoll(Context, Index, NULL);
+                              Cpu))
+        DoneSomething |= EvtchnPoll(Context, Cpu, NULL);
 
     return DoneSomething;
 }
@@ -1210,24 +1210,24 @@ EvtchnInterruptEnable(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    ULONG                       Index;
+    ULONG                       Cpu;
     ULONG                       Line;
     NTSTATUS                    status;
 
     Trace("====>\n");
 
-    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+    for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR    Processor;
         unsigned int                vcpu_id;
         UCHAR                       Vector;
         PROCESSOR_NUMBER            ProcNumber;
 
-        Processor = &Context->Processor[Index];
+        Processor = &Context->Processor[Cpu];
 
         if (Processor->Interrupt == NULL)
             continue;
 
-        status = SystemVirtualCpuIndex(Index, &vcpu_id);
+        status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
         ASSERT(NT_SUCCESS(status));
 
         Vector = FdoGetInterruptVector(Context->Fdo, Processor->Interrupt);
@@ -1241,7 +1241,7 @@ EvtchnInterruptEnable(
             break;
         }
 
-        status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+        status = KeGetProcessorNumberFromIndex(Cpu, &ProcNumber);
         ASSERT(NT_SUCCESS(status));
 
         Info("CPU %u:%u (Vector = %u)\n",
@@ -1266,7 +1266,7 @@ EvtchnInterruptDisable(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
     )
 {
-    ULONG                       Index;
+    ULONG                       Cpu;
     NTSTATUS                    status;
 
     UNREFERENCED_PARAMETER(Context);
@@ -1276,16 +1276,16 @@ EvtchnInterruptDisable(
     status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, 0);
     ASSERT(NT_SUCCESS(status));
 
-    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+    for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR    Processor;
         unsigned int                vcpu_id;
 
-        Processor = &Context->Processor[Index];
+        Processor = &Context->Processor[Cpu];
 
         if (!Processor->UpcallEnabled)
             continue;
 
-        status = SystemVirtualCpuIndex(Index, &vcpu_id);
+        status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
         ASSERT(NT_SUCCESS(status));
 
         (VOID) HvmSetEvtchnUpcallVector(vcpu_id, 0);
@@ -1442,7 +1442,7 @@ EvtchnAcquire(
     PXENBUS_FDO             Fdo = Context->Fdo;
     KIRQL                   Irql;
     PROCESSOR_NUMBER        ProcNumber;
-    ULONG                   Index;
+    ULONG                   Cpu;
     NTSTATUS                status;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
@@ -1516,18 +1516,18 @@ EvtchnAcquire(
     if (Context->Processor == NULL)
         goto fail9;
 
-    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+    for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR    Processor;
 
         if (!XENBUS_EVTCHN_ABI(IsProcessorEnabled,
                                &Context->EvtchnAbi,
-                               Index))
+                               Cpu))
             continue;
 
-        status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+        status = KeGetProcessorNumberFromIndex(Cpu, &ProcNumber);
         ASSERT(NT_SUCCESS(status));
 
-        Processor = &Context->Processor[Index];
+        Processor = &Context->Processor[Cpu];
 
         Processor->Interrupt = FdoAllocateInterrupt(Fdo,
                                                     Latched,
@@ -1621,7 +1621,7 @@ EvtchnRelease(
     PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
     PXENBUS_FDO             Fdo = Context->Fdo;
     KIRQL                   Irql;
-    ULONG                   Index;
+    ULONG                   Cpu;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -1632,16 +1632,16 @@ EvtchnRelease(
 
     EvtchnInterruptDisable(Context);
 
-    for (Index = 0; Index < Context->ProcessorCount; Index++) {
+    for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR Processor;
 
         ASSERT(Context->Processor != NULL);
-        Processor = &Context->Processor[Index];
+        Processor = &Context->Processor[Cpu];
 
         if (Processor->Interrupt == NULL)
             continue;
 
-        EvtchnFlush(Context, Index);
+        EvtchnFlush(Context, Cpu);
 
         (VOID) KeRemoveQueueDpc(&Processor->Dpc);
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
