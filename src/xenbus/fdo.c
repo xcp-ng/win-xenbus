@@ -85,6 +85,7 @@ typedef struct _XENBUS_VIRQ {
     LIST_ENTRY              ListEntry;
     ULONG                   Type;
     PXENBUS_EVTCHN_CHANNEL  Channel;
+    ULONG                   Cpu;
 } XENBUS_VIRQ, *PXENBUS_VIRQ;
 
 struct _XENBUS_FDO {
@@ -151,6 +152,7 @@ struct _XENBUS_FDO {
     LIST_ENTRY                      InterruptList;
 
     LIST_ENTRY                      VirqList;
+    PXENBUS_DEBUG_CALLBACK          DebugCallback;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
     PLOG_DISPOSITION                LogDisposition;
 };
@@ -2812,6 +2814,7 @@ __FdoVirqCreate(
 
     (*Virq)->Fdo = Fdo;
     (*Virq)->Type = Type;
+    (*Virq)->Cpu = Cpu;
 
     status = KeGetProcessorNumberFromIndex(Cpu, &ProcNumber);
     ASSERT(NT_SUCCESS(status));
@@ -3244,6 +3247,45 @@ done:
     Fdo->RangeSet = NULL;
 }
 
+static VOID
+FdoDebugCallback(
+    IN  PVOID   Argument,
+    IN  BOOLEAN Crashing
+    )
+{
+    PXENBUS_FDO Fdo = Argument;
+
+    UNREFERENCED_PARAMETER(Crashing);
+
+    if (!IsListEmpty(&Fdo->VirqList)) {
+        PLIST_ENTRY ListEntry;
+
+        XENBUS_DEBUG(Printf,
+                     &Fdo->DebugInterface,
+                     "VIRQS:\n");
+
+        for (ListEntry = Fdo->VirqList.Flink;
+             ListEntry != &Fdo->VirqList;
+             ListEntry = ListEntry->Flink) {
+            PXENBUS_VIRQ        Virq;
+            PROCESSOR_NUMBER    ProcNumber;
+            NTSTATUS            status;
+
+            Virq = CONTAINING_RECORD(ListEntry, XENBUS_VIRQ, ListEntry);
+
+            status = KeGetProcessorNumberFromIndex(Virq->Cpu, &ProcNumber);
+            ASSERT(NT_SUCCESS(status));
+
+            XENBUS_DEBUG(Printf,
+                         &Fdo->DebugInterface,
+                         "- %s: (%u:%u)\n",
+                         VirqName(Virq->Type),
+                         ProcNumber.Group,
+                         ProcNumber.Number);
+        }
+    }
+}
+
 // This function must not touch pageable code or data
 static NTSTATUS
 FdoD3ToD0(
@@ -3313,6 +3355,15 @@ FdoD3ToD0(
     if (!NT_SUCCESS(status))
         goto fail10;
 
+    status = XENBUS_DEBUG(Register,
+                          &Fdo->DebugInterface,
+                          __MODULE__ "|FDO",
+                          FdoDebugCallback,
+                          Fdo,
+                          &Fdo->DebugCallback);
+    if (!NT_SUCCESS(status))
+        goto fail11;
+
     KeLowerIrql(Irql);
 
 not_active:
@@ -3341,6 +3392,14 @@ not_active:
     Trace("<====\n");
 
     return STATUS_SUCCESS;
+
+fail11:
+    Error("fail11\n");
+
+    XENBUS_SUSPEND(Deregister,
+                   &Fdo->SuspendInterface,
+                   Fdo->SuspendCallbackLate);
+    Fdo->SuspendCallbackLate = NULL;
 
 fail10:
     Error("fail10\n");
@@ -3469,6 +3528,11 @@ FdoD0ToD3(
     Trace("done\n");
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+
+    XENBUS_DEBUG(Deregister,
+                 &Fdo->DebugInterface,
+                 Fdo->DebugCallback);
+    Fdo->DebugCallback = NULL;
 
     XENBUS_SUSPEND(Deregister,
                    &Fdo->SuspendInterface,
