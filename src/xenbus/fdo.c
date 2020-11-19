@@ -5431,8 +5431,8 @@ __FdoFreeBuffer(
     Fdo->Buffer = NULL;
 }
 
-static BOOLEAN
-FdoIsBalloonEnabled(
+static NTSTATUS
+FdoBalloonInitialize(
     IN  PXENBUS_FDO Fdo
     )
 {
@@ -5441,8 +5441,6 @@ FdoIsBalloonEnabled(
     PCHAR           Value;
     BOOLEAN         Enabled;
     NTSTATUS        status;
-
-    UNREFERENCED_PARAMETER(Fdo);
 
     Enabled = TRUE;
 
@@ -5458,9 +5456,22 @@ FdoIsBalloonEnabled(
     RegistryFreeSzValue(Option);
 
 done:
-    return Enabled;
+    return Enabled ?
+           BalloonInitialize(Fdo, &Fdo->BalloonContext) :
+           STATUS_SUCCESS;
 }
 
+static VOID
+FdoBalloonTeardown(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    if (Fdo->BalloonContext == NULL)
+        return;
+
+    BalloonTeardown(Fdo->BalloonContext);
+    Fdo->BalloonContext = NULL;
+}
 NTSTATUS
 FdoCreate(
     IN  PDEVICE_OBJECT          PhysicalDeviceObject
@@ -5581,11 +5592,9 @@ FdoCreate(
     if (!NT_SUCCESS(status))
         goto fail19;
 
-    if (FdoIsBalloonEnabled(Fdo)) {
-        status = BalloonInitialize(Fdo, &Fdo->BalloonContext);
-        if (!NT_SUCCESS(status))
-            goto fail20;
-    }
+    status = FdoBalloonInitialize(Fdo);
+    if (!NT_SUCCESS(status))
+        goto fail20;
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
                                XENBUS_DEBUG_INTERFACE_VERSION_MAX,
@@ -5826,10 +5835,7 @@ FdoDestroy(
         RtlZeroMemory(&Fdo->DebugInterface,
                       sizeof (XENBUS_DEBUG_INTERFACE));
 
-        if (Fdo->BalloonContext != NULL) {
-            BalloonTeardown(Fdo->BalloonContext);
-            Fdo->BalloonContext = NULL;
-        }
+        FdoBalloonTeardown(Fdo);
 
         UnplugTeardown(Fdo->UnplugContext);
         Fdo->UnplugContext = NULL;
