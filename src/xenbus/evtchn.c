@@ -1074,8 +1074,8 @@ EvtchnReset(
         Console.LocalPort = (ULONG)Value;
 
     if (Store.LocalPort != 0) {
-        domid_t         RemoteDomain;
-        evtchn_port_t   RemotePort;
+        USHORT  RemoteDomain;
+        ULONG   RemotePort;
 
         status = EventChannelQueryInterDomain(Store.LocalPort,
                                               &RemoteDomain,
@@ -1092,8 +1092,8 @@ EvtchnReset(
     }
 
     if (Console.LocalPort != 0) {
-        domid_t         RemoteDomain;
-        evtchn_port_t   RemotePort;
+        USHORT  RemoteDomain;
+        ULONG   RemotePort;
 
         status = EventChannelQueryInterDomain(Console.LocalPort,
                                               &RemoteDomain,
@@ -1113,8 +1113,8 @@ EvtchnReset(
     LogPrintf(LOG_LEVEL_INFO, "EVTCHN_RESET: RESET\n");
 
     if (Store.LocalPort != 0) {
-        domid_t         RemoteDomain;
-        evtchn_port_t   RemotePort;
+        USHORT  RemoteDomain;
+        ULONG   RemotePort;
 
         RemoteDomain = Store.Parameters.InterDomain.RemoteDomain;
         RemotePort = Store.Parameters.InterDomain.RemotePort;
@@ -1134,8 +1134,8 @@ EvtchnReset(
     }
 
     if (Console.LocalPort != 0) {
-        domid_t         RemoteDomain;
-        evtchn_port_t   RemotePort;
+        USHORT  RemoteDomain;
+        ULONG   RemotePort;
 
         RemoteDomain = Console.Parameters.InterDomain.RemoteDomain;
         RemotePort = Console.Parameters.InterDomain.RemotePort;

@@ -153,48 +153,48 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelSend(
-    IN  evtchn_port_t   Port
+    IN  ULONG   Port
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelAllocateUnbound(
-    IN  domid_t         Domain,
-    OUT evtchn_port_t   *Port
+    IN  USHORT  Domain,
+    OUT ULONG   *Port
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindInterDomain(
-    IN  domid_t         RemoteDomain,
-    IN  evtchn_port_t   RemotePort,
-    OUT evtchn_port_t   *LocalPort
+    IN  USHORT  RemoteDomain,
+    IN  ULONG   RemotePort,
+    OUT ULONG   *LocalPort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindVirq(
-    IN  uint32_t        Virq,
-    OUT evtchn_port_t   *LocalPort
+    IN  ULONG   Virq,
+    OUT ULONG   *LocalPort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelQueryInterDomain(
-    IN  evtchn_port_t   LocalPort,
-    OUT domid_t         *RemoteDomain,
-    OUT evtchn_port_t   *RemotePort
+    IN  ULONG   LocalPort,
+    OUT USHORT  *RemoteDomain,
+    OUT ULONG   *RemotePort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelClose(
-    IN  evtchn_port_t   LocalPort
+    IN  ULONG   LocalPort
     );
 
 __checkReturn
