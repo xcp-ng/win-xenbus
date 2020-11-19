@@ -37,18 +37,6 @@ Miscellaneous
 
 For convenience the source repository includes some other scripts:
 
-kdfiles.py
-----------
-
-This generates two files called kdfiles32.txt and kdfiles64.txt which can
-be used as map files for the .kdfiles WinDBG command.
-
-clean.py
---------
-
-This removes any files not checked into the repository and not covered by
-the .gitignore file.
-
 get_xen_headers.py
 ------------------
 
