@@ -86,6 +86,7 @@ typedef struct _XENBUS_VIRQ {
     ULONG                   Type;
     PXENBUS_EVTCHN_CHANNEL  Channel;
     ULONG                   Cpu;
+    ULONG                   Count;
 } XENBUS_VIRQ, *PXENBUS_VIRQ;
 
 struct _XENBUS_FDO {
@@ -152,6 +153,10 @@ struct _XENBUS_FDO {
     LIST_ENTRY                      InterruptList;
 
     LIST_ENTRY                      VirqList;
+    HIGH_LOCK                       VirqLock;
+
+    ULONG                           Watchdog;
+
     PXENBUS_DEBUG_CALLBACK          DebugCallback;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
     PLOG_DISPOSITION                LogDisposition;
@@ -2755,6 +2760,45 @@ FdoOutputBuffer(
                           (ULONG)(Cursor - FdoOutBuffer));
 }
 
+static FORCEINLINE BOOLEAN
+__FdoVirqPatWatchdog(
+    IN  PXENBUS_VIRQ    Virq
+    )
+{
+    PXENBUS_FDO         Fdo = Virq->Fdo;
+    ULONG               Cpu;
+    ULONG               Count;
+    BOOLEAN             Pat;
+    KIRQL               Irql;
+    PLIST_ENTRY         ListEntry;
+
+    AcquireHighLock(&Fdo->VirqLock, &Irql);
+
+    Cpu = Virq->Cpu;
+    Count = Virq->Count++;
+    Pat = TRUE;
+
+    if (Virq->Count == 0) // wrapped
+        goto out;
+
+    for (ListEntry = Fdo->VirqList.Flink;
+         ListEntry != &Fdo->VirqList;
+         ListEntry = ListEntry->Flink) {
+        Virq = CONTAINING_RECORD(ListEntry, XENBUS_VIRQ, ListEntry);
+
+        if (Virq->Type != VIRQ_TIMER || Virq->Cpu == Cpu)
+            continue;
+
+        if (Virq->Count <= Count)
+            Pat = FALSE;
+    }
+
+out:
+    ReleaseHighLock(&Fdo->VirqLock, Irql);
+
+    return Pat;
+}
+
 static
 _Function_class_(KSERVICE_ROUTINE)
 _IRQL_requires_(HIGH_LEVEL)
@@ -2773,8 +2817,22 @@ FdoVirqCallback(
     ASSERT(Virq != NULL);
     Fdo = Virq->Fdo;
 
-    ASSERT3U(Virq->Type, ==, VIRQ_DEBUG);
-    XENBUS_DEBUG(Trigger, &Fdo->DebugInterface, NULL);
+    switch (Virq->Type) {
+    case VIRQ_DEBUG:
+        Virq->Count++;
+        XENBUS_DEBUG(Trigger, &Fdo->DebugInterface, NULL);
+        break;
+
+    case VIRQ_TIMER:
+        if (__FdoVirqPatWatchdog(Virq))
+            SystemSetWatchdog(Fdo->Watchdog);
+
+        break;
+
+    default:
+        ASSERT(FALSE);
+        break;
+    }
 
     return TRUE;
 }
@@ -2787,6 +2845,16 @@ __FdoVirqDestroy(
     PXENBUS_FDO         Fdo = Virq->Fdo;
 
     Info("%s\n", VirqName(Virq->Type));
+
+    if (Virq->Type == VIRQ_TIMER) {
+        unsigned int    vcpu_id;
+        NTSTATUS        status;
+
+        status = SystemVirtualCpuIndex(Virq->Cpu, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
+
+        (VOID) VcpuSetPeriodicTimer(vcpu_id, NULL);
+    }
 
     XENBUS_EVTCHN(Close,
                   &Fdo->EvtchnInterface,
@@ -2804,6 +2872,7 @@ __FdoVirqCreate(
     )
 {
     PROCESSOR_NUMBER    ProcNumber;
+    unsigned int        vcpu_id;
     NTSTATUS            status;
 
     *Virq = __FdoAllocate(sizeof (XENBUS_VIRQ));
@@ -2832,6 +2901,20 @@ __FdoVirqCreate(
     if ((*Virq)->Channel == NULL)
         goto fail2;
 
+    if (Type == VIRQ_TIMER) {
+        LARGE_INTEGER   Period;
+
+        status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
+
+        BUG_ON(Fdo->Watchdog == 0);
+        Period.QuadPart = TIME_S(Fdo->Watchdog / 2);
+
+        status = VcpuSetPeriodicTimer(vcpu_id, &Period);
+        if (!NT_SUCCESS(status))
+            goto fail3;
+    }
+
     (VOID) XENBUS_EVTCHN(Unmask,
                          &Fdo->EvtchnInterface,
                          (*Virq)->Channel,
@@ -2842,6 +2925,13 @@ __FdoVirqCreate(
          ProcNumber.Group, ProcNumber.Number);
 
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    XENBUS_EVTCHN(Close,
+                  &Fdo->EvtchnInterface,
+                  (*Virq)->Channel);
 
 fail2:
     Error("fail2\n");
@@ -2859,6 +2949,9 @@ FdoVirqTeardown(
     IN  PXENBUS_FDO Fdo
     )
 {
+    if (Fdo->Watchdog != 0)
+        SystemStopWatchdog();
+
     while (!IsListEmpty(&Fdo->VirqList)) {
         PLIST_ENTRY     ListEntry;
         PXENBUS_VIRQ    Virq;
@@ -2882,9 +2975,12 @@ FdoVirqInitialize(
     )
 {
     PXENBUS_VIRQ    Virq;
+    ULONG           Count;
+    ULONG           Index;
     NTSTATUS        status;
 
     InitializeListHead(&Fdo->VirqList);
+    InitializeHighLock(&Fdo->VirqLock);
 
     status = __FdoVirqCreate(Fdo, VIRQ_DEBUG, 0, &Virq);
     if (!NT_SUCCESS(status))
@@ -2892,7 +2988,37 @@ FdoVirqInitialize(
 
     InsertTailList(&Fdo->VirqList, &Virq->ListEntry);
 
+    if (Fdo->Watchdog == 0)
+        goto done;
+
+    Count = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+
+    for (Index = 0; Index < Count; Index++) {
+        status = __FdoVirqCreate(Fdo, VIRQ_TIMER, Index, &Virq);
+        if (!NT_SUCCESS(status)) {
+            if (status != STATUS_NOT_SUPPORTED )
+                continue;
+
+            goto fail2;
+        }
+
+        InsertTailList(&Fdo->VirqList, &Virq->ListEntry);
+    }
+
+    status = SystemSetWatchdog(Fdo->Watchdog);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
+done:
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+fail2:
+    Error("fail2\n");
+
+    FdoVirqTeardown(Fdo);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -3278,10 +3404,11 @@ FdoDebugCallback(
 
             XENBUS_DEBUG(Printf,
                          &Fdo->DebugInterface,
-                         "- %s: (%u:%u)\n",
+                         "- %s: (%u:%u) Count = %u\n",
                          VirqName(Virq->Type),
                          ProcNumber.Group,
-                         ProcNumber.Number);
+                         ProcNumber.Number,
+                         Virq->Count);
         }
     }
 }
@@ -5472,6 +5599,38 @@ FdoBalloonTeardown(
     BalloonTeardown(Fdo->BalloonContext);
     Fdo->BalloonContext = NULL;
 }
+
+static VOID
+FdoSetWatchdog(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    CHAR            Key[] = "XEN:WATCHDOG=";
+    PANSI_STRING    Option;
+    ULONG           Value;
+    NTSTATUS        status;
+
+    status = RegistryQuerySystemStartOption(Key, &Option);
+    if (!NT_SUCCESS(status))
+        return;
+
+    Value = strtoul(Option->Buffer + sizeof (Key) - 1, NULL, 0);
+
+    RegistryFreeSzValue(Option);
+
+    if (Value && Value < 10) {
+        Warning("%us TOO SHORT (ROUNDING UP TO 10s)\n");
+        Value = 10;
+    }
+
+    Fdo->Watchdog = Value;
+
+    if (Fdo->Watchdog != 0)
+        Info("WATCHDOG ENABLED (%us)\n", Fdo->Watchdog);
+    else
+        Info("WATCHDOG DISABLED\n");
+}
+
 NTSTATUS
 FdoCreate(
     IN  PDEVICE_OBJECT          PhysicalDeviceObject
@@ -5651,6 +5810,8 @@ done:
 
     (VOID) FdoSetFriendlyName(Fdo, Header.DeviceID);
 
+    FdoSetWatchdog(Fdo);
+
     Info("%p (%s) %s\n",
          FunctionDeviceObject,
          __FdoGetName(Fdo),
@@ -5809,6 +5970,8 @@ FdoDestroy(
          __FdoGetName(Fdo));
 
     Dx->Fdo = NULL;
+
+    Fdo->Watchdog = 0;
 
     RtlZeroMemory(&Fdo->List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&Fdo->Mutex, sizeof (MUTEX));
