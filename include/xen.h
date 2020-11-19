@@ -201,15 +201,15 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelExpandArray(
-    IN  PFN_NUMBER              Pfn
+    IN  PFN_NUMBER  Pfn
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelInitControl(
-    IN  PFN_NUMBER              Pfn,
-    IN  unsigned int            vcpu_id
+    IN  PFN_NUMBER      Pfn,
+    IN  unsigned int    vcpu_id
     );
 
 __checkReturn
@@ -223,8 +223,8 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindVirtualCpu(
-    IN  ULONG               LocalPort,
-    IN  unsigned int        vcpu_id
+    IN  ULONG           LocalPort,
+    IN  unsigned int    vcpu_id
     );
 
 __checkReturn
@@ -262,27 +262,27 @@ __checkReturn
 XEN_API
 NTSTATUS
 GrantTableMapForeignPage(
-    IN  USHORT                  Domain,
-    IN  ULONG                   GrantRef,
-    IN  PHYSICAL_ADDRESS        Address,
-    IN  BOOLEAN                 ReadOnly,
-    OUT ULONG                   *Handle
+    IN  USHORT              Domain,
+    IN  ULONG               GrantRef,
+    IN  PHYSICAL_ADDRESS    Address,
+    IN  BOOLEAN             ReadOnly,
+    OUT ULONG               *Handle
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 GrantTableUnmapForeignPage(
-    IN  ULONG                   Handle,
-    IN  PHYSICAL_ADDRESS        Address
+    IN  ULONG               Handle,
+    IN  PHYSICAL_ADDRESS    Address
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 GrantTableQuerySize(
-    OUT uint32_t                *Current OPTIONAL,
-    OUT uint32_t                *Maximum OPTIONAL
+    OUT uint32_t    *Current OPTIONAL,
+    OUT uint32_t    *Maximum OPTIONAL
     );
 
 // SCHED
