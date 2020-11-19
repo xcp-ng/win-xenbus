@@ -45,6 +45,7 @@
 #include <public/event_channel.h>
 #include <public/grant_table.h>
 #include <public/sched.h>
+#include <public/vcpu.h>
 #include <public/hvm/params.h>
 #include <public/hvm/hvm_info_table.h>
 
@@ -482,6 +483,16 @@ XEN_API
 VOID
 SystemStopWatchdog(
     VOID
+    );
+
+// VCPU
+
+__checkReturn
+XEN_API
+NTSTATUS
+VcpuSetPeriodicTimer(
+    IN  unsigned int    vcpu_id,
+    IN  PLARGE_INTEGER  Period
     );
 
 #endif  // _XEN_H
