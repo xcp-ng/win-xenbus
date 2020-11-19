@@ -308,6 +308,13 @@ SchedYield(
     VOID
     );
 
+XEN_API
+NTSTATUS
+SchedWatchdog(
+    IN OUT  PULONG  Id,
+    IN      ULONG   Seconds
+    );
+
 // XEN VERSION
 
 __checkReturn
@@ -462,6 +469,18 @@ SystemMaximumPhysicalAddress(
 XEN_API
 BOOLEAN
 SystemRealTimeIsUniversal(
+    VOID
+    );
+
+XEN_API
+NTSTATUS
+SystemSetWatchdog(
+    IN  ULONG       Seconds
+    );
+
+XEN_API
+VOID
+SystemStopWatchdog(
     VOID
     );
 

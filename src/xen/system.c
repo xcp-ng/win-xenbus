@@ -55,6 +55,11 @@ typedef struct _SYSTEM_PROCESSOR {
     UCHAR   ProcessorID;
 } SYSTEM_PROCESSOR, *PSYSTEM_PROCESSOR;
 
+typedef struct _SYSTEM_WATCHDOG {
+    ULONG   Id;
+    ULONG   Seconds;
+} SYSTEM_WATCHDOG, *PSYSTEM_WATCHDOG;
+
 typedef struct _SYSTEM_CONTEXT {
     LONG                References;
     PACPI_MADT          Madt;
@@ -64,6 +69,7 @@ typedef struct _SYSTEM_CONTEXT {
     PVOID               ProcessorChangeHandle;
     PHYSICAL_ADDRESS    MaximumPhysicalAddress;
     BOOLEAN             RealTimeIsUniversal;
+    SYSTEM_WATCHDOG     Watchdog;
 } SYSTEM_CONTEXT, *PSYSTEM_CONTEXT;
 
 static SYSTEM_CONTEXT   SystemContext;
@@ -1102,6 +1108,62 @@ SystemRealTimeIsUniversal(
     PSYSTEM_CONTEXT Context = &SystemContext;
 
     return Context->RealTimeIsUniversal;
+}
+
+XEN_API
+NTSTATUS
+SystemSetWatchdog(
+    IN  ULONG       Seconds
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+    ULONG           Id = Context->Watchdog.Id;
+    NTSTATUS        status;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (Seconds == 0)
+        goto fail1;
+
+    status = SchedWatchdog(&Id, Seconds);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    if (Context->Watchdog.Id == 0 || Context->Watchdog.Seconds != Seconds)
+        Info("%u: %us\n", Id, Seconds);
+
+    Context->Watchdog.Id = Id;
+    Context->Watchdog.Seconds = Seconds;
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+XEN_API
+VOID
+SystemStopWatchdog(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+    NTSTATUS        status;
+
+    if (Context->Watchdog.Id == 0)
+        return;
+
+    status = SchedWatchdog(&Context->Watchdog.Id, 0);
+    ASSERT(NT_SUCCESS(status));
+
+    Info("%u\n", Context->Watchdog.Id);
+
+    Context->Watchdog.Id = 0;
+    Context->Watchdog.Seconds = 0;
 }
 
 VOID

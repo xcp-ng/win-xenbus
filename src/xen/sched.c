@@ -51,7 +51,7 @@ __checkReturn
 XEN_API
 NTSTATUS
 SchedShutdownCode(
-    ULONG                   Reason
+    IN  ULONG               Reason
     )
 {
     struct sched_shutdown   op;
@@ -79,7 +79,7 @@ __checkReturn
 XEN_API
 NTSTATUS
 SchedShutdown(
-    ULONG                   Reason
+    IN  ULONG               Reason
     )
 {
     struct sched_shutdown   op;
@@ -118,4 +118,36 @@ SchedYield(
     )
 {
     (VOID) SchedOp(SCHEDOP_yield, NULL);
+}
+
+XEN_API
+NTSTATUS
+SchedWatchdog(
+    IN OUT  PULONG          Id,
+    IN      ULONG           Seconds
+    )
+{
+    struct sched_watchdog   op;
+    LONG_PTR                rc;
+    NTSTATUS                status;
+
+    op.id = *Id;
+    op.timeout = Seconds;
+
+    rc = SchedOp(SCHEDOP_watchdog, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    if (*Id == 0)
+        *Id = (ULONG)rc;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }
