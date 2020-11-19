@@ -695,6 +695,8 @@ __LogDbgPrintCallbackEnable(
 
     if (strcmp(Value, "OFF") == 0)
         Enable = FALSE;
+    else if (strcmp(Value, "ON") != 0)
+        Warning("UNRECOGNIZED VALUE OF %s: %s\n", Key, Value);
 
     RegistryFreeSzValue(Option);
 

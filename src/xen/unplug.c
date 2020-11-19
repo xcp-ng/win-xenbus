@@ -93,6 +93,8 @@ UnplugSetBootEmulated(
 
     if (strcmp(Value, "TRUE") == 0)
         Context->BootEmulated = TRUE;
+    else if (strcmp(Value, "FALSE") != 0)
+        Warning("UNRECOGNIZED VALUE OF %s: %s\n", Key, Value);
 
     RegistryFreeSzValue(Option);
 }
