@@ -276,7 +276,7 @@ EvtchnOpenVirq(
     Processor = &Context->Processor[Cpu];
 
     status = STATUS_NOT_SUPPORTED;
-    if (!Processor->UpcallEnabled)
+    if (!Processor->UpcallEnabled && Cpu != 0)
         goto fail1;
 
     status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
@@ -749,7 +749,7 @@ EvtchnBind(
     Processor = &Context->Processor[Cpu];
 
     status = STATUS_NOT_SUPPORTED;
-    if (!Processor->UpcallEnabled)
+    if (!Processor->UpcallEnabled && Cpu != 0)
         goto fail1;
 
     KeAcquireSpinLock(&Channel->Lock, &Irql);
