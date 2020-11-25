@@ -77,6 +77,7 @@ struct _XENBUS_EVTCHN_CHANNEL {
     KSPIN_LOCK                  Lock;
     LIST_ENTRY                  ListEntry;
     LIST_ENTRY                  PendingListEntry;
+    LONG                        Pending;
     PVOID                       Caller;
     PKSERVICE_ROUTINE           Callback;
     PVOID                       Argument;
@@ -378,8 +379,6 @@ EvtchnOpen(
 
     Trace("%u\n", LocalPort);
 
-    InitializeListHead(&Channel->PendingListEntry);
-
     status = XENBUS_EVTCHN_ABI(PortEnable,
                                &Context->EvtchnAbi,
                                LocalPort);
@@ -413,9 +412,6 @@ fail4:
 
 fail3:
     Error("fail3\n");
-
-    ASSERT(IsListEmpty(&Channel->PendingListEntry));
-    RtlZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY));
 
     Channel->LocalPort = 0;
     Channel->Mask = FALSE;
@@ -471,9 +467,6 @@ EvtchnReap(
 
     Channel->Cpu = 0;
 
-    ASSERT(IsListEmpty(&Channel->PendingListEntry));
-    RtlZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY));
-
     Channel->LocalPort = 0;
     Channel->Mask = FALSE;
     RtlZeroMemory(&Channel->Parameters, sizeof (XENBUS_EVTCHN_PARAMETERS));
@@ -501,8 +494,8 @@ EvtchnPollCallback(
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor = Argument;
     PXENBUS_EVTCHN_CONTEXT      Context = Processor->Context;
+    ULONG                       Cpu = Processor->Cpu;
     PXENBUS_EVTCHN_CHANNEL      Channel;
-    BOOLEAN                     Pending;
     NTSTATUS                    status;
 
     status = HashTableLookup(Context->Table,
@@ -513,11 +506,15 @@ EvtchnPollCallback(
 
     ASSERT3U(Channel->LocalPort, ==, LocalPort);
 
-    Pending = !IsListEmpty(&Channel->PendingListEntry);
+    if (Channel->Cpu != Cpu)
+        goto done;
 
-    if (!Pending)
+    if (InterlockedBitTestAndSet(&Channel->Pending, 0) == 0) {
+        ASSERT(IsZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY)));
+
         InsertTailList(&Processor->PendingList,
                        &Channel->PendingListEntry);
+    }
 
 done:
     return FALSE;
@@ -558,8 +555,18 @@ EvtchnPoll(
 
         KeMemoryBarrier();
         if (!Channel->Closed) {
+            ASSERT(Channel->Pending != 0);
+
             RemoveEntryList(&Channel->PendingListEntry);
-            InitializeListHead(&Channel->PendingListEntry);
+            RtlZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY));
+
+            //
+            // Make sure the list removal is complete before we allow the
+            // channel to be queued again.
+            //
+            KeMemoryBarrier();
+
+            Channel->Pending = 0;
 
             if (Channel->Mask)
                 XENBUS_EVTCHN_ABI(PortMask,
@@ -583,6 +590,8 @@ EvtchnPoll(
 #pragma warning(suppress:6387)  // NULL argument
             DoneSomething |= Channel->Callback(NULL, Channel->Argument);
         } else if (List != NULL) {
+            ASSERT(Channel->Pending != 0);
+
             RemoveEntryList(&Channel->PendingListEntry);
             InsertTailList(List, &Channel->PendingListEntry);
         }
@@ -630,7 +639,12 @@ EvtchnFlush(
 
         ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
-        InitializeListHead(&Channel->PendingListEntry);
+        ASSERT(Channel->Pending != 0);
+
+        RtlZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY));
+
+        // No need to barrier as the event will not be queued again
+        Channel->Pending = 0;
 
         EvtchnReap(Context, Channel, TRUE);
     }
@@ -680,7 +694,7 @@ EvtchnTrigger(
     ULONG                       Cpu;
     PXENBUS_EVTCHN_PROCESSOR    Processor;
     PXENBUS_INTERRUPT           Interrupt;
-    BOOLEAN                     Pending;
+    BOOLEAN                     Queued;
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
@@ -697,15 +711,16 @@ EvtchnTrigger(
 
     Irql = FdoAcquireInterruptLock(Context->Fdo, Interrupt);
 
-    Pending = !IsListEmpty(&Channel->PendingListEntry);
-
-    if (!Pending)
+    Queued = FALSE;
+    if (InterlockedBitTestAndSet(&Channel->Pending, 0) == 0) {
         InsertTailList(&Processor->PendingList,
                        &Channel->PendingListEntry);
+        Queued = TRUE;
+    }
 
     FdoReleaseInterruptLock(Context->Fdo, Interrupt, Irql);
 
-    if (Pending)
+    if (!Queued)
         return;
 
     KeInsertQueueDpc(&Processor->Dpc, NULL, NULL);

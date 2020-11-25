@@ -71,19 +71,13 @@ EvtchnTwoLevelIsProcessorEnabled(
     IN  ULONG                       Index
     )
 {
-    unsigned int                    vcpu_id;
-    NTSTATUS                        status;
-
     UNREFERENCED_PARAMETER(_Context);
 
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
-    if (!NT_SUCCESS(status))
-        return FALSE;
-
-    if (vcpu_id != 0)
-        return FALSE;
-
-    return TRUE;
+    //
+    // We currently rely on using the vcpu_info array that is embedded
+    // in the shared_info.
+    //
+    return (Index < XEN_LEGACY_MAX_VCPUS) ? TRUE : FALSE;
 }
 
 static BOOLEAN

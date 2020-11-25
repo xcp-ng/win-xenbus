@@ -48,7 +48,7 @@ struct _XENBUS_SHARED_INFO_CONTEXT {
     LONG                        References;
     PHYSICAL_ADDRESS            Address;
     shared_info_t               *Shared;
-    ULONG                       Port;
+    ULONG                       Port[HVM_MAX_VCPUS];
     XENBUS_SUSPEND_INTERFACE    SuspendInterface;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
     XENBUS_DEBUG_INTERFACE      DebugInterface;
@@ -204,7 +204,7 @@ SharedInfoEvtchnPoll(
 
     KeMemoryBarrier();
 
-    Port = Context->Port;
+    Port = Context->Port[vcpu_id];
 
     while (SelectorMask != 0) {
         ULONG   SelectorBit;
@@ -241,7 +241,7 @@ SharedInfoEvtchnPoll(
             Port = 0;
     }
 
-    Context->Port = Port;
+    Context->Port[vcpu_id] = Port;
 
 done:
     return DoneSomething;
@@ -652,7 +652,7 @@ SharedInfoRelease (
 
     Trace("====>\n");
 
-    Context->Port = 0;
+    RtlZeroMemory(Context->Port, sizeof (ULONG) * HVM_MAX_VCPUS);
 
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
