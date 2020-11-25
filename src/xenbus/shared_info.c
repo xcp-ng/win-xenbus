@@ -512,7 +512,7 @@ SharedInfoDebugCallback(
 
             XENBUS_DEBUG(Printf,
                          &Context->DebugInterface,
-                         "CPU %u:u: SELECTOR MASK: %p\n",
+                         "CPU %u:%u: SELECTOR MASK: %p\n",
                          ProcNumber.Group,
                          ProcNumber.Number,
                          (PVOID)Shared->vcpu_info[vcpu_id].evtchn_pending_sel);
