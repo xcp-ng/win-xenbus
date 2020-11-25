@@ -2978,6 +2978,7 @@ FdoVirqInitialize(
     PXENBUS_VIRQ    Virq;
     ULONG           Count;
     ULONG           Index;
+    ULONG           Timer;
     NTSTATUS        status;
 
     InitializeListHead(&Fdo->VirqList);
@@ -2994,27 +2995,24 @@ FdoVirqInitialize(
 
     Count = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
+    Timer = 0;
     for (Index = 0; Index < Count; Index++) {
         status = __FdoVirqCreate(Fdo, VIRQ_TIMER, Index, &Virq);
-        if (!NT_SUCCESS(status)) {
-            if (status != STATUS_NOT_SUPPORTED )
-                continue;
-
-            goto fail2;
-        }
+        if (!NT_SUCCESS(status))
+            continue;
 
         InsertTailList(&Fdo->VirqList, &Virq->ListEntry);
+        Timer++;
     }
 
-    status = SystemSetWatchdog(Fdo->Watchdog);
-    if (!NT_SUCCESS(status))
-        goto fail3;
+    if (Timer != 0) {
+        status = SystemSetWatchdog(Fdo->Watchdog);
+        if (!NT_SUCCESS(status))
+            goto fail2;
+    }
 
 done:
     return STATUS_SUCCESS;
-
-fail3:
-    Error("fail3\n");
 
 fail2:
     Error("fail2\n");
