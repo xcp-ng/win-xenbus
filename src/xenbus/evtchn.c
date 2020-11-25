@@ -114,6 +114,7 @@ struct _XENBUS_EVTCHN_CONTEXT {
     PXENBUS_EVTCHN_ABI_CONTEXT      EvtchnFifoContext;
     XENBUS_EVTCHN_ABI               EvtchnAbi;
     BOOLEAN                         UseEvtchnFifoAbi;
+    BOOLEAN                         UseEvtchnUpcall;
     PXENBUS_HASH_TABLE              Table;
     LIST_ENTRY                      List;
 };
@@ -1271,6 +1272,12 @@ EvtchnInterruptEnable(
 
     Trace("====>\n");
 
+    if (!Context->UseEvtchnUpcall)
+    {
+        Info("PER-CPU UPCALL DISABLED\n");
+        goto line;
+    }
+
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR    Processor;
         unsigned int                vcpu_id;
@@ -1306,6 +1313,7 @@ EvtchnInterruptEnable(
         Processor->UpcallEnabled = TRUE;
     }
 
+line:
     Line = FdoGetInterruptLine(Context->Fdo, Context->Interrupt);
 
     status = HvmSetParam(HVM_PARAM_CALLBACK_IRQ, Line);
@@ -1840,6 +1848,7 @@ EvtchnInitialize(
 {
     HANDLE                      ParametersKey;
     ULONG                       UseEvtchnFifoAbi;
+    ULONG                       UseEvtchnUpcall;
     NTSTATUS                    status;
 
     Trace("====>\n");
@@ -1872,6 +1881,14 @@ EvtchnInitialize(
         UseEvtchnFifoAbi = 1;
 
     (*Context)->UseEvtchnFifoAbi = (UseEvtchnFifoAbi != 0) ? TRUE : FALSE;
+
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     "UseEvtchnUpcall",
+                                     &UseEvtchnUpcall);
+    if (!NT_SUCCESS(status))
+        UseEvtchnUpcall = 1;
+
+    (*Context)->UseEvtchnUpcall = (UseEvtchnUpcall != 0) ? TRUE : FALSE;
 
     status = SuspendGetInterface(FdoGetSuspendContext(Fdo),
                                  XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
@@ -2082,6 +2099,7 @@ EvtchnTeardown(
     RtlZeroMemory(&Context->SuspendInterface,
                   sizeof (XENBUS_SUSPEND_INTERFACE));
 
+    Context->UseEvtchnUpcall = FALSE;
     Context->UseEvtchnFifoAbi = FALSE;
 
     EvtchnFifoTeardown(Context->EvtchnFifoContext);
