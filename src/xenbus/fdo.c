@@ -2966,6 +2966,7 @@ FdoVirqTeardown(
         __FdoVirqDestroy(Virq);
     }
 
+    RtlZeroMemory(&Fdo->VirqLock, sizeof (HIGH_LOCK));
     RtlZeroMemory(&Fdo->VirqList, sizeof (LIST_ENTRY));
 }
 
@@ -3018,10 +3019,10 @@ fail3:
 fail2:
     Error("fail2\n");
 
-    FdoVirqTeardown(Fdo);
-
 fail1:
     Error("fail1 (%08x)\n", status);
+
+    FdoVirqTeardown(Fdo);
 
     return status;
 }
