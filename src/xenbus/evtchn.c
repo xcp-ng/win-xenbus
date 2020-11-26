@@ -86,7 +86,7 @@ struct _XENBUS_EVTCHN_CHANNEL {
     XENBUS_EVTCHN_PARAMETERS    Parameters;
     BOOLEAN                     Mask;
     ULONG                       LocalPort;
-    PROCESSOR_NUMBER            ProcNumber;
+    ULONG                       Cpu;
     BOOLEAN                     Closed;
 };
 
@@ -467,7 +467,7 @@ EvtchnReap(
     RemoveEntryList(&Channel->ListEntry);
     RtlZeroMemory(&Channel->ListEntry, sizeof (LIST_ENTRY));
 
-    RtlZeroMemory(&Channel->ProcNumber, sizeof (PROCESSOR_NUMBER));
+    Channel->Cpu = 0;
 
     ASSERT(IsListEmpty(&Channel->PendingListEntry));
     RtlZeroMemory(&Channel->PendingListEntry, sizeof (LIST_ENTRY));
@@ -684,7 +684,6 @@ EvtchnTrigger(
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
     KIRQL                       Irql;
-    PROCESSOR_NUMBER            ProcNumber;
     ULONG                       Cpu;
     PXENBUS_EVTCHN_PROCESSOR    Processor;
     PXENBUS_INTERRUPT           Interrupt;
@@ -693,10 +692,8 @@ EvtchnTrigger(
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
     KeAcquireSpinLock(&Channel->Lock, &Irql);
-    ProcNumber = Channel->ProcNumber;
+    Cpu = Channel->Cpu;
     KeReleaseSpinLock(&Channel->Lock, Irql);
-
-    Cpu = KeGetProcessorIndexFromNumber(&ProcNumber);
 
     ASSERT3U(Cpu, <, Context->ProcessorCount);
     Processor = &Context->Processor[Cpu];
@@ -758,8 +755,7 @@ EvtchnBind(
     if (!Channel->Active)
         goto done;
 
-    if (Channel->ProcNumber.Group == Group &&
-        Channel->ProcNumber.Number == Number)
+    if (Channel->Cpu == Cpu)
         goto done;
 
     LocalPort = Channel->LocalPort;
@@ -771,7 +767,7 @@ EvtchnBind(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Channel->ProcNumber = ProcNumber;
+    Channel->Cpu = Cpu;
 
     Info("[%u]: CPU %u:%u\n", LocalPort, Group, Number);
 
@@ -803,7 +799,7 @@ EvtchnUnmask(
     KIRQL                       Irql = PASSIVE_LEVEL;
     BOOLEAN                     Pending;
     ULONG                       LocalPort;
-    PROCESSOR_NUMBER            ProcNumber;
+    ULONG                       Cpu;
 
     ASSERT3U(Channel->Magic, ==, XENBUS_EVTCHN_CHANNEL_MAGIC);
 
@@ -845,10 +841,9 @@ EvtchnUnmask(
     // event channel is bound, then we need to use the hypercall.
     // to schedule the upcall on the correct CPU.
     //
-    (VOID) KeGetCurrentProcessorNumberEx(&ProcNumber);
+    Cpu = KeGetCurrentProcessorNumberEx(NULL);
 
-    if (Channel->ProcNumber.Group != ProcNumber.Group ||
-        Channel->ProcNumber.Number != ProcNumber.Number) {
+    if (Channel->Cpu != Cpu) {
         XENBUS_EVTCHN_ABI(PortMask,
                           &Context->EvtchnAbi,
                           LocalPort);
