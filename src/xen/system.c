@@ -578,7 +578,7 @@ SystemProcessorInformation(
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
     PKEVENT             Event = Argument1;
-    ULONG               Index;
+    ULONG               Cpu;
     PROCESSOR_NUMBER    ProcNumber;
     PSYSTEM_PROCESSOR   Processor;
     ULONG               EAX;
@@ -590,12 +590,12 @@ SystemProcessorInformation(
     UNREFERENCED_PARAMETER(_Context);
     UNREFERENCED_PARAMETER(Argument2);
 
-    Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
-    ASSERT3U(Index, <, Context->ProcessorCount);
+    Cpu = KeGetCurrentProcessorNumberEx(&ProcNumber);
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
 
-    Processor = &Context->Processor[Index];
+    Processor = &Context->Processor[Cpu];
 
-    if (Index == 0) {
+    if (Cpu == 0) {
         CHAR    Signature[13];
 
         RtlZeroMemory(Signature, sizeof (Signature));
@@ -642,14 +642,14 @@ SystemProcessorChangeCallback(
 {
     PSYSTEM_CONTEXT                             Context = &SystemContext;
     PROCESSOR_NUMBER                            ProcNumber;
-    ULONG                                       Index;
+    ULONG                                       Cpu;
     NTSTATUS                                    status;
 
     UNREFERENCED_PARAMETER(Argument);
 
-    Index = Change->NtNumber;
+    Cpu = Change->NtNumber;
 
-    status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
+    status = KeGetProcessorNumberFromIndex(Cpu, &ProcNumber);
     ASSERT(NT_SUCCESS(status));
 
     Trace("====> (%u:%u:%s)\n",
@@ -662,10 +662,10 @@ SystemProcessorChangeCallback(
         PSYSTEM_PROCESSOR   Processor;
         ULONG               ProcessorCount;
 
-        if (Index < Context->ProcessorCount)
+        if (Cpu < Context->ProcessorCount)
             break;
 
-        ProcessorCount = Index + 1;
+        ProcessorCount = Cpu + 1;
         Processor = __SystemAllocate(sizeof (SYSTEM_PROCESSOR) *
                                      ProcessorCount);
 
@@ -692,9 +692,9 @@ SystemProcessorChangeCallback(
         PSYSTEM_PROCESSOR   Processor;
         KEVENT              Event;
 
-        ASSERT3U(Index, <, Context->ProcessorCount);
+        ASSERT3U(Cpu, <, Context->ProcessorCount);
 
-        Processor = &Context->Processor[Index];
+        Processor = &Context->Processor[Cpu];
 
         KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
@@ -1069,16 +1069,16 @@ SystemProcessorCount(
 XEN_API
 NTSTATUS
 SystemVirtualCpuIndex(
-    IN  ULONG           Index,
+    IN  ULONG           Cpu,
     OUT unsigned int    *vcpu_id
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
-    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Index];
+    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
     NTSTATUS            status;
 
     status = STATUS_UNSUCCESSFUL;
-    if (Index >= __SystemProcessorCount())
+    if (Cpu >= __SystemProcessorCount())
         goto fail1;
 
     *vcpu_id = Processor->ProcessorID;
