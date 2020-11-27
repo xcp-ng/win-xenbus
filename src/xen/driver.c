@@ -249,6 +249,8 @@ DllInitialize(
 
     __DriverSetUnplugKey(UnplugKey);
 
+    HypercallInitialize();
+
     status = AcpiInitialize();
     if (!NT_SUCCESS(status))
         goto fail6;
@@ -256,8 +258,6 @@ DllInitialize(
     status = SystemInitialize();
     if (!NT_SUCCESS(status))
         goto fail7;
-
-    HypercallInitialize();
 
     status = BugCheckInitialize();
     if (!NT_SUCCESS(status))
@@ -298,8 +298,6 @@ fail9:
 
     BugCheckTeardown();
 
-    HypercallTeardown();
-
 fail8:
     Error("fail8\n");
 
@@ -312,6 +310,8 @@ fail7:
 
 fail6:
     Error("fail6\n");
+
+    HypercallTeardown();
 
     RegistryCloseKey(UnplugKey);
     __DriverSetUnplugKey(NULL);
@@ -367,9 +367,11 @@ DllUnload(
 
     BugCheckTeardown();
 
-    HypercallTeardown();
-
     SystemTeardown();
+
+    AcpiTeardown();
+
+    HypercallTeardown();
 
     UnplugKey = __DriverGetUnplugKey();
 
