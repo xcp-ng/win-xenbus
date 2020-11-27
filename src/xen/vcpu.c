@@ -80,3 +80,41 @@ fail1:
 
     return status;
 }
+
+__checkReturn
+XEN_API
+NTSTATUS
+VcpuRegisterVcpuInfo(
+    IN  unsigned int                vcpu_id,
+    IN  PFN_NUMBER                  Pfn,
+    IN  ULONG                       Offset
+    )
+{
+    struct vcpu_register_vcpu_info  op;
+    LONG_PTR                        rc;
+    NTSTATUS                        status;
+
+    op.mfn = (xen_pfn_t)Pfn;
+    op.offset = Offset;
+    op.rsvd = 0;
+
+    //
+    // NOTE: This has to be called on the CPU with the matching vcpu_id
+    //       otherwise Xen will fail the hypercall with -EINVAL.
+    //
+
+    rc = VcpuOp(VCPUOP_register_vcpu_info, vcpu_id, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+
+}

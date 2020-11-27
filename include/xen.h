@@ -495,4 +495,13 @@ VcpuSetPeriodicTimer(
     IN  PLARGE_INTEGER  Period
     );
 
+__checkReturn
+XEN_API
+NTSTATUS
+VcpuRegisterVcpuInfo(
+    IN  unsigned int                vcpu_id,
+    IN  PFN_NUMBER                  Pfn,
+    IN  ULONG                       Offset
+    );
+
 #endif  // _XEN_H
