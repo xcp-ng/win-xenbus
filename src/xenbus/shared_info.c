@@ -155,23 +155,23 @@ SharedInfoEvtchnMaskAll(
 
 static BOOLEAN
 SharedInfoUpcallPending(
-    IN  PINTERFACE              Interface,
-    IN  ULONG                   Index
+    IN  PINTERFACE  Interface,
+    IN  ULONG       Index
     )
 {
-    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
-    shared_info_t               *Shared = Context->Shared;
-    unsigned int                vcpu_id;
-    UCHAR                       Pending;
-    NTSTATUS                    status;
+    vcpu_info_t     *Vcpu;
+    UCHAR           Pending;
+    NTSTATUS        status;
 
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    UNREFERENCED_PARAMETER(Interface);
+
+    status = SystemProcessorVcpuInfo(Index, &Vcpu);
     if (!NT_SUCCESS(status))
         return FALSE;
 
     KeMemoryBarrier();
 
-    Pending = _InterlockedExchange8((CHAR *)&Shared->vcpu_info[vcpu_id].evtchn_upcall_pending, 0);
+    Pending = _InterlockedExchange8((CHAR *)&Vcpu->evtchn_upcall_pending, 0);
 
     return (Pending != 0) ? TRUE : FALSE;
 }
@@ -187,6 +187,7 @@ SharedInfoEvtchnPoll(
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
     shared_info_t                   *Shared = Context->Shared;
     unsigned int                    vcpu_id;
+    vcpu_info_t                     *Vcpu;
     ULONG                           Port;
     ULONG_PTR                       SelectorMask;
     BOOLEAN                         DoneSomething;
@@ -194,13 +195,17 @@ SharedInfoEvtchnPoll(
 
     DoneSomething = FALSE;
 
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    status = SystemProcessorVcpuId(Index, &vcpu_id);
+    if (!NT_SUCCESS(status))
+        goto done;
+
+    status = SystemProcessorVcpuInfo(Index, &Vcpu);
     if (!NT_SUCCESS(status))
         goto done;
 
     KeMemoryBarrier();
 
-    SelectorMask = (ULONG_PTR)InterlockedExchangePointer((PVOID *)&Shared->vcpu_info[vcpu_id].evtchn_pending_sel, (PVOID)0);
+    SelectorMask = (ULONG_PTR)InterlockedExchangePointer((PVOID *)&Vcpu->evtchn_pending_sel, (PVOID)0);
 
     KeMemoryBarrier();
 
@@ -320,6 +325,7 @@ SharedInfoGetTime(
 
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
     shared_info_t               *Shared;
+    vcpu_info_t                 *Vcpu;
     ULONG                       WcVersion;
     ULONG                       TimeVersion;
     ULONGLONG                   Seconds;
@@ -331,16 +337,20 @@ SharedInfoGetTime(
     CHAR                        TscShift;
     TIME_FIELDS                 TimeFields;
     KIRQL                       Irql;
+    NTSTATUS                    status;
 
     // Make sure we don't suspend
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
     Shared = Context->Shared;
 
+    status = SystemProcessorVcpuInfo(0, &Vcpu);
+    ASSERT(NT_SUCCESS(status));
+
     // Loop until we can read a consistent set of values from the same update
     do {
         WcVersion = Shared->wc_version;
-        TimeVersion = Shared->vcpu_info[0].time.version;
+        TimeVersion = Vcpu->time.version;
         KeMemoryBarrier();
 
         // Wallclock time at system time zero (guest boot or resume)
@@ -348,21 +358,21 @@ SharedInfoGetTime(
         NanoSeconds = Shared->wc_nsec;
 
         // Cached time in nanoseconds since guest boot
-        SystemTime = Shared->vcpu_info[0].time.system_time;
+        SystemTime = Vcpu->time.system_time;
 
         // Timestamp counter value when these time values were last updated
-        Timestamp = Shared->vcpu_info[0].time.tsc_timestamp;
+        Timestamp = Vcpu->time.tsc_timestamp;
 
         // Timestamp modifiers
-        TscShift = Shared->vcpu_info[0].time.tsc_shift;
-        TscSystemMul = Shared->vcpu_info[0].time.tsc_to_system_mul;
+        TscShift = Vcpu->time.tsc_shift;
+        TscSystemMul = Vcpu->time.tsc_to_system_mul;
         KeMemoryBarrier();
 
     // Version is incremented to indicate update in progress.
     // LSB of version is set if update in progress.
     // Version is incremented again once update has completed.
     } while (Shared->wc_version != WcVersion ||
-             Shared->vcpu_info[0].time.version != TimeVersion ||
+             Vcpu->time.version != TimeVersion ||
              (WcVersion & 1) ||
              (TimeVersion & 1));
 
@@ -491,10 +501,10 @@ SharedInfoDebugCallback(
              Index < KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
              Index++) {
             PROCESSOR_NUMBER    ProcNumber;
-            unsigned int        vcpu_id;
+            vcpu_info_t         *Vcpu;
             NTSTATUS            status;
 
-            status = SystemVirtualCpuIndex(Index, &vcpu_id);
+            status = SystemProcessorVcpuInfo(Index, &Vcpu);
             if (!NT_SUCCESS(status))
                 continue;
 
@@ -506,7 +516,7 @@ SharedInfoDebugCallback(
                          "CPU %u:%u: PENDING: %s\n",
                          ProcNumber.Group,
                          ProcNumber.Number,
-                         Shared->vcpu_info[vcpu_id].evtchn_upcall_pending ?
+                         Vcpu->evtchn_upcall_pending ?
                          "TRUE" :
                          "FALSE");
 
@@ -515,7 +525,7 @@ SharedInfoDebugCallback(
                          "CPU %u:%u: SELECTOR MASK: %p\n",
                          ProcNumber.Group,
                          ProcNumber.Number,
-                         (PVOID)Shared->vcpu_info[vcpu_id].evtchn_pending_sel);
+                         (PVOID)Vcpu->evtchn_pending_sel);
         }
 
         for (Selector = 0; Selector < XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT; Selector += 4) {

@@ -2850,7 +2850,7 @@ __FdoVirqDestroy(
         unsigned int    vcpu_id;
         NTSTATUS        status;
 
-        status = SystemVirtualCpuIndex(Virq->Cpu, &vcpu_id);
+        status = SystemProcessorVcpuId(Virq->Cpu, &vcpu_id);
         ASSERT(NT_SUCCESS(status));
 
         (VOID) VcpuSetPeriodicTimer(vcpu_id, NULL);
@@ -2904,7 +2904,7 @@ __FdoVirqCreate(
     if (Type == VIRQ_TIMER) {
         LARGE_INTEGER   Period;
 
-        status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
+        status = SystemProcessorVcpuId(Cpu, &vcpu_id);
         ASSERT(NT_SUCCESS(status));
 
         BUG_ON(Fdo->Watchdog == 0);

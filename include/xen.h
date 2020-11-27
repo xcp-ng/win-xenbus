@@ -456,9 +456,23 @@ SystemProcessorCount(
 
 XEN_API
 NTSTATUS
-SystemVirtualCpuIndex(
+SystemProcessorVcpuId(
     IN  ULONG           Cpu,
     OUT unsigned int    *vcpu_id
+    );
+
+XEN_API
+NTSTATUS
+SystemProcessorVcpuInfo(
+    IN  ULONG       Cpu,
+    OUT vcpu_info_t **Vcpu
+    );
+
+XEN_API
+NTSTATUS
+SystemProcessorRegisterVcpuInfo(
+    IN  ULONG   Cpu,
+    IN  BOOLEAN Force
     );
 
 XEN_API

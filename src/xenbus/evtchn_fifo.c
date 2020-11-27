@@ -289,7 +289,7 @@ EvtchnFifoIsProcessorEnabled(
     unsigned int                    vcpu_id;
     NTSTATUS                        status;
     
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    status = SystemProcessorVcpuId(Index, &vcpu_id);
     if (!NT_SUCCESS(status))
         return FALSE;
 
@@ -364,7 +364,7 @@ EvtchnFifoPoll(
 
     DoneSomething = FALSE;
 
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    status = SystemProcessorVcpuId(Index, &vcpu_id);
     if (!NT_SUCCESS(status))
         goto done;
 
@@ -510,7 +510,7 @@ EvtchnFifoAcquire(
         if (Mdl == NULL)
             goto fail1;
 
-        status = SystemVirtualCpuIndex(Index, &vcpu_id);
+        status = SystemProcessorVcpuId(Index, &vcpu_id);
         ASSERT(NT_SUCCESS(status));
 
         Pfn = MmGetMdlPfnArray(Mdl)[0];
@@ -552,7 +552,7 @@ fail1:
     while (--Index >= 0) {
         unsigned int    vcpu_id;
 
-        (VOID) SystemVirtualCpuIndex(Index, &vcpu_id);
+        (VOID) SystemProcessorVcpuId(Index, &vcpu_id);
 
         Mdl = Context->ControlBlockMdl[vcpu_id];
         Context->ControlBlockMdl[vcpu_id] = NULL;

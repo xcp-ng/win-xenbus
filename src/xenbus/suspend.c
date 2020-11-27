@@ -193,7 +193,7 @@ SuspendEarly(
     LogPrintf(LOG_LEVEL_INFO,
               "SUSPEND: EARLY (%u)\n", Cpu);
 
-    if (!Context->Success || Cpu != 0)
+    if (!Context->Success)
         return;
 
     //
@@ -202,6 +202,11 @@ SuspendEarly(
     //
 
     Context->Count++;
+
+    SystemProcessorRegisterVcpuInfo(Cpu, TRUE);
+
+    if (Cpu != 0)
+        return;
 
     HypercallPopulate();
 

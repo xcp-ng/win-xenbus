@@ -72,12 +72,9 @@ EvtchnTwoLevelIsProcessorEnabled(
     )
 {
     UNREFERENCED_PARAMETER(_Context);
+    UNREFERENCED_PARAMETER(Index);
 
-    //
-    // We currently rely on using the vcpu_info array that is embedded
-    // in the shared_info.
-    //
-    return (Index < XEN_LEGACY_MAX_VCPUS) ? TRUE : FALSE;
+    return TRUE;
 }
 
 static BOOLEAN

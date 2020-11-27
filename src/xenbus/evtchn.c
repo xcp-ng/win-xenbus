@@ -283,7 +283,7 @@ EvtchnOpenVirq(
     if (!Processor->UpcallEnabled && Cpu != 0)
         goto fail1;
 
-    status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
+    status = SystemProcessorVcpuId(Cpu, &vcpu_id);
     ASSERT(NT_SUCCESS(status));
 
     status = EventChannelBindVirq(Index, vcpu_id, &LocalPort);
@@ -768,7 +768,7 @@ EvtchnBind(
 
     LocalPort = Channel->LocalPort;
 
-    status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
+    status = SystemProcessorVcpuId(Cpu, &vcpu_id);
     ASSERT(NT_SUCCESS(status));
 
     status = EventChannelBindVirtualCpu(LocalPort, vcpu_id);
@@ -1290,7 +1290,7 @@ EvtchnInterruptEnable(
         if (Processor->Interrupt == NULL)
             continue;
 
-        status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
+        status = SystemProcessorVcpuId(Cpu, &vcpu_id);
         ASSERT(NT_SUCCESS(status));
 
         Vector = FdoGetInterruptVector(Context->Fdo, Processor->Interrupt);
@@ -1349,7 +1349,7 @@ EvtchnInterruptDisable(
         if (!Processor->UpcallEnabled)
             continue;
 
-        status = SystemVirtualCpuIndex(Cpu, &vcpu_id);
+        status = SystemProcessorVcpuId(Cpu, &vcpu_id);
         ASSERT(NT_SUCCESS(status));
 
         (VOID) HvmSetEvtchnUpcallVector(vcpu_id, 0);

@@ -45,6 +45,7 @@
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"
+#include "driver.h"
 
 #define XEN_SYSTEM_TAG  'TSYS'
 
@@ -55,6 +56,8 @@ typedef struct _SYSTEM_PROCESSOR {
     UCHAR       ProcessorID;
     NTSTATUS    Status;
     KEVENT      Event;
+    vcpu_info_t *Vcpu;
+    PBOOLEAN    Registered;
 } SYSTEM_PROCESSOR, *PSYSTEM_PROCESSOR;
 
 typedef struct _SYSTEM_WATCHDOG {
@@ -72,6 +75,7 @@ typedef struct _SYSTEM_CONTEXT {
     PHYSICAL_ADDRESS    MaximumPhysicalAddress;
     BOOLEAN             RealTimeIsUniversal;
     SYSTEM_WATCHDOG     Watchdog;
+    PMDL                Mdl;
 } SYSTEM_CONTEXT, *PSYSTEM_CONTEXT;
 
 static SYSTEM_CONTEXT   SystemContext;
@@ -635,6 +639,139 @@ __SystemProcessorCount(
     return Context->ProcessorCount;
 }
 
+XEN_API
+NTSTATUS
+SystemProcessorVcpuId(
+    IN  ULONG           Cpu,
+    OUT unsigned int    *vcpu_id
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
+    NTSTATUS            status;
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Cpu >= __SystemProcessorCount())
+        goto fail1;
+
+    *vcpu_id = Processor->ProcessorID;
+    return STATUS_SUCCESS;
+
+fail1:
+    return status;
+}
+
+XEN_API
+NTSTATUS
+SystemProcessorVcpuInfo(
+    IN  ULONG           Cpu,
+    OUT vcpu_info_t     **Vcpu
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
+    NTSTATUS            status;
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Cpu >= __SystemProcessorCount())
+        goto fail1;
+
+    ASSERT(*Processor->Registered);
+    *Vcpu = Processor->Vcpu;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    return status;
+}
+
+XEN_API
+NTSTATUS
+SystemProcessorRegisterVcpuInfo(
+    IN  ULONG           Cpu,
+    IN  BOOLEAN         Force
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
+    PMDL                Mdl = Context->Mdl;
+    ULONG               Offset;
+    PFN_NUMBER          Pfn;
+    PHYSICAL_ADDRESS    Address;
+    PUCHAR              MdlMappedSystemVa;
+    NTSTATUS            status;
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Cpu >= __SystemProcessorCount())
+        goto fail1;
+
+    ASSERT(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA);
+    MdlMappedSystemVa = Mdl->MappedSystemVa;
+
+    Offset = sizeof (vcpu_info_t) * HVM_MAX_VCPUS;
+    Offset += sizeof (BOOLEAN) * Cpu;
+
+    Processor->Registered = (PBOOLEAN)(MdlMappedSystemVa + Offset);
+
+    Offset = sizeof (vcpu_info_t) * Cpu;
+
+    Processor->Vcpu = (vcpu_info_t *)(MdlMappedSystemVa + Offset);
+
+    Pfn = MmGetMdlPfnArray(Context->Mdl)[Offset >> PAGE_SHIFT];
+    Offset = Offset & (PAGE_SIZE - 1);
+
+    if (!*Processor->Registered || Force) {
+        unsigned int    vcpu_id;
+
+        status = SystemProcessorVcpuId(Cpu, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
+
+        status = VcpuRegisterVcpuInfo(vcpu_id, Pfn, Offset);
+        if (!NT_SUCCESS(status))
+            goto fail2;
+
+        LogPrintf(LOG_LEVEL_INFO,
+                  "XEN: REGISTER vcpu_info[%u]\n",
+                  Cpu);
+
+        *Processor->Registered = TRUE;
+    }
+
+    Address.QuadPart = (ULONGLONG)Pfn << PAGE_SHIFT;
+    Address.QuadPart += Offset;
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "XEN: vcpu_info[%u] @ %08x.%08x\n",
+              Cpu,
+              Address.HighPart,
+              Address.LowPart);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    Processor->Vcpu = NULL;
+    Processor->Registered = NULL;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+SystemProcessorDeregisterVcpuInfo(
+    IN  ULONG           Cpu
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
+
+    Processor->Vcpu = NULL;
+    Processor->Registered = NULL;
+}
+
 static
 _Function_class_(KDEFERRED_ROUTINE)
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -653,6 +790,7 @@ SystemProcessorDpc(
     ULONG               Cpu;
     PROCESSOR_NUMBER    ProcNumber;
     PSYSTEM_PROCESSOR   Processor;
+    NTSTATUS            status;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(_Context);
@@ -669,9 +807,21 @@ SystemProcessorDpc(
 
     SystemProcessorInitialize(Cpu);
 
+    status = SystemProcessorRegisterVcpuInfo(Cpu, FALSE);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
     Info("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
 
     Processor->Status = STATUS_SUCCESS;
+    KeSetEvent(&Processor->Event, IO_NO_INCREMENT, FALSE);
+
+    return;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    Processor->Status = status;
     KeSetEvent(&Processor->Event, IO_NO_INCREMENT, FALSE);
 }
 
@@ -773,6 +923,44 @@ SystemProcessorChangeCallback(
 }
 
 static NTSTATUS
+SystemAllocateVcpuInfo(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+    ULONG           Size;
+    NTSTATUS        status;
+
+    Size = sizeof (vcpu_info_t) * HVM_MAX_VCPUS;
+    Size += sizeof (BOOLEAN) * HVM_MAX_VCPUS;
+    Size = P2ROUNDUP(Size, PAGE_SIZE);
+
+    Context->Mdl = DriverGetNamedPages("VCPU_INFO", Size >> PAGE_SHIFT);
+
+    status = STATUS_NO_MEMORY;
+    if (Context->Mdl == NULL)
+        goto fail1;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static VOID
+SystemFreeVcpuInfo(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+
+    DriverPutNamedPages(Context->Mdl);
+    Context->Mdl = NULL;
+}
+
+static NTSTATUS
 SystemRegisterProcessorChangeCallback(
     VOID
     )
@@ -781,17 +969,26 @@ SystemRegisterProcessorChangeCallback(
     PVOID           Handle;
     NTSTATUS        status;
 
+    status = SystemAllocateVcpuInfo();
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
     Handle = KeRegisterProcessorChangeCallback(SystemProcessorChangeCallback,
                                                NULL,
                                                KE_PROCESSOR_CHANGE_ADD_EXISTING);
 
     status = STATUS_UNSUCCESSFUL;
     if (Handle == NULL)
-        goto fail1;
+        goto fail2;
 
     Context->ProcessorChangeHandle = Handle;
 
     return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    SystemFreeVcpuInfo();
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -813,6 +1010,7 @@ SystemDeregisterProcessorChangeCallback(
     for (Cpu = 0; Cpu < __SystemProcessorCount(); Cpu++) {
         PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
+        SystemProcessorDeregisterVcpuInfo(Cpu);
         SystemProcessorTeardown(Cpu);
 
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
@@ -825,6 +1023,8 @@ SystemDeregisterProcessorChangeCallback(
     __SystemFree(Context->Processor);
     Context->Processor = NULL;
     Context->ProcessorCount = 0;
+
+    SystemFreeVcpuInfo();
 }
 
 static NTSTATUS
@@ -1151,28 +1351,6 @@ SystemProcessorCount(
     )
 {
     return __SystemProcessorCount();
-}
-
-XEN_API
-NTSTATUS
-SystemVirtualCpuIndex(
-    IN  ULONG           Cpu,
-    OUT unsigned int    *vcpu_id
-    )
-{
-    PSYSTEM_CONTEXT     Context = &SystemContext;
-    PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
-    NTSTATUS            status;
-
-    status = STATUS_UNSUCCESSFUL;
-    if (Cpu >= __SystemProcessorCount())
-        goto fail1;
-
-    *vcpu_id = Processor->ProcessorID;
-    return STATUS_SUCCESS;
-
-fail1:
-    return status;
 }
 
 XEN_API
