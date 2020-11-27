@@ -49,10 +49,12 @@
 #define XEN_SYSTEM_TAG  'TSYS'
 
 typedef struct _SYSTEM_PROCESSOR {
-    KDPC    Dpc;
-    CHAR    Manufacturer[13];
-    UCHAR   ApicID;
-    UCHAR   ProcessorID;
+    KDPC        Dpc;
+    CHAR        Manufacturer[13];
+    UCHAR       ApicID;
+    UCHAR       ProcessorID;
+    NTSTATUS    Status;
+    KEVENT      Event;
 } SYSTEM_PROCESSOR, *PSYSTEM_PROCESSOR;
 
 typedef struct _SYSTEM_WATCHDOG {
@@ -562,36 +564,17 @@ done:
     Info("<====\n");
 }
 
-static
-_Function_class_(KDEFERRED_ROUTINE)
-_IRQL_requires_max_(DISPATCH_LEVEL)
-_IRQL_requires_min_(DISPATCH_LEVEL)
-_IRQL_requires_(DISPATCH_LEVEL)
-_IRQL_requires_same_
-VOID
-SystemProcessorInformation(
-    IN  PKDPC           Dpc,
-    IN  PVOID           _Context,
-    IN  PVOID           Argument1,
-    IN  PVOID           Argument2
+static VOID
+SystemProcessorInitialize(
+    IN  ULONG           Cpu
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
-    PKEVENT             Event = Argument1;
-    ULONG               Cpu;
-    PROCESSOR_NUMBER    ProcNumber;
     PSYSTEM_PROCESSOR   Processor;
     ULONG               EAX;
     ULONG               EBX;
     ULONG               ECX;
     ULONG               EDX;
-
-    UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(_Context);
-    UNREFERENCED_PARAMETER(Argument2);
-
-    Cpu = KeGetCurrentProcessorNumberEx(&ProcNumber);
-    ASSERT3U(Cpu, <, Context->ProcessorCount);
 
     Processor = &Context->Processor[Cpu];
 
@@ -609,8 +592,6 @@ SystemProcessorInformation(
             SystemViridianInformation(EAX - 0x40000000);
     }
 
-    Info("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
-
     __CpuId(0, NULL, &EBX, &ECX, &EDX);
 
     RtlCopyMemory(&Processor->Manufacturer[0], &EBX, sizeof (ULONG));
@@ -625,10 +606,73 @@ SystemProcessorInformation(
     Info("Manufacturer: %s\n", Processor->Manufacturer);
     Info("APIC ID: %02X\n", Processor->ApicID);
     Info("PROCESSOR ID: %02X\n", Processor->ProcessorID);
+}
 
-    KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
+static VOID
+SystemProcessorTeardown(
+    IN  ULONG           Cpu
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    PSYSTEM_PROCESSOR   Processor;
+
+    Processor = &Context->Processor[Cpu];
+
+    Processor->ProcessorID = 0;
+    Processor->ApicID = 0;
+    RtlZeroMemory(Processor->Manufacturer, sizeof (Processor->Manufacturer));
+}
+
+static FORCEINLINE ULONG
+__SystemProcessorCount(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+
+    KeMemoryBarrier();
+
+    return Context->ProcessorCount;
+}
+
+static
+_Function_class_(KDEFERRED_ROUTINE)
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_requires_min_(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
+_IRQL_requires_same_
+VOID
+SystemProcessorDpc(
+    IN  PKDPC           Dpc,
+    IN  PVOID           _Context,
+    IN  PVOID           Argument1,
+    IN  PVOID           Argument2
+    )
+{
+    PSYSTEM_CONTEXT     Context = &SystemContext;
+    ULONG               Cpu;
+    PROCESSOR_NUMBER    ProcNumber;
+    PSYSTEM_PROCESSOR   Processor;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(_Context);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+
+    Cpu = KeGetCurrentProcessorNumberEx(&ProcNumber);
+    ASSERT3U(Cpu, <, Context->ProcessorCount);
+
+    Processor = &Context->Processor[Cpu];
+    Processor->Status = STATUS_UNSUCCESSFUL;
+
+    Info("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
+
+    SystemProcessorInitialize(Cpu);
 
     Info("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
+
+    Processor->Status = STATUS_SUCCESS;
+    KeSetEvent(&Processor->Event, IO_NO_INCREMENT, FALSE);
 }
 
 static
@@ -690,21 +734,24 @@ SystemProcessorChangeCallback(
     }
     case KeProcessorAddCompleteNotify: {
         PSYSTEM_PROCESSOR   Processor;
-        KEVENT              Event;
 
         ASSERT3U(Cpu, <, Context->ProcessorCount);
 
         Processor = &Context->Processor[Cpu];
 
-        KeInitializeEvent(&Event, NotificationEvent, FALSE);
+        KeInitializeEvent(&Processor->Event, NotificationEvent, FALSE);
 
-        KeInitializeDpc(&Processor->Dpc, SystemProcessorInformation, NULL);
+        KeInitializeDpc(&Processor->Dpc, SystemProcessorDpc, NULL);
         KeSetImportanceDpc(&Processor->Dpc, HighImportance);
         KeSetTargetProcessorDpcEx(&Processor->Dpc, &ProcNumber);
 
-        KeInsertQueueDpc(&Processor->Dpc, &Event, NULL);
+        KeInsertQueueDpc(&Processor->Dpc, NULL, NULL);
 
-        (VOID) KeWaitForSingleObject(&Event,
+        //
+        // Wait for the DPC to avoid log lines from multiple processor
+        // initializations from being interleaved.
+        //
+        (VOID) KeWaitForSingleObject(&Processor->Event,
                                      Executive,
                                      KernelMode,
                                      FALSE,
@@ -758,9 +805,22 @@ SystemDeregisterProcessorChangeCallback(
     )
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
+    ULONG           Cpu;
 
     KeDeregisterProcessorChangeCallback(Context->ProcessorChangeHandle);
     Context->ProcessorChangeHandle = NULL;
+
+    for (Cpu = 0; Cpu < __SystemProcessorCount(); Cpu++) {
+        PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
+
+        SystemProcessorTeardown(Cpu);
+
+        RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
+        RtlZeroMemory(&Processor->Event, sizeof (KEVENT));
+        Processor->Status = 0;
+
+        ASSERT(IsZeroMemory(Processor, sizeof (SYSTEM_PROCESSOR)));
+    }
 
     __SystemFree(Context->Processor);
     Context->Processor = NULL;
@@ -964,6 +1024,38 @@ fail1:
     return status;
 }
 
+static NTSTATUS
+SystemCheckProcessors(
+    VOID
+    )
+{
+    PSYSTEM_CONTEXT Context = &SystemContext;
+    ULONG           Cpu;
+    NTSTATUS        status;
+
+    for (Cpu = 0; Cpu < __SystemProcessorCount(); Cpu++)
+    {
+        PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
+
+        (VOID) KeWaitForSingleObject(&Processor->Event,
+                                     Executive,
+                                     KernelMode,
+                                     FALSE,
+                                     NULL);
+
+        status = Processor->Status;
+        if (!NT_SUCCESS(status))
+            goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
 NTSTATUS
 SystemInitialize(
     VOID
@@ -1007,7 +1099,14 @@ SystemInitialize(
     if (!NT_SUCCESS(status))
         goto fail8;
 
+    status = SystemCheckProcessors();
+    if (!NT_SUCCESS(status))
+        goto fail9;
+
     return STATUS_SUCCESS;
+
+fail9:
+    Error("fail9\n");
 
 fail8:
     Error("fail8\n");
@@ -1043,18 +1142,6 @@ fail1:
     (VOID) InterlockedDecrement(&Context->References);
 
     return status;
-}
-
-static FORCEINLINE ULONG
-__SystemProcessorCount(
-    VOID
-    )
-{
-    PSYSTEM_CONTEXT     Context = &SystemContext;
-
-    KeMemoryBarrier();
-
-    return Context->ProcessorCount;
 }
 
 XEN_API
