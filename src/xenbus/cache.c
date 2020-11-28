@@ -385,13 +385,13 @@ CacheDestroySlab(
     // The only reason the cursor should be pointing at this slab is
     // if it is the only one in the list.
     //
-    if (Cache->Cursor == &Slab->ListEntry) {
-        ASSERT(Slab->ListEntry.Flink == &Cache->SlabList);
-        ASSERT(Slab->ListEntry.Blink == &Cache->SlabList);
+    if (Cache->Cursor == &Slab->ListEntry)
         Cache->Cursor = &Cache->SlabList;
-    }
 
     RemoveEntryList(&Slab->ListEntry);
+
+    ASSERT(Cache->Cursor != &Cache->SlabList ||
+           IsListEmpty(&Cache->SlabList));
 
     Index = Slab->MaximumOccupancy;
     while (--Index >= 0) {
