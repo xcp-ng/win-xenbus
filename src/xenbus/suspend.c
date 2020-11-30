@@ -51,6 +51,7 @@ struct _XENBUS_SUSPEND_CONTEXT {
     PXENBUS_FDO                 Fdo;
     KSPIN_LOCK                  Lock;
     LONG                        References;
+    BOOLEAN                     Success;
     ULONG                       Count;
     LIST_ENTRY                  EarlyList;
     LIST_ENTRY                  LateList;
@@ -180,6 +181,73 @@ __SuspendLogTimers(
               PerformanceFrequency.LowPart);
 }
 
+static VOID
+SuspendEarly(
+    IN  PVOID               Argument,
+    IN  ULONG               Cpu
+    )
+{
+    PXENBUS_SUSPEND_CONTEXT Context = Argument;
+    PLIST_ENTRY             ListEntry;
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "SUSPEND: EARLY (%u)\n", Cpu);
+
+    if (!Context->Success || Cpu != 0)
+        return;
+
+    //
+    // No lock is required here as the VM is single-threaded with interrupts
+    // disabled.
+    //
+
+    Context->Count++;
+
+    HypercallPopulate();
+
+    UnplugDevices();
+
+    for (ListEntry = Context->EarlyList.Flink;
+         ListEntry != &Context->EarlyList;
+         ListEntry = ListEntry->Flink) {
+        PXENBUS_SUSPEND_CALLBACK  Callback;
+
+        Callback = CONTAINING_RECORD(ListEntry,
+                                     XENBUS_SUSPEND_CALLBACK,
+                                     ListEntry);
+        Callback->Function(Callback->Argument);
+    }
+}
+
+static VOID
+SuspendLate(
+    IN  PVOID               Argument,
+    IN  ULONG               Cpu
+    )
+{
+    PXENBUS_SUSPEND_CONTEXT Context = Argument;
+    PLIST_ENTRY             ListEntry;
+
+    LogPrintf(LOG_LEVEL_INFO,
+              "SUSPEND: LATE (%u)\n", Cpu);
+
+    if (!Context->Success || Cpu != 0)
+        return;
+
+    // No lock is required here as the VM is single-threaded
+
+    for (ListEntry = Context->LateList.Flink;
+         ListEntry != &Context->LateList;
+         ListEntry = ListEntry->Flink) {
+        PXENBUS_SUSPEND_CALLBACK  Callback;
+
+        Callback = CONTAINING_RECORD(ListEntry,
+                                     XENBUS_SUSPEND_CALLBACK,
+                                     ListEntry);
+        Callback->Function(Callback->Argument);
+    }
+}
+
 NTSTATUS
 #pragma prefast(suppress:28167) // Function changes IRQL
 SuspendTrigger(
@@ -195,7 +263,7 @@ SuspendTrigger(
     LogPrintf(LOG_LEVEL_INFO,
               "SUSPEND: ====>\n");
 
-    SyncCapture();
+    SyncCapture(Context, SuspendEarly, SuspendLate);
     SyncDisableInterrupts();
 
     __SuspendLogTimers("PRE-SUSPEND");
@@ -209,43 +277,9 @@ SuspendTrigger(
 
     __SuspendLogTimers("POST-SUSPEND");
 
-    if (NT_SUCCESS(status)) {
-        PLIST_ENTRY ListEntry;
-
-        Context->Count++;
-
-        HypercallPopulate();
-
-        UnplugDevices();
-
-        for (ListEntry = Context->EarlyList.Flink;
-             ListEntry != &Context->EarlyList;
-             ListEntry = ListEntry->Flink) {
-            PXENBUS_SUSPEND_CALLBACK  Callback;
-
-            Callback = CONTAINING_RECORD(ListEntry, XENBUS_SUSPEND_CALLBACK, ListEntry);
-            Callback->Function(Callback->Argument);
-        }
-    }
+    Context->Success = NT_SUCCESS(status) ? TRUE : FALSE;
 
     SyncEnableInterrupts();
-
-    // No lock is required here as the VM is single-threaded until
-    // SyncRelease() is called.
-
-    if (NT_SUCCESS(status)) {
-        PLIST_ENTRY ListEntry;
-
-        for (ListEntry = Context->LateList.Flink;
-             ListEntry != &Context->LateList;
-             ListEntry = ListEntry->Flink) {
-            PXENBUS_SUSPEND_CALLBACK  Callback;
-
-            Callback = CONTAINING_RECORD(ListEntry, XENBUS_SUSPEND_CALLBACK, ListEntry);
-            Callback->Function(Callback->Argument);
-        }
-    }
-
     SyncRelease();
 
     LogPrintf(LOG_LEVEL_INFO, "SUSPEND: <====\n");

@@ -86,6 +86,9 @@ typedef struct  _SYNC_PROCESSOR {
 } SYNC_PROCESSOR, *PSYNC_PROCESSOR;
 
 typedef struct  _SYNC_CONTEXT {
+    PVOID               Argument;
+    SYNC_CALLBACK       Early;
+    SYNC_CALLBACK       Late;
     ULONG               Sequence;
     LONG                ProcessorCount;
     LONG                CompletionCount;
@@ -108,10 +111,13 @@ __SyncAcquire(
 
 static FORCEINLINE VOID
 __SyncRelease(
-    IN  LONG    Index
+    VOID
     )
 {
-    LONG        Old;
+    LONG    Old;
+    LONG    Index;
+
+    Index = KeGetCurrentProcessorNumberEx(NULL);
 
     Old = InterlockedExchange(&SyncOwner, -1);
     ASSERT3U(Old, ==, Index);
@@ -145,6 +151,9 @@ SyncWorker(
 
     InterruptsDisabled = FALSE;
     Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
+
+    ASSERT(SyncOwner >= 0 && Index != (ULONG)SyncOwner);
+
     Processor = &Context->Processor[Index];
 
     Trace("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
@@ -153,8 +162,12 @@ SyncWorker(
     for (;;) {
         ULONG   Sequence;
 
-        if (Processor->Exit)
+        if (Processor->Exit) {
+            if (Context->Late != NULL)
+                Context->Late(Context->Argument, Index);
+
             break;
+        }
 
         if (Processor->DisableInterrupts == InterruptsDisabled) {
             _mm_pause();
@@ -210,6 +223,9 @@ SyncWorker(
         } else {
             InterruptsDisabled = FALSE;
 
+            if (Context->Early != NULL)
+                Context->Early(Context->Argument, Index);
+
             _enable();
 
 #pragma prefast(suppress:28138) // Use constant rather than variable
@@ -236,7 +252,9 @@ __drv_maxIRQL(DISPATCH_LEVEL)
 __drv_raisesIRQL(DISPATCH_LEVEL)
 VOID
 SyncCapture(
-    VOID
+    IN  PVOID           Argument OPTIONAL,
+    IN  SYNC_CALLBACK   Early OPTIONAL,
+    IN  SYNC_CALLBACK   Late OPTIONAL
     )
 {
     PSYNC_CONTEXT       Context = SyncContext;
@@ -256,6 +274,10 @@ SyncCapture(
     Trace("====> (%u:%u)\n", Group, Number);
 
     ASSERT(IsZeroMemory(Context, PAGE_SIZE));
+
+    Context->Argument = Argument;
+    Context->Early = Early;
+    Context->Late = Late;
 
     Context->Sequence++;
     Context->CompletionCount = 0;
@@ -303,6 +325,8 @@ SyncDisableInterrupts(
     NTSTATUS        status;
 
     Trace("====>\n");
+
+    ASSERT(SyncOwner >= 0);
 
     Context->Sequence++;
     Context->CompletionCount = 0;
@@ -368,6 +392,11 @@ SyncEnableInterrupts(
     KIRQL           Irql;
     LONG            Index;
 
+    ASSERT(SyncOwner >= 0);
+
+    if (Context->Early != NULL)
+        Context->Early(Context->Argument, SyncOwner);
+
     _enable();
 
     Irql = KeGetCurrentIrql();
@@ -409,6 +438,11 @@ SyncRelease(
 
     Trace("====>\n");
 
+    ASSERT(SyncOwner >= 0);
+
+    if (Context->Late != NULL)
+        Context->Late(Context->Argument, SyncOwner);
+
     Context->Sequence++;
     Context->CompletionCount = 0;
 
@@ -429,8 +463,7 @@ SyncRelease(
 
     RtlZeroMemory(Context, PAGE_SIZE);
 
-    Index = KeGetCurrentProcessorNumberEx(NULL);
-    __SyncRelease(Index);
+    __SyncRelease();
 
     Trace("<====\n");
 }

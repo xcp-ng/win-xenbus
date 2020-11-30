@@ -34,12 +34,20 @@
 
 #include <ntddk.h>
 
+typedef VOID
+(*SYNC_CALLBACK)(
+    IN  PVOID   Arguement,
+    IN  ULONG   Cpu
+    );
+
 extern
 __drv_maxIRQL(DISPATCH_LEVEL)
 __drv_raisesIRQL(DISPATCH_LEVEL)
 VOID
 SyncCapture(
-    VOID
+    IN  PVOID           Argument OPTIONAL,
+    IN  SYNC_CALLBACK   Early OPTIONAL,
+    IN  SYNC_CALLBACK   Late OPTIONAL
     );
 
 extern
