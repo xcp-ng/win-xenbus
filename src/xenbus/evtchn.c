@@ -1269,6 +1269,7 @@ EvtchnInterruptEnable(
 {
     ULONG                       Cpu;
     ULONG                       Line;
+    KIRQL                       Irql;
     NTSTATUS                    status;
 
     Trace("====>\n");
@@ -1312,6 +1313,10 @@ EvtchnInterruptEnable(
              ProcNumber.Number,
              Vector);
         Processor->UpcallEnabled = TRUE;
+
+        Irql = FdoAcquireInterruptLock(Context->Fdo, Processor->Interrupt);
+        (VOID) EvtchnInterruptCallback(NULL, Processor);
+        FdoReleaseInterruptLock(Context->Fdo, Processor->Interrupt, Irql);
     }
 
 line:
@@ -1321,6 +1326,10 @@ line:
     ASSERT(NT_SUCCESS(status));
 
     Info("CALLBACK VIA (Vector = %u)\n", Line);
+
+    Irql = FdoAcquireInterruptLock(Context->Fdo, Context->Interrupt);
+    (VOID) EvtchnInterruptCallback(NULL, &Context->Processor[0]);
+    FdoReleaseInterruptLock(Context->Fdo, Context->Interrupt, Irql);
 
     Trace("<====\n");
 }

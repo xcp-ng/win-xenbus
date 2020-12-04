@@ -78,6 +78,7 @@ struct _XENBUS_INTERRUPT {
     ULONG               Line;
     PKSERVICE_ROUTINE   Callback;
     PVOID               Argument;
+    ULONG               Count;
 };
 
 typedef struct _XENBUS_VIRQ {
@@ -2211,6 +2212,12 @@ FdoInterruptCallback(
 
     if (Interrupt->Callback == NULL)
         return FALSE;
+
+    if (Interrupt->Count++ == 0)
+        LogPrintf(LOG_LEVEL_INFO,
+                  "XENBUS: %u:%u INTERRUPT\n",
+                  Interrupt->ProcNumber.Group,
+                  Interrupt->ProcNumber.Number);
 
     return Interrupt->Callback(InterruptObject,
                                Interrupt->Argument);
