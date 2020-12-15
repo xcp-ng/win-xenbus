@@ -301,7 +301,8 @@ WTSStateName(
 
 static VOID
 DoReboot(
-    VOID
+    IN PTCHAR   Message,
+    IN DWORD    Timeout
     )
 {
     Log("waiting for pending install events...");
@@ -312,8 +313,8 @@ DoReboot(
 
 #pragma prefast(suppress:28159)
     (VOID) InitiateSystemShutdownEx(NULL,
-                                    NULL,
-                                    0,
+                                    Message,
+                                    Timeout,
                                     TRUE,
                                     TRUE,
                                     SHTDN_REASON_MAJOR_OPERATINGSYSTEM |
@@ -451,6 +452,125 @@ fail1:
     return NULL;
 }
 
+static BOOL
+TryAutoReboot(
+    IN PTCHAR           DriverName
+    )
+{
+    PMONITOR_CONTEXT    Context = &MonitorContext;
+    HRESULT             Result;
+    DWORD               Type;
+    DWORD               AutoReboot;
+    DWORD               RebootCount;
+    DWORD               Length;
+    PTCHAR              DisplayName;
+    PTCHAR              Description;
+    PTCHAR              Text;
+    DWORD               TextLength;
+    HRESULT             Error;
+
+    Length = sizeof (DWORD);
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "AutoReboot",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&AutoReboot,
+                            &Length);
+    if (Error != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+        AutoReboot = 0;
+
+    if (AutoReboot == 0)
+        goto done;
+
+    Length = sizeof (DWORD);
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "RebootCount",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&RebootCount,
+                            &Length);
+    if (Error != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+        RebootCount = 0;
+
+    if (RebootCount >= AutoReboot)
+        goto done;
+
+    Log("AutoRebooting (reboot %u of %u)\n",
+        RebootCount,
+        AutoReboot);
+
+    ++RebootCount;
+
+    (VOID) RegSetValueEx(Context->ParametersKey,
+                         "RebootCount",
+                         0,
+                         REG_DWORD,
+                         (const BYTE*)&RebootCount,
+                         (DWORD) sizeof(DWORD));
+
+    (VOID) RegFlushKey(Context->ParametersKey);
+
+    Context->RebootPending = TRUE;
+
+    DisplayName = GetDisplayName(DriverName);
+    if (DisplayName == NULL)
+        goto fail1;
+
+    Description = _tcsrchr(DisplayName, ';');
+    if (Description == NULL)
+        Description = DisplayName;
+    else
+        Description++;
+
+    TextLength = (DWORD)((_tcslen(Description) +
+                          1 + // ' '
+                          _tcslen(Context->Text) +
+                          1) * sizeof (TCHAR));
+
+    Text = calloc(1, TextLength);
+    if (Text == NULL)
+        goto fail2;
+
+    Result = StringCbPrintf(Text,
+                            TextLength,
+                            TEXT("%s %s"),
+                            Description,
+                            Context->Text);
+    assert(SUCCEEDED(Result));
+
+    free(DisplayName);
+
+    DoReboot(Text, 60);
+
+    free(Text);
+
+    return TRUE;
+
+done:
+    return FALSE;
+
+fail2:
+    Log("fail2");
+
+    free(DisplayName);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
 static VOID
 PromptForReboot(
     IN PTCHAR           DriverName
@@ -475,6 +595,10 @@ PromptForReboot(
     Title = Context->Title;
     TitleLength = (DWORD)((_tcslen(Context->Title) +
                            1) * sizeof (TCHAR));
+
+    // AutoReboot is set, DoReboot has been called
+    if (TryAutoReboot(DriverName))
+        goto done;
 
     DisplayName = GetDisplayName(DriverName);
     if (DisplayName == NULL)
@@ -547,7 +671,7 @@ PromptForReboot(
         Context->RebootPending = TRUE;
 
         if (Response == IDYES || Response == IDTIMEOUT)
-            DoReboot();
+            DoReboot(NULL, 0);
 
         break;
     }
@@ -556,6 +680,7 @@ PromptForReboot(
 
     free(DisplayName);
 
+done:
     Log("<====");
 
     return;
@@ -671,6 +796,11 @@ CheckRequestSubKeys(
 loop:
         RegCloseKey(SubKey);
     }
+
+    Error = RegDeleteValue(Context->ParametersKey,
+                           "RebootCount");
+    if (Error == ERROR_SUCCESS)
+        (VOID) RegFlushKey(Context->ParametersKey);
 
     goto done;
 
