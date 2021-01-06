@@ -115,6 +115,7 @@ typedef struct _XENBUS_STORE_REQUEST {
 typedef struct _XENBUS_STORE_BUFFER {
     LIST_ENTRY  ListEntry;
     ULONG       Magic;
+    ULONG       Length;
     PVOID       Caller;
     CHAR        Data[1];
 } XENBUS_STORE_BUFFER, *PXENBUS_STORE_BUFFER;
@@ -1036,6 +1037,7 @@ StoreCopyPayload(
         goto fail1;
 
     Buffer->Magic = XENBUS_STORE_BUFFER_MAGIC;
+    Buffer->Length = Length;
     Buffer->Caller = Caller;
 
     RtlCopyMemory(Buffer->Data, Data, Length);
@@ -1044,7 +1046,7 @@ StoreCopyPayload(
     InsertTailList(&Context->BufferList, &Buffer->ListEntry);
     KeReleaseSpinLock(&Context->Lock, Irql);
 
-    return Buffer;        
+    return Buffer;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1439,12 +1441,19 @@ StoreDirectory(
     if (Buffer == NULL)
         goto fail4;
 
+    status = STATUS_OBJECT_PATH_NOT_FOUND;
+    if (Buffer->Length == 0)
+        goto fail5;
+
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     *Value = Buffer->Data;
 
     return STATUS_SUCCESS;
+
+fail5:
+    StoreFreePayload(Context, Buffer);
 
 fail4:
 fail3:
