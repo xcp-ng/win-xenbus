@@ -463,6 +463,7 @@ TryAutoReboot(
     DWORD               AutoReboot;
     DWORD               RebootCount;
     DWORD               Length;
+    DWORD               Timeout;
     PTCHAR              DisplayName;
     PTCHAR              Description;
     PTCHAR              Text;
@@ -516,6 +517,16 @@ TryAutoReboot(
 
     Context->RebootPending = TRUE;
 
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "AutoRebootTimeout",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&Timeout,
+                            &Length);
+    if (Error != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+        Timeout = 60;
+
     DisplayName = GetDisplayName(DriverName);
     if (DisplayName == NULL)
         goto fail1;
@@ -544,7 +555,7 @@ TryAutoReboot(
 
     free(DisplayName);
 
-    DoReboot(Text, 60);
+    DoReboot(Text, Timeout);
 
     free(Text);
 
