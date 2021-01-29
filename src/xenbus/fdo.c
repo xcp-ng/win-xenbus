@@ -2348,6 +2348,8 @@ FdoDisconnectInterrupt(
 
     IoDisconnectInterruptEx(&Disconnect);
 
+    Interrupt->Count = 0;
+
     Interrupt->Line = 0;
     Interrupt->InterruptObject = NULL;
     Interrupt->InterruptMode = 0;
