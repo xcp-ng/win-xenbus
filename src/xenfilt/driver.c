@@ -579,7 +579,6 @@ DriverQueryId(
 
             Index += Length + 1;
         }
-        ASSERT(Index > 0);
 
         Size = (Index + 1) * sizeof (CHAR);
 
