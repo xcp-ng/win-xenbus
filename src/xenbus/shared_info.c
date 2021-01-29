@@ -42,17 +42,24 @@
 #define XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR     (sizeof (ULONG_PTR) * 8)
 #define XENBUS_SHARED_INFO_EVTCHN_SELECTOR_COUNT   (RTL_FIELD_SIZE(shared_info_t, evtchn_pending) / sizeof (ULONG_PTR))
 
+typedef struct _XENBUS_SHARED_INFO_PROCESSOR {
+    unsigned int    vcpu_id;
+    vcpu_info_t     *Vcpu;
+    ULONG           Port;
+} XENBUS_SHARED_INFO_PROCESSOR, *PXENBUS_SHARED_INFO_PROCESSOR;
+
 struct _XENBUS_SHARED_INFO_CONTEXT {
-    PXENBUS_FDO                 Fdo;
-    KSPIN_LOCK                  Lock;
-    LONG                        References;
-    PHYSICAL_ADDRESS            Address;
-    shared_info_t               *Shared;
-    ULONG                       Port[HVM_MAX_VCPUS];
-    XENBUS_SUSPEND_INTERFACE    SuspendInterface;
-    PXENBUS_SUSPEND_CALLBACK    SuspendCallbackEarly;
-    XENBUS_DEBUG_INTERFACE      DebugInterface;
-    PXENBUS_DEBUG_CALLBACK      DebugCallback;
+    PXENBUS_FDO                     Fdo;
+    KSPIN_LOCK                      Lock;
+    LONG                            References;
+    PHYSICAL_ADDRESS                Address;
+    shared_info_t                   *Shared;
+    PXENBUS_SHARED_INFO_PROCESSOR   Processor;
+    ULONG                           ProcessorCount;
+    XENBUS_SUSPEND_INTERFACE        SuspendInterface;
+    PXENBUS_SUSPEND_CALLBACK        SuspendCallbackEarly;
+    XENBUS_DEBUG_INTERFACE          DebugInterface;
+    PXENBUS_DEBUG_CALLBACK          DebugCallback;
 };
 
 #define XENBUS_SHARED_INFO_TAG 'OFNI'
@@ -155,19 +162,21 @@ SharedInfoEvtchnMaskAll(
 
 static BOOLEAN
 SharedInfoUpcallPending(
-    IN  PINTERFACE  Interface,
-    IN  ULONG       Index
+    IN  PINTERFACE                  Interface,
+    IN  ULONG                       Index
     )
 {
-    vcpu_info_t     *Vcpu;
-    UCHAR           Pending;
-    NTSTATUS        status;
+    PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
+    PXENBUS_SHARED_INFO_PROCESSOR   Processor = &Context->Processor[Index];
+    vcpu_info_t                     *Vcpu;
+    UCHAR                           Pending;
 
-    UNREFERENCED_PARAMETER(Interface);
+    ASSERT3U(Index, <, Context->ProcessorCount);
 
-    status = SystemProcessorVcpuInfo(Index, &Vcpu);
-    if (!NT_SUCCESS(status))
+    if (Processor->Vcpu == NULL)
         return FALSE;
+
+    Vcpu = Processor->Vcpu;
 
     KeMemoryBarrier();
 
@@ -185,23 +194,23 @@ SharedInfoEvtchnPoll(
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
+    PXENBUS_SHARED_INFO_PROCESSOR   Processor = &Context->Processor[Index];
     shared_info_t                   *Shared = Context->Shared;
     unsigned int                    vcpu_id;
     vcpu_info_t                     *Vcpu;
     ULONG                           Port;
     ULONG_PTR                       SelectorMask;
     BOOLEAN                         DoneSomething;
-    NTSTATUS                        status;
 
     DoneSomething = FALSE;
 
-    status = SystemProcessorVcpuId(Index, &vcpu_id);
-    if (!NT_SUCCESS(status))
+    ASSERT3U(Index, <, Context->ProcessorCount);
+
+    if (Processor->Vcpu == NULL)
         goto done;
 
-    status = SystemProcessorVcpuInfo(Index, &Vcpu);
-    if (!NT_SUCCESS(status))
-        goto done;
+    vcpu_id = Processor->vcpu_id;
+    Vcpu = Processor->Vcpu;
 
     KeMemoryBarrier();
 
@@ -209,12 +218,11 @@ SharedInfoEvtchnPoll(
 
     KeMemoryBarrier();
 
-    Port = Context->Port[vcpu_id];
+    Port = Processor->Port;
 
     while (SelectorMask != 0) {
         ULONG   SelectorBit;
         ULONG   PortBit;
-
 
         SelectorBit = Port / XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
         PortBit = Port % XENBUS_SHARED_INFO_EVTCHN_PER_SELECTOR;
@@ -246,7 +254,7 @@ SharedInfoEvtchnPoll(
             Port = 0;
     }
 
-    Context->Port[vcpu_id] = Port;
+    Processor->Port = Port;
 
 done:
     return DoneSomething;
@@ -316,36 +324,35 @@ SharedInfoEvtchnUnmask(
 
 static VOID
 SharedInfoGetTime(
-    IN  PINTERFACE              Interface,
-    OUT PLARGE_INTEGER          Time,
-    OUT PBOOLEAN                Local
+    IN  PINTERFACE                  Interface,
+    OUT PLARGE_INTEGER              Time,
+    OUT PBOOLEAN                    Local
     )
 {
 #define NS_PER_S 1000000000ull
 
-    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
-    shared_info_t               *Shared;
-    vcpu_info_t                 *Vcpu;
-    ULONG                       WcVersion;
-    ULONG                       TimeVersion;
-    ULONGLONG                   Seconds;
-    ULONGLONG                   NanoSeconds;
-    ULONGLONG                   Timestamp;
-    ULONGLONG                   Tsc;
-    ULONGLONG                   SystemTime;
-    ULONG                       TscSystemMul;
-    CHAR                        TscShift;
-    TIME_FIELDS                 TimeFields;
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
+    PXENBUS_SHARED_INFO_PROCESSOR   Processor = &Context->Processor[0];
+    shared_info_t                   *Shared;
+    vcpu_info_t                     *Vcpu;
+    ULONG                           WcVersion;
+    ULONG                           TimeVersion;
+    ULONGLONG                       Seconds;
+    ULONGLONG                       NanoSeconds;
+    ULONGLONG                       Timestamp;
+    ULONGLONG                       Tsc;
+    ULONGLONG                       SystemTime;
+    ULONG                           TscSystemMul;
+    CHAR                            TscShift;
+    TIME_FIELDS                     TimeFields;
+    KIRQL                           Irql;
 
     // Make sure we don't suspend
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
 
     Shared = Context->Shared;
-
-    status = SystemProcessorVcpuInfo(0, &Vcpu);
-    ASSERT(NT_SUCCESS(status));
+    Vcpu = Processor->Vcpu;
+    ASSERT(Vcpu != NULL);
 
     // Loop until we can read a consistent set of values from the same update
     do {
@@ -554,13 +561,16 @@ SharedInfoDebugCallback(
 
 static NTSTATUS
 SharedInfoAcquire(
-    IN  PINTERFACE              Interface
+    IN  PINTERFACE                  Interface
     )
 {
-    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
-    PXENBUS_FDO                 Fdo = Context->Fdo;
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
+    PXENBUS_FDO                     Fdo = Context->Fdo;
+    KIRQL                           Irql;
+    shared_info_t                   *Shared;
+    LONG                            Index;
+    PXENBUS_SHARED_INFO_PROCESSOR   Processor;
+    NTSTATUS                        status;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -602,12 +612,62 @@ SharedInfoAcquire(
     if (!NT_SUCCESS(status))
         goto fail5;
 
+    Context->ProcessorCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    Context->Processor = __SharedInfoAllocate(sizeof (XENBUS_SHARED_INFO_PROCESSOR) * Context->ProcessorCount);
+
+    status = STATUS_NO_MEMORY;
+    if (Context->Processor == NULL)
+        goto fail6;
+
+    Shared = Context->Shared;
+
+    for (Index = 0; Index < (LONG)Context->ProcessorCount; Index++) {
+        Processor = &Context->Processor[Index];
+
+        status = SystemProcessorVcpuId(Index, &Processor->vcpu_id);
+        if (!NT_SUCCESS(status))
+            goto fail7;
+
+        status = SystemProcessorVcpuInfo(Index, &Processor->Vcpu);
+        if (!NT_SUCCESS(status) && status != STATUS_NOT_SUPPORTED)
+            goto fail8;
+    }
+
     Trace("<====\n");
 
 done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     return STATUS_SUCCESS;
+
+fail8:
+    Error("fail8\n");
+
+    Processor->vcpu_id = 0;
+
+fail7:
+    Error("fail7\n");
+
+    while (--Index >= 0) {
+        Processor = &Context->Processor[Index];
+
+        Processor->Vcpu = NULL;
+        Processor->vcpu_id = 0;
+    }
+
+    ASSERT(IsZeroMemory(Context->Processor, sizeof (XENBUS_SHARED_INFO_PROCESSOR) * Context->ProcessorCount));
+    __SharedInfoFree(Context->Processor);
+    Context->Processor = NULL;
+
+fail6:
+    Error("fail6\n");
+
+    Context->ProcessorCount = 0;
+
+    XENBUS_DEBUG(Deregister,
+                 &Context->DebugInterface,
+                 Context->DebugCallback);
+    Context->DebugCallback = NULL;
 
 fail5:
     Error("fail5\n");
@@ -648,12 +708,14 @@ fail1:
 
 static VOID
 SharedInfoRelease (
-    IN  PINTERFACE              Interface
+    IN  PINTERFACE                  Interface
     )
 {
-    PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
-    PXENBUS_FDO                 Fdo = Context->Fdo;
-    KIRQL                       Irql;
+    PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
+    PXENBUS_FDO                     Fdo = Context->Fdo;
+    KIRQL                           Irql;
+    LONG                            Index;
+    PXENBUS_SHARED_INFO_PROCESSOR   Processor;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
@@ -662,7 +724,19 @@ SharedInfoRelease (
 
     Trace("====>\n");
 
-    RtlZeroMemory(Context->Port, sizeof (ULONG) * HVM_MAX_VCPUS);
+    Index = (LONG)Context->ProcessorCount;
+    while (--Index >= 0) {
+        Processor = &Context->Processor[Index];
+
+        Processor->Port = 0;
+        Processor->Vcpu = NULL;
+        Processor->vcpu_id = 0;
+    }
+
+    ASSERT(IsZeroMemory(Context->Processor, sizeof (XENBUS_SHARED_INFO_PROCESSOR) * Context->ProcessorCount));
+    __SharedInfoFree(Context->Processor);
+    Context->Processor = NULL;
+    Context->ProcessorCount = 0;
 
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
