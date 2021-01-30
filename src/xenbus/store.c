@@ -2639,22 +2639,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_STORE_INTERFACE_V1 StoreInterfaceVersion1 = {
-    { sizeof (struct _XENBUS_STORE_INTERFACE_V1), 1, NULL, NULL, NULL },
-    StoreAcquire,
-    StoreRelease,
-    StoreFree,
-    StoreRead,
-    StorePrintf,
-    StoreRemove,
-    StoreDirectory,
-    StoreTransactionStart,
-    StoreTransactionEnd,
-    StoreWatchAdd,
-    StoreWatchRemove,
-    StorePoll
-};
-                     
 static struct _XENBUS_STORE_INTERFACE_V2 StoreInterfaceVersion2 = {
     { sizeof (struct _XENBUS_STORE_INTERFACE_V2), 2, NULL, NULL, NULL },
     StoreAcquire,
@@ -2800,23 +2784,6 @@ StoreGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 1: {
-        struct _XENBUS_STORE_INTERFACE_V1  *StoreInterface;
-
-        StoreInterface = (struct _XENBUS_STORE_INTERFACE_V1 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_STORE_INTERFACE_V1))
-            break;
-
-        *StoreInterface = StoreInterfaceVersion1;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 2: {
         struct _XENBUS_STORE_INTERFACE_V2  *StoreInterface;
 

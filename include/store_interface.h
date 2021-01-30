@@ -290,26 +290,6 @@ typedef NTSTATUS
 DEFINE_GUID(GUID_XENBUS_STORE_INTERFACE, 
 0x86824c3b, 0xd34e, 0x4753, 0xb2, 0x81, 0x2f, 0x1e, 0x3a, 0xd2, 0x14, 0xd7);
 
-/*! \struct _XENBUS_STORE_INTERFACE_V1
-    \brief STORE interface version 1
-    \ingroup interfaces
-*/
-struct _XENBUS_STORE_INTERFACE_V1 {
-    INTERFACE                       Interface;
-    XENBUS_STORE_ACQUIRE            StoreAcquire;
-    XENBUS_STORE_RELEASE            StoreRelease;
-    XENBUS_STORE_FREE               StoreFree;
-    XENBUS_STORE_READ               StoreRead;
-    XENBUS_STORE_PRINTF             StorePrintf;
-    XENBUS_STORE_REMOVE             StoreRemove;
-    XENBUS_STORE_DIRECTORY          StoreDirectory;
-    XENBUS_STORE_TRANSACTION_START  StoreTransactionStart;
-    XENBUS_STORE_TRANSACTION_END    StoreTransactionEnd;
-    XENBUS_STORE_WATCH_ADD          StoreWatchAdd;
-    XENBUS_STORE_WATCH_REMOVE       StoreWatchRemove;
-    XENBUS_STORE_POLL               StorePoll;
-};
-
 /*! \struct _XENBUS_STORE_INTERFACE_V2
     \brief STORE interface version 2
     \ingroup interfaces
@@ -341,7 +321,7 @@ typedef struct _XENBUS_STORE_INTERFACE_V2 XENBUS_STORE_INTERFACE, *PXENBUS_STORE
 
 #endif  // _WINDLL
 
-#define XENBUS_STORE_INTERFACE_VERSION_MIN  1
+#define XENBUS_STORE_INTERFACE_VERSION_MIN  2
 #define XENBUS_STORE_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENBUS_STORE_INTERFACE_H

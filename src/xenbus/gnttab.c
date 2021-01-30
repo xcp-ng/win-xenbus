@@ -979,17 +979,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_GNTTAB_INTERFACE_V1   GnttabInterfaceVersion1 = {
-    { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V1), 1, NULL, NULL, NULL },
-    GnttabAcquire,
-    GnttabRelease,
-    GnttabCreateCacheVersion1,
-    GnttabPermitForeignAccess,
-    GnttabRevokeForeignAccess,
-    GnttabGetReference,
-    GnttabDestroyCache
-};
-                     
 static struct _XENBUS_GNTTAB_INTERFACE_V2   GnttabInterfaceVersion2 = {
     { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V2), 2, NULL, NULL, NULL },
     GnttabAcquire,
@@ -1110,23 +1099,6 @@ GnttabGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 1: {
-        struct _XENBUS_GNTTAB_INTERFACE_V1  *GnttabInterface;
-
-        GnttabInterface = (struct _XENBUS_GNTTAB_INTERFACE_V1 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_GNTTAB_INTERFACE_V1))
-            break;
-
-        *GnttabInterface = GnttabInterfaceVersion1;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 2: {
         struct _XENBUS_GNTTAB_INTERFACE_V2  *GnttabInterface;
 

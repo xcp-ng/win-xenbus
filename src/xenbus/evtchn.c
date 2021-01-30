@@ -1811,19 +1811,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_EVTCHN_INTERFACE_V4 EvtchnInterfaceVersion4 = {
-    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V4), 4, NULL, NULL, NULL },
-    EvtchnAcquire,
-    EvtchnRelease,
-    EvtchnOpen,
-    EvtchnBind,
-    EvtchnUnmaskVersion4,
-    EvtchnSendVersion1,
-    EvtchnTrigger,
-    EvtchnGetPort,
-    EvtchnClose
-};
-
 static struct _XENBUS_EVTCHN_INTERFACE_V5 EvtchnInterfaceVersion5 = {
     { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V5), 5, NULL, NULL, NULL },
     EvtchnAcquire,
@@ -2014,23 +2001,6 @@ EvtchnGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 4: {
-        struct _XENBUS_EVTCHN_INTERFACE_V4  *EvtchnInterface;
-
-        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V4 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V4))
-            break;
-
-        *EvtchnInterface = EvtchnInterfaceVersion4;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 5: {
         struct _XENBUS_EVTCHN_INTERFACE_V5  *EvtchnInterface;
 
