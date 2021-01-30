@@ -161,6 +161,20 @@ SharedInfoEvtchnMaskAll(
 }
 
 static BOOLEAN
+SharedInfoUpcallSupported(
+    IN  PINTERFACE                  Interface,
+    IN  ULONG                       Index
+    )
+{
+    PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
+    PXENBUS_SHARED_INFO_PROCESSOR   Processor = &Context->Processor[Index];
+
+    ASSERT3U(Index, <, Context->ProcessorCount);
+
+    return (Processor->Vcpu != NULL) ? TRUE : FALSE;
+}
+
+static BOOLEAN
 SharedInfoUpcallPending(
     IN  PINTERFACE                  Interface,
     IN  ULONG                       Index
@@ -795,6 +809,19 @@ static struct _XENBUS_SHARED_INFO_INTERFACE_V3 SharedInfoInterfaceVersion3 = {
     SharedInfoGetTime
 };
                      
+static struct _XENBUS_SHARED_INFO_INTERFACE_V4 SharedInfoInterfaceVersion4 = {
+    { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V4), 4, NULL, NULL, NULL },
+    SharedInfoAcquire,
+    SharedInfoRelease,
+    SharedInfoUpcallSupported,
+    SharedInfoUpcallPending,
+    SharedInfoEvtchnPoll,
+    SharedInfoEvtchnAck,
+    SharedInfoEvtchnMask,
+    SharedInfoEvtchnUnmask,
+    SharedInfoGetTime
+};
+
 NTSTATUS
 SharedInfoInitialize(
     IN  PXENBUS_FDO                 Fdo,
@@ -879,6 +906,23 @@ SharedInfoGetInterface(
             break;
 
         *SharedInfoInterface = SharedInfoInterfaceVersion3;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 4: {
+        struct _XENBUS_SHARED_INFO_INTERFACE_V4 *SharedInfoInterface;
+
+        SharedInfoInterface = (struct _XENBUS_SHARED_INFO_INTERFACE_V4 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V4))
+            break;
+
+        *SharedInfoInterface = SharedInfoInterfaceVersion4;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;

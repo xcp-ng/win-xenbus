@@ -1512,21 +1512,10 @@ EvtchnIsProcessorEnabled(
     IN  ULONG                       Cpu
     )
 {
-    vcpu_info_t                     *Vcpu;
-    NTSTATUS                        status;
-
-    status = SystemProcessorVcpuInfo(Cpu, &Vcpu);
-    if (!NT_SUCCESS(status)) {
-        unsigned int    vcpu_id;
-
-        ASSERT(status == STATUS_NOT_SUPPORTED);
-
-        status = SystemProcessorVcpuId(Cpu, &vcpu_id);
-        ASSERT(NT_SUCCESS(status));
-
-        if (vcpu_id >= XEN_LEGACY_MAX_VCPUS)
-            return FALSE;
-    }
+    if (!XENBUS_SHARED_INFO(UpcallSupported,
+                            &Context->SharedInfoInterface,
+                            Cpu))
+        return FALSE;
 
     return XENBUS_EVTCHN_ABI(IsProcessorEnabled,
                              &Context->EvtchnAbi,
