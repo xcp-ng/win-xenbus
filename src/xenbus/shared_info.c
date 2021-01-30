@@ -629,8 +629,15 @@ SharedInfoAcquire(
             goto fail7;
 
         status = SystemProcessorVcpuInfo(Index, &Processor->Vcpu);
-        if (!NT_SUCCESS(status) && status != STATUS_NOT_SUPPORTED)
-            goto fail8;
+        if (!NT_SUCCESS(status)) {
+            if (status != STATUS_NOT_SUPPORTED)
+                goto fail8;
+
+            if (Processor->vcpu_id >= ARRAYSIZE(Shared->vcpu_info))
+                continue;
+
+            Processor->Vcpu = &Shared->vcpu_info[Processor->vcpu_id];
+        }
     }
 
     Trace("<====\n");

@@ -1506,6 +1506,33 @@ EvtchnDebugCallback(
     }
 }
 
+static BOOLEAN
+EvtchnIsProcessorEnabled(
+    IN  PXENBUS_EVTCHN_CONTEXT      Context,
+    IN  ULONG                       Cpu
+    )
+{
+    vcpu_info_t                     *Vcpu;
+    NTSTATUS                        status;
+
+    status = SystemProcessorVcpuInfo(Cpu, &Vcpu);
+    if (!NT_SUCCESS(status)) {
+        unsigned int    vcpu_id;
+
+        ASSERT(status == STATUS_NOT_SUPPORTED);
+
+        status = SystemProcessorVcpuId(Cpu, &vcpu_id);
+        ASSERT(NT_SUCCESS(status));
+
+        if (vcpu_id >= XEN_LEGACY_MAX_VCPUS)
+            return FALSE;
+    }
+
+    return XENBUS_EVTCHN_ABI(IsProcessorEnabled,
+                             &Context->EvtchnAbi,
+                             Cpu);
+}
+
 static NTSTATUS
 EvtchnAcquire(
     IN  PINTERFACE          Interface
@@ -1578,9 +1605,7 @@ EvtchnAcquire(
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR    Processor;
 
-        if (!XENBUS_EVTCHN_ABI(IsProcessorEnabled,
-                               &Context->EvtchnAbi,
-                               Cpu))
+        if (!EvtchnIsProcessorEnabled(Context, Cpu))
             continue;
 
         status = KeGetProcessorNumberFromIndex(Cpu, &ProcNumber);

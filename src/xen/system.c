@@ -75,6 +75,7 @@ typedef struct _SYSTEM_CONTEXT {
     PHYSICAL_ADDRESS    MaximumPhysicalAddress;
     BOOLEAN             RealTimeIsUniversal;
     SYSTEM_WATCHDOG     Watchdog;
+    BOOLEAN             RegisterVcpuInfo;
     PMDL                Mdl;
 } SYSTEM_CONTEXT, *PSYSTEM_CONTEXT;
 
@@ -664,11 +665,16 @@ SystemProcessorVcpuInfo(
     if (Cpu >= Context->ProcessorCount)
         goto fail1;
 
+    status = STATUS_NOT_SUPPORTED;
+    if (Processor->Registered == NULL)
+        goto fail2;
+
     ASSERT(*Processor->Registered);
     *Vcpu = Processor->Vcpu;
 
     return STATUS_SUCCESS;
 
+fail2:
 fail1:
     return status;
 }
@@ -688,6 +694,8 @@ SystemProcessorRegisterVcpuInfo(
     PHYSICAL_ADDRESS    Address;
     PUCHAR              MdlMappedSystemVa;
     NTSTATUS            status;
+
+    ASSERT(Context->RegisterVcpuInfo);
 
     status = STATUS_UNSUCCESSFUL;
     if (Cpu >= Context->ProcessorCount)
@@ -756,6 +764,8 @@ SystemProcessorDeregisterVcpuInfo(
     PSYSTEM_CONTEXT     Context = &SystemContext;
     PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
+    ASSERT(Context->RegisterVcpuInfo);
+
     Processor->Vcpu = NULL;
     Processor->Registered = NULL;
 }
@@ -795,9 +805,11 @@ SystemProcessorDpc(
 
     SystemProcessorInitialize(Cpu);
 
-    status = SystemProcessorRegisterVcpuInfo(Cpu, FALSE);
-    if (!NT_SUCCESS(status))
-        goto fail1;
+    if (Context->RegisterVcpuInfo) {
+        status = SystemProcessorRegisterVcpuInfo(Cpu, FALSE);
+        if (!NT_SUCCESS(status))
+            goto fail1;
+    }
 
     Info("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
 
@@ -843,7 +855,6 @@ SystemProcessorChangeCallback(
     switch (Change->State) {
     case KeProcessorAddStartNotify:
         break;
-
     case KeProcessorAddCompleteNotify: {
         PSYSTEM_PROCESSOR   Processor;
 
@@ -893,6 +904,8 @@ SystemAllocateVcpuInfo(
     ULONG           Size;
     NTSTATUS        status;
 
+    ASSERT(Context->RegisterVcpuInfo);
+
     Size = sizeof (vcpu_info_t) * HVM_MAX_VCPUS;
     Size += sizeof (BOOLEAN) * HVM_MAX_VCPUS;
     Size = P2ROUNDUP(Size, PAGE_SIZE);
@@ -918,6 +931,8 @@ SystemFreeVcpuInfo(
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
 
+    ASSERT(Context->RegisterVcpuInfo);
+
     DriverPutNamedPages(Context->Mdl);
     Context->Mdl = NULL;
 }
@@ -931,9 +946,11 @@ SystemRegisterProcessorChangeCallback(
     PVOID           Handle;
     NTSTATUS        status;
 
-    status = SystemAllocateVcpuInfo();
-    if (!NT_SUCCESS(status))
-        goto fail1;
+    if (Context->RegisterVcpuInfo) {
+        status = SystemAllocateVcpuInfo();
+        if (!NT_SUCCESS(status))
+            goto fail1;
+    }
 
     Handle = KeRegisterProcessorChangeCallback(SystemProcessorChangeCallback,
                                                NULL,
@@ -950,7 +967,8 @@ SystemRegisterProcessorChangeCallback(
 fail2:
     Error("fail2\n");
 
-    SystemFreeVcpuInfo();
+    if (Context->RegisterVcpuInfo)
+        SystemFreeVcpuInfo();
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -972,7 +990,9 @@ SystemDeregisterProcessorChangeCallback(
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
-        SystemProcessorDeregisterVcpuInfo(Cpu);
+        if (Context->RegisterVcpuInfo)
+            SystemProcessorDeregisterVcpuInfo(Cpu);
+
         SystemProcessorTeardown(Cpu);
 
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
@@ -982,7 +1002,8 @@ SystemDeregisterProcessorChangeCallback(
         ASSERT(IsZeroMemory(Processor, sizeof (SYSTEM_PROCESSOR)));
     }
 
-    SystemFreeVcpuInfo();
+    if (Context->RegisterVcpuInfo)
+        SystemFreeVcpuInfo();
 }
 
 static NTSTATUS
@@ -1221,6 +1242,8 @@ SystemInitialize(
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
     LONG            References;
+    HANDLE          ParametersKey;
+    ULONG           RegisterVcpuInfo;
     NTSTATUS        status;
 
     References = InterlockedIncrement(&Context->References);
@@ -1235,6 +1258,17 @@ SystemInitialize(
     status = STATUS_NO_MEMORY;
     if (Context->Processor == NULL)
         goto fail2;
+
+    ParametersKey = DriverGetParametersKey();
+
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     "RegisterVcpuInfo",
+                                     &RegisterVcpuInfo);
+    if (NT_SUCCESS(status))
+        Context->RegisterVcpuInfo = (RegisterVcpuInfo != 0) ? TRUE : FALSE;
+    else
+        Context->RegisterVcpuInfo = (Context->ProcessorCount > XEN_LEGACY_MAX_VCPUS) ?
+                                    TRUE : FALSE;
 
     status = SystemGetStartOptions();
     if (!NT_SUCCESS(status))
