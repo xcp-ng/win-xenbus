@@ -33,6 +33,11 @@
 #define _XEN_DRIVER_H
 
 extern HANDLE
+DriverGetParametersKey(
+    VOID
+    );
+
+extern HANDLE
 DriverGetUnplugKey(
     VOID
     );

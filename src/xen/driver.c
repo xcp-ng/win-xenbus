@@ -60,6 +60,7 @@
 typedef struct _XEN_DRIVER {
     PLOG_DISPOSITION    XenDisposition;
     PLOG_DISPOSITION    QemuDisposition;
+    HANDLE              ParametersKey;
     HANDLE              UnplugKey;
     HANDLE              MemoryKey;
 } XEN_DRIVER, *PXEN_DRIVER;
@@ -92,6 +93,30 @@ __DriverSafeMode(
     )
 {
     return (*InitSafeBootMode > 0) ? TRUE : FALSE;
+}
+
+static FORCEINLINE VOID
+__DriverSetParametersKey(
+    IN  HANDLE  Key
+    )
+{
+    Driver.ParametersKey = Key;
+}
+
+static FORCEINLINE HANDLE
+__DriverGetParametersKey(
+    VOID
+    )
+{
+    return Driver.ParametersKey;
+}
+
+HANDLE
+DriverGetParametersKey(
+    VOID
+    )
+{
+    return __DriverGetParametersKey();
 }
 
 static FORCEINLINE VOID
@@ -504,6 +529,8 @@ DllInitialize(
     if (!NT_SUCCESS(status))
         goto fail4;
 
+    __DriverSetParametersKey(ParametersKey);
+
     status = LogReadLogLevel(ParametersKey,
                              "XenLogLevel",
                              &LogLevel);
@@ -584,8 +611,6 @@ DllInitialize(
     if (!NT_SUCCESS(status))
         goto fail12;
 
-    RegistryCloseKey(ParametersKey);
-
     RegistryCloseKey(ServiceKey);
 
     Trace("<====\n");
@@ -641,6 +666,7 @@ fail5:
     Driver.XenDisposition = NULL;
 
     RegistryCloseKey(ParametersKey);
+    __DriverSetParametersKey(NULL);
 
 fail4:
     Error("fail4\n");
@@ -672,6 +698,7 @@ DllUnload(
 {
     HANDLE  MemoryKey;
     HANDLE  UnplugKey;
+    HANDLE  ParametersKey;
 
     Trace("====>\n");
 
@@ -698,6 +725,11 @@ DllUnload(
 
     RegistryCloseKey(UnplugKey);
     __DriverSetUnplugKey(NULL);
+
+    ParametersKey = __DriverGetParametersKey();
+
+    RegistryCloseKey(ParametersKey);
+    __DriverSetParametersKey(NULL);
 
     RegistryTeardown();
 
