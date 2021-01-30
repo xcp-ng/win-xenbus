@@ -487,6 +487,7 @@ EvtchnFifoAcquire(
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
     KIRQL                           Irql;
+    LONG                            ProcessorCount;
     LONG                            Index;
     PMDL                            Mdl;
     NTSTATUS                        status;
@@ -498,8 +499,10 @@ EvtchnFifoAcquire(
 
     Trace("====>\n");
 
+    ProcessorCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
+
     Index = 0;
-    while (Index < (LONG)SystemProcessorCount()) {
+    while (Index < ProcessorCount) {
         unsigned int        vcpu_id;
         PFN_NUMBER          Pfn;
         PHYSICAL_ADDRESS    Address;

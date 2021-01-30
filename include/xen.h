@@ -449,12 +449,6 @@ LogRemoveDisposition(
 // SYSTEM
 
 XEN_API
-ULONG
-SystemProcessorCount(
-    VOID
-    );
-
-XEN_API
 NTSTATUS
 SystemProcessorVcpuId(
     IN  ULONG           Cpu,

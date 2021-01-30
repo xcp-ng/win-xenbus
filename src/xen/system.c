@@ -627,18 +627,6 @@ SystemProcessorTeardown(
     RtlZeroMemory(Processor->Manufacturer, sizeof (Processor->Manufacturer));
 }
 
-static FORCEINLINE ULONG
-__SystemProcessorCount(
-    VOID
-    )
-{
-    PSYSTEM_CONTEXT     Context = &SystemContext;
-
-    KeMemoryBarrier();
-
-    return Context->ProcessorCount;
-}
-
 XEN_API
 NTSTATUS
 SystemProcessorVcpuId(
@@ -651,7 +639,7 @@ SystemProcessorVcpuId(
     NTSTATUS            status;
 
     status = STATUS_UNSUCCESSFUL;
-    if (Cpu >= __SystemProcessorCount())
+    if (Cpu >= Context->ProcessorCount)
         goto fail1;
 
     *vcpu_id = Processor->ProcessorID;
@@ -673,7 +661,7 @@ SystemProcessorVcpuInfo(
     NTSTATUS            status;
 
     status = STATUS_UNSUCCESSFUL;
-    if (Cpu >= __SystemProcessorCount())
+    if (Cpu >= Context->ProcessorCount)
         goto fail1;
 
     ASSERT(*Processor->Registered);
@@ -702,7 +690,7 @@ SystemProcessorRegisterVcpuInfo(
     NTSTATUS            status;
 
     status = STATUS_UNSUCCESSFUL;
-    if (Cpu >= __SystemProcessorCount())
+    if (Cpu >= Context->ProcessorCount)
         goto fail1;
 
     ASSERT(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA);
@@ -840,6 +828,7 @@ SystemProcessorChangeCallback(
     NTSTATUS                                    status;
 
     UNREFERENCED_PARAMETER(Argument);
+    UNREFERENCED_PARAMETER(Status);
 
     Cpu = Change->NtNumber;
 
@@ -852,36 +841,9 @@ SystemProcessorChangeCallback(
           ProcessorChangeName(Change->State));
 
     switch (Change->State) {
-    case KeProcessorAddStartNotify: {
-        PSYSTEM_PROCESSOR   Processor;
-        ULONG               ProcessorCount;
-
-        if (Cpu < Context->ProcessorCount)
-            break;
-
-        ProcessorCount = Cpu + 1;
-        Processor = __SystemAllocate(sizeof (SYSTEM_PROCESSOR) *
-                                     ProcessorCount);
-
-        if (Processor == NULL) {
-            *Status = STATUS_NO_MEMORY;
-            break;
-        }
-
-        if (Context->ProcessorCount != 0) {
-            RtlCopyMemory(Processor,
-                          Context->Processor,
-                          sizeof (SYSTEM_PROCESSOR) *
-                          Context->ProcessorCount);
-            __SystemFree(Context->Processor);
-        }
-
-        Context->Processor = Processor;
-        KeMemoryBarrier();
-
-        Context->ProcessorCount = ProcessorCount;
+    case KeProcessorAddStartNotify:
         break;
-    }
+
     case KeProcessorAddCompleteNotify: {
         PSYSTEM_PROCESSOR   Processor;
 
@@ -1007,7 +969,7 @@ SystemDeregisterProcessorChangeCallback(
     KeDeregisterProcessorChangeCallback(Context->ProcessorChangeHandle);
     Context->ProcessorChangeHandle = NULL;
 
-    for (Cpu = 0; Cpu < __SystemProcessorCount(); Cpu++) {
+    for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
         SystemProcessorDeregisterVcpuInfo(Cpu);
@@ -1019,10 +981,6 @@ SystemDeregisterProcessorChangeCallback(
 
         ASSERT(IsZeroMemory(Processor, sizeof (SYSTEM_PROCESSOR)));
     }
-
-    __SystemFree(Context->Processor);
-    Context->Processor = NULL;
-    Context->ProcessorCount = 0;
 
     SystemFreeVcpuInfo();
 }
@@ -1233,7 +1191,7 @@ SystemCheckProcessors(
     ULONG           Cpu;
     NTSTATUS        status;
 
-    for (Cpu = 0; Cpu < __SystemProcessorCount(); Cpu++)
+    for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++)
     {
         PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
@@ -1271,58 +1229,68 @@ SystemInitialize(
     if (References != 1)
         goto fail1;
 
-    status = SystemGetStartOptions();
-    if (!NT_SUCCESS(status))
+    Context->ProcessorCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    Context->Processor = __SystemAllocate(sizeof (SYSTEM_PROCESSOR) * Context->ProcessorCount);
+
+    status = STATUS_NO_MEMORY;
+    if (Context->Processor == NULL)
         goto fail2;
 
-    status = SystemGetVersionInformation();
+    status = SystemGetStartOptions();
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    status = SystemGetMemoryInformation();
+    status = SystemGetVersionInformation();
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    status = SystemGetAcpiInformation();
+    status = SystemGetMemoryInformation();
     if (!NT_SUCCESS(status))
         goto fail5;
 
-    status = SystemRegisterProcessorChangeCallback();
+    status = SystemGetAcpiInformation();
     if (!NT_SUCCESS(status))
         goto fail6;
 
-    status = SystemRegisterPowerStateCallback();
+    status = SystemRegisterProcessorChangeCallback();
     if (!NT_SUCCESS(status))
         goto fail7;
 
-    status = SystemGetTimeInformation();
+    status = SystemRegisterPowerStateCallback();
     if (!NT_SUCCESS(status))
         goto fail8;
 
-    status = SystemCheckProcessors();
+    status = SystemGetTimeInformation();
     if (!NT_SUCCESS(status))
         goto fail9;
 
+    status = SystemCheckProcessors();
+    if (!NT_SUCCESS(status))
+        goto fail10;
+
     return STATUS_SUCCESS;
+
+fail10:
+    Error("fail10\n");
 
 fail9:
     Error("fail9\n");
 
+    SystemDeregisterPowerStateCallback();
+
 fail8:
     Error("fail8\n");
 
-    SystemDeregisterPowerStateCallback();
+    SystemDeregisterProcessorChangeCallback();
 
 fail7:
     Error("fail7\n");
 
-    SystemDeregisterProcessorChangeCallback();
+    __SystemFree(Context->Madt);
+    Context->Madt = NULL;
 
 fail6:
     Error("fail6\n");
-
-    __SystemFree(Context->Madt);
-    Context->Madt = NULL;
 
 fail5:
     Error("fail5\n");
@@ -1333,8 +1301,12 @@ fail4:
 fail3:
     Error("fail3\n");
 
+    __SystemFree(Context->Processor);
+
 fail2:
     Error("fail2\n");
+
+    Context->ProcessorCount = 0;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1342,15 +1314,6 @@ fail1:
     (VOID) InterlockedDecrement(&Context->References);
 
     return status;
-}
-
-XEN_API
-ULONG
-SystemProcessorCount(
-    VOID
-    )
-{
-    return __SystemProcessorCount();
 }
 
 XEN_API
@@ -1446,6 +1409,9 @@ SystemTeardown(
     Context->Madt = NULL;
 
     Context->MaximumPhysicalAddress.QuadPart = 0;
+
+    __SystemFree(Context->Processor);
+    Context->ProcessorCount = 0;
 
     (VOID) InterlockedDecrement(&Context->References);
 
