@@ -324,6 +324,8 @@ DriverIsActivePresent(
 done:
     XENFILT_EMULATED(Release, &Driver.EmulatedInterface);
 
+    Info("ACTIVE DEVICE %sPRESENT\n", (!Present) ? "NOT " : "");
+
     return Present;
 
 fail1:
@@ -362,8 +364,6 @@ DriverSetFilterState(
             break;
 
         if (DriverIsActivePresent()) {
-            Info("ACTIVE DEVICE %sPRESENT\n", (!Present) ? "NOT " : "");
-
             if (!__DriverSafeMode())
                 UnplugDevices();
         }
