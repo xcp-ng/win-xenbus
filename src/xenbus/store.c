@@ -739,21 +739,15 @@ StoreResetResponse(
     Segment->Length = sizeof (struct xsd_sockmsg);
 }
 
-static PXENBUS_STORE_RESPONSE
+static VOID
 StoreCopyResponse(
-    IN  PXENBUS_STORE_CONTEXT   Context
+    IN  PXENBUS_STORE_CONTEXT   Context,
+    OUT PXENBUS_STORE_RESPONSE  Response
     )
 {
-    PXENBUS_STORE_RESPONSE      Response;
     PXENBUS_STORE_SEGMENT       Segment;
-    NTSTATUS                    status;
 
-    Response = __StoreAllocate(sizeof (XENBUS_STORE_RESPONSE));
-
-    status = STATUS_NO_MEMORY;
-    if (Response == NULL)
-        goto fail1;
-
+    ASSERT(Response != NULL);
     *Response = Context->Response;
 
     Segment = &Response->Segment[XENBUS_STORE_RESPONSE_HEADER_SEGMENT];
@@ -767,13 +761,6 @@ StoreCopyResponse(
     } else {
         ASSERT3P(Segment->Data, ==, NULL);
     }
-
-    return Response;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return NULL;
 }
 
 static VOID
@@ -817,7 +804,7 @@ StoreProcessResponse(
 
     RemoveEntryList(&Request->ListEntry);
 
-    Request->Response = StoreCopyResponse(Context);
+    StoreCopyResponse(Context, Request->Response);
     StoreResetResponse(Context);
 
     Request->State = XENBUS_STORE_REQUEST_COMPLETED;
@@ -921,8 +908,15 @@ StoreSubmitRequest(
     ULONG                       Count;
     XENBUS_STORE_REQUEST_STATE  State;
     LARGE_INTEGER               Timeout;
+    NTSTATUS                    status;
 
     ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_PREPARED);
+
+    Request->Response = __StoreAllocate(sizeof (XENBUS_STORE_RESPONSE));
+
+    status = STATUS_NO_MEMORY;
+    if (Request->Response == NULL)
+        goto fail1;
 
     // Make sure we don't suspend
     ASSERT3U(KeGetCurrentIrql(), <=, DISPATCH_LEVEL);
@@ -942,8 +936,6 @@ StoreSubmitRequest(
     Timeout.QuadPart = TIME_RELATIVE(TIME_S(XENBUS_STORE_POLL_PERIOD));
 
     while (State != XENBUS_STORE_REQUEST_COMPLETED) {
-        NTSTATUS    status;
-
         status = XENBUS_EVTCHN(Wait,
                                &Context->EvtchnInterface,
                                Context->Channel,
@@ -970,6 +962,11 @@ StoreSubmitRequest(
     KeLowerIrql(Irql);
 
     return Response;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return NULL;
 }
 
 static NTSTATUS
