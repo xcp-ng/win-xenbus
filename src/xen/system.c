@@ -695,7 +695,8 @@ SystemProcessorRegisterVcpuInfo(
     PUCHAR              MdlMappedSystemVa;
     NTSTATUS            status;
 
-    ASSERT(Context->RegisterVcpuInfo);
+    if (!Context->RegisterVcpuInfo)
+        goto done;
 
     status = STATUS_UNSUCCESSFUL;
     if (Cpu >= Context->ProcessorCount)
@@ -742,6 +743,7 @@ SystemProcessorRegisterVcpuInfo(
               Address.HighPart,
               Address.LowPart);
 
+done:
     return STATUS_SUCCESS;
 
 fail2:
@@ -764,7 +766,8 @@ SystemProcessorDeregisterVcpuInfo(
     PSYSTEM_CONTEXT     Context = &SystemContext;
     PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
-    ASSERT(Context->RegisterVcpuInfo);
+    if (!Context->RegisterVcpuInfo)
+        return;
 
     Processor->Vcpu = NULL;
     Processor->Registered = NULL;
@@ -805,11 +808,9 @@ SystemProcessorDpc(
 
     SystemProcessorInitialize(Cpu);
 
-    if (Context->RegisterVcpuInfo) {
-        status = SystemProcessorRegisterVcpuInfo(Cpu, FALSE);
-        if (!NT_SUCCESS(status))
-            goto fail1;
-    }
+    status = SystemProcessorRegisterVcpuInfo(Cpu, FALSE);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     Info("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
 
@@ -990,9 +991,7 @@ SystemDeregisterProcessorChangeCallback(
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
-        if (Context->RegisterVcpuInfo)
-            SystemProcessorDeregisterVcpuInfo(Cpu);
-
+        SystemProcessorDeregisterVcpuInfo(Cpu);
         SystemProcessorTeardown(Cpu);
 
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
