@@ -67,11 +67,75 @@ Function Run-MSBuildSDV {
 	Set-Location $basepath
 }
 
+Function Run-CodeQL {
+	param(
+		[string]$SolutionPath,
+		[string]$Name,
+		[string]$Configuration,
+		[string]$Platform,
+		[string]$SearchPath,
+		[string]$OutputPath
+	)
+
+	$projpath = Resolve-Path (Join-Path $SolutionPath $Name)
+	$project = [string]::Format("{0}.vcxproj", $Name)
+	$output = [string]::Format("{0}.sarif", $Name)
+	$database = Join-Path "database" $Name
+
+	# write a bat file to wrap msbuild parameters
+	$bat = [string]::Format("{0}.bat", $Name)
+	if (Test-Path $bat) {
+		Remove-Item $bat
+	}
+	$a = "msbuild.exe"
+	$a += " /m:4"
+	$a += " /t:Build"
+	$a += [string]::Format(" /p:Configuration=""{0}""", $Configuration)
+	$a += [string]::Format(" /p:Platform=""{0}""", $Platform)
+	$a += " "
+	$a += Join-Path $projpath $project
+	$a | Set-Content $bat
+
+	# generate the database
+	$b = "codeql"
+	$b += " database"
+	$b += " create"
+	$b += " -l=cpp"
+	$b += " -s=src"
+	$b += " -c"
+	$b += ' "' + (Resolve-Path $bat) + '" '
+	$b += $database
+	Invoke-Expression $b
+	if ($LASTEXITCODE -ne 0) {
+		Write-Host -ForegroundColor Red "ERROR: CodeQL failed, code:" $LASTEXITCODE
+		Exit $LASTEXITCODE
+	}
+	Remove-Item $bat
+
+	# perform the analysis on the database
+	$c = "codeql"
+	$c += " database"
+	$c += " analyze "
+	$c += $database
+	$c += " windows_driver_recommended.qls"
+	$c += " --format=sarifv2.1.0"
+	$c += " --output="
+	$c += (Join-Path $OutputPath $output)
+	$c += " --search-path="
+	$c += $SearchPath
+
+	Invoke-Expression $c
+	if ($LASTEXITCODE -ne 0) {
+		Write-Host -ForegroundColor Red "ERROR: CodeQL failed, code:" $LASTEXITCODE
+		Exit $LASTEXITCODE
+	}
+}
+
 #
 # Script Body
 #
 
-$configuration = @{ "free" = "$ConfigurationBase Release"; "checked" = "$ConfigurationBase Debug"; "sdv" = "$ConfigurationBase Release"; }
+$configuration = @{ "free" = "$ConfigurationBase Release"; "checked" = "$ConfigurationBase Debug"; "sdv" = "$ConfigurationBase Release"; "codeql" = "$ConfigurationBase Release"; }
 $platform = @{ "x86" = "Win32"; "x64" = "x64" }
 $solutionpath = Resolve-Path $SolutionDir
 
@@ -82,6 +146,28 @@ if ($Type -eq "free") {
 }
 elseif ($Type -eq "checked") {
 	Run-MSBuild $solutionpath "xenbus.sln" $configuration["checked"] $platform[$Arch]
+}
+elseif ($Type -eq "codeql") {
+	$archivepath = "xenbus"
+
+	if (-Not (Test-Path -Path $archivepath)) {
+		New-Item -Name $archivepath -ItemType Directory | Out-Null
+	}
+
+	if ([string]::IsNullOrEmpty($Env:CODEQL_QUERY_SUITE)) {
+		$searchpath = Resolve-Path ".."
+	} else {
+		$searchpath = $Env:CODEQL_QUERY_SUITE
+	}
+
+	if (Test-Path "database") {
+		Remove-Item -Recurse -Force "database"
+	}
+	New-Item -ItemType Directory "database"
+
+	Run-CodeQL $solutionpath "xen" $configuration["codeql"] $platform[$Arch] $searchpath $archivepath
+	Run-CodeQL $solutionpath "xenfilt" $configuration["codeql"] $platform[$Arch] $searchpath $archivepath
+	Run-CodeQL $solutionpath "xenbus" $configuration["codeql"] $platform[$Arch] $searchpath $archivepath
 }
 elseif ($Type -eq "sdv") {
 	$archivepath = "xenbus"

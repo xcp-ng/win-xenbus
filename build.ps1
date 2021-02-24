@@ -6,6 +6,7 @@ param(
 	[Parameter(Mandatory = $true)]
 	[string]$Type,
 	[string]$Arch,
+	[switch]$CodeQL,
 	[switch]$Sdv
 )
 
@@ -47,6 +48,21 @@ Function SdvBuild {
 		ConfigurationBase = $configurationbase[$visualstudioversion];
 		Arch = $arch;
 		Type = "sdv"
+		}
+	& ".\msbuild.ps1" @params
+}
+
+function CodeQLBuild {
+	$visualstudioversion = $Env:VisualStudioVersion
+	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; "16.0" = "vs2019"; }
+	$configurationbase = @{ "14.0" = "Windows 10"; "15.0" = "Windows 10"; "16.0" = "Windows 10"; }
+	$arch = "x64"
+
+	$params = @{
+		SolutionDir = $solutiondir[$visualstudioversion];
+		ConfigurationBase = $configurationbase[$visualstudioversion];
+		Arch = $arch;
+		Type = "codeql"
 		}
 	& ".\msbuild.ps1" @params
 }
@@ -97,6 +113,10 @@ if ([string]::IsNullOrEmpty($Arch) -or $Arch -eq "x86" -or $Arch -eq "Win32") {
 
 if ([string]::IsNullOrEmpty($Arch) -or $Arch -eq "x64") {
 	Build "x64" $Type
+}
+
+if ($CodeQL) {
+	CodeQLBuild
 }
 
 if ($Sdv) {
