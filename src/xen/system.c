@@ -1334,7 +1334,10 @@ fail4:
 fail3:
     Error("fail3\n");
 
+    Context->RegisterVcpuInfo = FALSE;
+
     __SystemFree(Context->Processor);
+    Context->Processor = NULL;
 
 fail2:
     Error("fail2\n");
@@ -1444,7 +1447,10 @@ SystemTeardown(
     Context->MaximumPhysicalAddress.QuadPart = 0;
 
     __SystemFree(Context->Processor);
+    Context->Processor = NULL;
+
     Context->ProcessorCount = 0;
+    Context->RegisterVcpuInfo = FALSE;
 
     (VOID) InterlockedDecrement(&Context->References);
 
