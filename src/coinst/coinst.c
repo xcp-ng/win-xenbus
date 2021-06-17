@@ -1361,7 +1361,8 @@ static BOOLEAN
 IsActiveDevice(
     IN  HDEVINFO            DeviceInfoSet,
     IN  PSP_DEVINFO_DATA    DeviceInfoData,
-    OUT PBOOLEAN            ActiveDevice
+    OUT PBOOLEAN            ActiveDevice,
+    OUT PBOOLEAN            VendorIsActive
     )
 {
     PTCHAR                  ActiveDeviceID;
@@ -1391,6 +1392,20 @@ IsActiveDevice(
                      _stricmp(ActiveInstanceID, InstanceID) == 0) ?
         TRUE :
         FALSE;
+
+#ifdef VENDOR_DEVICE_ID_STR
+
+#define DRIVER_VENDOR_DEVICE_ID "PCI\\VEN_5853&DEV_" ## VENDOR_DEVICE_ID_STR ## "&SUBSYS_C0005853&REV_01"
+
+    *VendorIsActive = (_stricmp(ActiveDeviceID, DRIVER_VENDOR_DEVICE_ID) == 0) ?
+        TRUE :
+        FALSE;
+
+#undef DRIVER_VENDOR_DEVICE_ID
+
+#else
+    *VendorIsActive = FALSE;
+#endif
 
     free(DeviceID);
     free(InstanceID);
@@ -1778,6 +1793,7 @@ DifInstallPostProcess(
 {
     BOOLEAN                         NewBinding;
     BOOLEAN                         Active;
+    BOOLEAN                         VendorIsActive;
 
     Log("====>");
 
@@ -1787,12 +1803,13 @@ DifInstallPostProcess(
 
     (VOID) IsActiveDevice(DeviceInfoSet,
                           DeviceInfoData,
-                          &Active);
+                          &Active,
+                          &VendorIsActive);
 
     Log("Active = %s", Active ? "TRUE" : "FALSE");
     Log("NewBinding = %s", NewBinding ? "TRUE" : "FALSE");
 
-    if (Active && NewBinding) {
+    if ((Active && NewBinding) || !VendorIsActive) {
         (VOID) ClearUnplugRequest("DISKS");
         (VOID) ClearUnplugRequest("NICS");
     }
