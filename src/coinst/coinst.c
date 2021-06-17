@@ -575,7 +575,8 @@ fail1:
 static BOOLEAN
 GetDriverKeyName(
     IN  HKEY    DeviceKey,
-    OUT PTCHAR  *Name
+    OUT PTCHAR  *Name,
+    OUT DWORD   *ConfigFlags
     )
 {
     HRESULT     Error;
@@ -586,6 +587,7 @@ GetDriverKeyName(
     DWORD       Index;
     HKEY        SubKey;
     PTCHAR      DriverKeyName;
+    DWORD       Flags;
 
     Error = RegQueryInfoKey(DeviceKey,
                             NULL,
@@ -612,9 +614,11 @@ GetDriverKeyName(
 
     SubKey = NULL;
     DriverKeyName = NULL;
+    Flags = 0;
 
     for (Index = 0; Index < SubKeys; Index++) {
         DWORD       MaxValueLength;
+        DWORD       ConfigFlagsLength;
         DWORD       DriverKeyNameLength;
         DWORD       Type;
 
@@ -661,6 +665,18 @@ GetDriverKeyName(
             goto fail4;
         }
 
+        ConfigFlagsLength = (DWORD)sizeof(DWORD);
+
+        Error = RegQueryValueEx(SubKey,
+                                "ConfigFlags",
+                                NULL,
+                                &Type,
+                                (LPBYTE)&Flags,
+                                &ConfigFlagsLength);
+        if (Error != ERROR_SUCCESS ||
+            Type != REG_DWORD)
+            Flags = 0;
+
         DriverKeyNameLength = MaxValueLength + sizeof (TCHAR);
 
         DriverKeyName = calloc(1, DriverKeyNameLength);
@@ -679,6 +695,7 @@ GetDriverKeyName(
 
         free(DriverKeyName);
         DriverKeyName = NULL;
+        Flags = 0;
 
         RegCloseKey(SubKey);
         SubKey = NULL;
@@ -692,6 +709,8 @@ GetDriverKeyName(
     free(SubKeyName);
 
     *Name = DriverKeyName;
+    if (ConfigFlags)
+        *ConfigFlags = Flags;
     return TRUE;
 
 fail5:
@@ -851,7 +870,7 @@ found:
         goto fail3;
 
     // Check for a bound driver
-    Success = GetDriverKeyName(DeviceKey, &DriverKeyName);
+    Success = GetDriverKeyName(DeviceKey, &DriverKeyName, NULL);
     if (!Success)
         goto fail4;
 
@@ -1452,6 +1471,7 @@ SupportChildDrivers(
     PTCHAR          SubKeyName;
     HKEY            DeviceKey;
     PTCHAR          DriverKeyName;
+    DWORD           ConfigFlags;
     HKEY            DriverKey;
     PTCHAR          MatchingDeviceID;
     DWORD           Index;
@@ -1511,20 +1531,23 @@ SupportChildDrivers(
         if (!Success)
             goto fail5;
 
-        Success = GetDriverKeyName(DeviceKey, &DriverKeyName);
+        Success = GetDriverKeyName(DeviceKey, &DriverKeyName, &ConfigFlags);
         if (!Success)
             goto fail6;
 
         if (DriverKeyName == NULL)
             goto loop1;
 
+        if (ConfigFlags & 0x20)
+            goto loop2;
+
         Success = OpenDriverKey(DriverKeyName, &DriverKey);
         if (!Success)
-            goto loop2;
+            goto loop3;
 
         Success = GetMatchingDeviceID(DriverKey, &MatchingDeviceID);
         if (!Success)
-            goto loop3;
+            goto loop4;
 
         Success = SupportDeviceID(MatchingDeviceID, NewBinding);
         if (!Success)
@@ -1532,8 +1555,10 @@ SupportChildDrivers(
 
         free(MatchingDeviceID);
 
-    loop3:
+    loop4:
         RegCloseKey(DriverKey);
+
+    loop3:
 
     loop2:
         free(DriverKeyName);
