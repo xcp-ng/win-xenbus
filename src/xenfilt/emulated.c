@@ -46,6 +46,7 @@
 typedef struct _XENFILT_EMULATED_DEVICE_DATA {
     CHAR    DeviceID[MAXNAMELEN];
     CHAR    InstanceID[MAXNAMELEN];
+    CHAR    CompatibleID[MAXNAMELEN];
 } XENFILT_EMULATED_DEVICE_DATA, *PXENFILT_EMULATED_DEVICE_DATA;
 
 typedef struct _XENFILT_EMULATED_DISK_DATA {
@@ -92,9 +93,12 @@ EmulatedSetObjectDeviceData(
     IN  PXENFILT_EMULATED_OBJECT        EmulatedObject,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
     IN  PCHAR                           DeviceID,
-    IN  PCHAR                           InstanceID
+    IN  PCHAR                           InstanceID,
+    IN  PCHAR                           CompatibleIDs OPTIONAL
     )
 {
+    ULONG                               Index;
+    PCHAR                               LastMatch;
     NTSTATUS                            status;
 
     status = STATUS_INVALID_PARAMETER;
@@ -113,6 +117,30 @@ EmulatedSetObjectDeviceData(
                                 InstanceID);
     ASSERT(NT_SUCCESS(status));
 
+    if (CompatibleIDs == NULL)
+        goto done;
+
+    Index = 0;
+    LastMatch = CompatibleIDs;
+    for (;;) {
+        ULONG   Length;
+
+        Length = (ULONG)strlen(&CompatibleIDs[Index]);
+        if (Length == 0)
+            break;
+
+        LastMatch = &CompatibleIDs[Index];
+
+        Index += Length + 1;
+    }
+
+    status = RtlStringCbPrintfA(EmulatedObject->Data.Device.CompatibleID,
+                                MAXNAMELEN,
+                                "%s",
+                                LastMatch);
+    ASSERT(NT_SUCCESS(status));
+
+done:
     return STATUS_SUCCESS;
 
 fail1:
@@ -126,7 +154,8 @@ EmulatedSetObjectDiskData(
     IN  PXENFILT_EMULATED_OBJECT        EmulatedObject,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
     IN  PCHAR                           DeviceID,
-    IN  PCHAR                           InstanceID
+    IN  PCHAR                           InstanceID,
+    IN  PCHAR                           CompatibleIDs OPTIONAL
     )
 {
     PCHAR                               End;
@@ -136,6 +165,7 @@ EmulatedSetObjectDiskData(
     NTSTATUS                            status;
 
     UNREFERENCED_PARAMETER(DeviceID);
+    UNREFERENCED_PARAMETER(CompatibleIDs);
 
     status = STATUS_INVALID_PARAMETER;
     if (Type != XENFILT_EMULATED_OBJECT_TYPE_IDE)
@@ -194,6 +224,7 @@ EmulatedAddObject(
     IN  PXENFILT_EMULATED_CONTEXT       Context,
     IN  PCHAR                           DeviceID,
     IN  PCHAR                           InstanceID,
+    IN  PCHAR                           CompatibleIDs OPTIONAL,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
     OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
     )
@@ -214,14 +245,16 @@ EmulatedAddObject(
         status = EmulatedSetObjectDeviceData(*EmulatedObject,
                                              Type,
                                              DeviceID,
-                                             InstanceID);
+                                             InstanceID,
+                                             CompatibleIDs);
         break;
 
     case XENFILT_EMULATED_OBJECT_TYPE_IDE:
         status = EmulatedSetObjectDiskData(*EmulatedObject,
                                            Type,
                                            DeviceID,
-                                           InstanceID);
+                                           InstanceID,
+                                           CompatibleIDs);
         break;
 
     default:
@@ -335,6 +368,13 @@ EmulatedIsDiskPresent(
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_IDE &&
             Index == EmulatedObject->Data.Disk.Index) {
+            Trace("FOUND\n");
+            break;
+        }
+
+        if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_PCI &&
+            _stricmp("PCI\\CC_0108", EmulatedObject->Data.Device.CompatibleID) == 0 &&
+            Index <= 3) {
             Trace("FOUND\n");
             break;
         }

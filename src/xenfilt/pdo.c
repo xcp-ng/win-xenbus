@@ -376,6 +376,14 @@ __PdoGetInstanceID(
            Dx->InstanceID : "";
 }
 
+static FORCEINLINE XENFILT_EMULATED_OBJECT_TYPE
+__PdoGetType(
+    IN  PXENFILT_PDO    Pdo
+    )
+{
+    return Pdo->Type;
+}
+
 static FORCEINLINE PCHAR
 __PdoGetLocationInformation(
     IN  PXENFILT_PDO    Pdo
@@ -2112,6 +2120,7 @@ PdoCreate(
     PDEVICE_OBJECT                  FilterDeviceObject;
     PXENFILT_DX                     Dx;
     PXENFILT_PDO                    Pdo;
+    PCHAR                           CompatibleIDs;
     NTSTATUS                        status;
 
     ASSERT(Type != XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN);
@@ -2173,13 +2182,23 @@ PdoCreate(
     if (!NT_SUCCESS(status))
         goto fail6;
 
+    status = DriverQueryId(Pdo->LowerDeviceObject,
+                           BusQueryCompatibleIDs,
+                           &CompatibleIDs);
+    if (!NT_SUCCESS(status))
+        CompatibleIDs = NULL;
+
     status = EmulatedAddObject(DriverGetEmulatedContext(),
                                __PdoGetDeviceID(Pdo),
                                __PdoGetInstanceID(Pdo),
-                               Pdo->Type,
+                               CompatibleIDs,
+                               __PdoGetType(Pdo),
                                &Pdo->EmulatedObject);
     if (!NT_SUCCESS(status))
         goto fail7;
+
+    if (CompatibleIDs)
+        ExFreePool(CompatibleIDs);
 
     __PdoSetName(Pdo);
 
@@ -2203,6 +2222,9 @@ PdoCreate(
 
 fail7:
     Error("fail7\n");
+
+    if (CompatibleIDs)
+        ExFreePool(CompatibleIDs);
 
     PdoClearDeviceInformation(Pdo);
 

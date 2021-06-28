@@ -69,6 +69,7 @@ EmulatedAddObject(
     IN  PXENFILT_EMULATED_CONTEXT       Context,
     IN  PCHAR                           DeviceID,
     IN  PCHAR                           InstanceID,
+    IN  PCHAR                           CompatibleIDs OPTIONAL,
     IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
     OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
     );
