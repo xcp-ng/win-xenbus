@@ -296,6 +296,9 @@ DriverRemoveFunctionDeviceObject(
     RemoveEntryList(&Dx->ListEntry);
     ASSERT3U(Driver.References, !=, 0);
     References = --Driver.References;
+
+    if (References == 1)
+        FiltersUninstall();
 }
 
 //
@@ -859,15 +862,16 @@ DriverEntry(
                       MICRO_VERSION,
                       BUILD_NUMBER);
     if (!NT_SUCCESS(status)) {
-        if (status == STATUS_INCOMPATIBLE_DRIVER_BLOCKED)
+        if (status == STATUS_INCOMPATIBLE_DRIVER_BLOCKED) {
+            // XenBus.sys is not the same version as Xen.sys
+            // Insert XenFilt to avoid a 2nd reboot in upgrade cases, as AddDevice
+            // will not be called to insert XenFilt.
+            FiltersInstall();
             __DriverRequestReboot();
+        }
 
         goto done;
     }
-
-    // Remove the filters from the registry. They will be re-instated by
-    // the first successful AddDevice.
-    FiltersUninstall();
 
     DriverObject->DriverExtension->AddDevice = DriverAddDevice;
 
