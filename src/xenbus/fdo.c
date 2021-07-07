@@ -4563,7 +4563,7 @@ FdoQueryPnpDeviceState(
         goto done;
 
     if (Fdo->NotDisableable) {
-        Info("%s: not disableable\n", __FdoGetName(Fdo));
+        Trace("%s: not disableable\n", __FdoGetName(Fdo));
         State |= PNP_DEVICE_NOT_DISABLEABLE;
     }
 
