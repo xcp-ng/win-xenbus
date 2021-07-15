@@ -58,10 +58,7 @@ typedef struct _XENBUS_DRIVER {
 static XENBUS_DRIVER    Driver;
 
 #define XENBUS_DRIVER_TAG   'VIRD'
-#define DEFAULT_CONSOLE_LOG_LEVEL   (LOG_LEVEL_INFO |       \
-                                     LOG_LEVEL_WARNING |    \
-                                     LOG_LEVEL_ERROR |      \
-                                     LOG_LEVEL_CRITICAL)
+#define DEFAULT_CONSOLE_LOG_LEVEL   0
 
 static FORCEINLINE PVOID
 __DriverAllocate(
