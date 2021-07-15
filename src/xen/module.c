@@ -145,6 +145,11 @@ ModuleAdd(
     BOOLEAN             After;
     NTSTATUS            status;
 
+    Info("%p - %p [%s]\n",
+         Start,
+         Start + Size - 1,
+         Name);
+
     New = __ModuleAllocate(sizeof (MODULE));
 
     status = STATUS_NO_MEMORY;
