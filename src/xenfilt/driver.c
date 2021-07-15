@@ -723,6 +723,19 @@ fail1:
     return status;
 }
 
+static FORCEINLINE PCHAR
+__EmulatedTypeName(
+    IN  XENFILT_EMULATED_OBJECT_TYPE    Type
+    )
+{
+    switch (Type) {
+    case XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN:  return "UNKNOWN";
+    case XENFILT_EMULATED_OBJECT_TYPE_PCI:      return "PCI";
+    case XENFILT_EMULATED_OBJECT_TYPE_IDE:      return "IDE";
+    default:                                    return "InvalidType";
+    }
+}
+
 static XENFILT_EMULATED_OBJECT_TYPE
 DriverGetEmulatedType(
     IN  PCHAR                       Id
@@ -803,6 +816,10 @@ DriverAddDevice(
             ExFreePool(Id);
         }
     }
+
+    Info("%p %s\n",
+         PhysicalDeviceObject,
+         __EmulatedTypeName(Type));
 
     status = STATUS_SUCCESS;
     if (Type == XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN)
