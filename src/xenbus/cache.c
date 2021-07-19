@@ -88,6 +88,10 @@ struct _XENBUS_CACHE {
     ULONG                   Count;
     PXENBUS_CACHE_MAGAZINE  Magazine;
     ULONG                   MagazineCount;
+    LONG                    CurrentSlabs;
+    LONG                    MaximumSlabs;
+    LONG                    CurrentObjects;
+    LONG                    MaximumObjects;
 };
 
 struct _XENBUS_CACHE_CONTEXT {
@@ -296,6 +300,7 @@ CacheCreateSlab(
     ULONG               Count;
     ULONG               Size;
     LONG                Index;
+    LONG                SlabCount;
     NTSTATUS            status;
 
     NumberOfBytes = P2ROUNDUP(FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer) +
@@ -339,6 +344,10 @@ CacheCreateSlab(
 
     CacheInsertSlab(Cache, Slab);
     Cache->Count += Count;
+
+    SlabCount = InterlockedIncrement(&Cache->CurrentSlabs);
+    if (SlabCount > Cache->MaximumSlabs)
+        Cache->MaximumSlabs = SlabCount;
 
     return STATUS_SUCCESS;
 
@@ -399,6 +408,9 @@ CacheDestroySlab(
 
         __CacheDtor(Cache, Object);
     }
+
+    ASSERT(Cache->CurrentSlabs != 0);
+    InterlockedDecrement(&Cache->CurrentSlabs);
 
     __CacheFree(Slab->Mask);
     __CacheFree(Slab);
@@ -527,6 +539,7 @@ CacheGet(
     ULONG                   Index;
     PXENBUS_CACHE_MAGAZINE  Magazine;
     PVOID                   Object;
+    LONG                    ObjectCount;
 
     UNREFERENCED_PARAMETER(Interface);
 
@@ -575,6 +588,12 @@ again:
         __CacheReleaseLock(Cache);
 
 done:
+    if (Object != NULL) {
+        ObjectCount = InterlockedIncrement(&Cache->CurrentObjects);
+        if (ObjectCount > Cache->MaximumObjects)
+            Cache->MaximumObjects = ObjectCount;
+    }
+
     KeLowerIrql(Irql);
 
     return Object;
@@ -625,6 +644,9 @@ CachePut(
         __CacheReleaseLock(Cache);
 
 done:
+    ASSERT(Cache->CurrentObjects != 0);
+    InterlockedDecrement(&Cache->CurrentObjects);
+
     KeLowerIrql(Irql);
 }
 
@@ -895,6 +917,12 @@ CacheDestroy(
 
     CacheSpill(Cache, 0);
 
+    ASSERT(Cache->CurrentObjects == 0);
+    Cache->MaximumObjects = 0;
+
+    ASSERT(Cache->CurrentSlabs == 0);
+    Cache->MaximumSlabs = 0;
+
     Cache->Cursor = NULL;
     ASSERT(IsListEmpty(&Cache->SlabList));
     RtlZeroMemory(&Cache->SlabList, sizeof (LIST_ENTRY));
@@ -942,10 +970,14 @@ CacheDebugCallback(
 
             XENBUS_DEBUG(Printf,
                          &Context->DebugInterface,
-                         "- %s: Count = %d (Reservation = %d)\n",
+                         "- %s: Count = %d, Reservation = %d, Objects = %d / %d, Slabs = %d / %d\n",
                          Cache->Name,
                          Cache->Count,
-                         Cache->Reservation);
+                         Cache->Reservation,
+                         Cache->CurrentObjects,
+                         Cache->MaximumObjects,
+                         Cache->CurrentSlabs,
+                         Cache->MaximumSlabs);
         }
     }
 }
