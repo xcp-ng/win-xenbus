@@ -65,12 +65,8 @@ typedef struct _XENBUS_CACHE_SLAB {
     UCHAR           Buffer[1];
 } XENBUS_CACHE_SLAB, *PXENBUS_CACHE_SLAB;
 
-#define BITS_PER_ULONG (sizeof (ULONG) * 8)
-#define MINIMUM_OBJECT_SIZE (PAGE_SIZE / BITS_PER_ULONG)
-
-C_ASSERT(sizeof (XENBUS_CACHE_SLAB) <= MINIMUM_OBJECT_SIZE);
-
-#define MAXNAMELEN  128
+#define BITS_PER_ULONG  (sizeof (ULONG) * 8)
+#define MAXNAMELEN      128
 
 struct _XENBUS_CACHE {
     LIST_ENTRY              ListEntry;
@@ -783,7 +779,6 @@ CacheCreate(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Size = __max(Size, MINIMUM_OBJECT_SIZE);
     Size = P2ROUNDUP(Size, sizeof (ULONG_PTR));
 
     if (Cap == 0)
