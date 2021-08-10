@@ -17,7 +17,8 @@ Function Run-MSBuild {
 		[string]$Configuration,
 		[string]$Platform,
 		[string]$Target = "Build",
-		[string]$Inputs = ""
+		[string]$Inputs = "",
+		[switch]$CodeAnalysis
 	)
 
 	$c = "msbuild.exe"
@@ -28,6 +29,11 @@ Function Run-MSBuild {
 	if ($Inputs) {
 		$c += [string]::Format(" /p:Inputs=""{0}"" ", $Inputs)
 	}
+	if ($CodeAnalysis) {
+		$c += "/p:RunCodeAnalysis=true "
+		$c += "/p:EnablePREFast=true "
+	}
+
 	$c += Join-Path -Path $SolutionPath -ChildPath $Name
 
 	Invoke-Expression $c
@@ -55,6 +61,7 @@ Function Run-MSBuildSDV {
 	Run-MSBuild $projpath $project $Configuration $Platform "Build"
 	Run-MSBuild $projpath $project $Configuration $Platform "sdv" "/clean"
 	Run-MSBuild $projpath $project $Configuration $Platform "sdv" "/check:default.sdv /debug"
+	Run-MSBuild $projpath $project $Configuration $Platform "Build" -CodeAnalysis
 	Run-MSBuild $projpath $project $Configuration $Platform "dvl"
 
 	$refine = Join-Path -Path $projpath -ChildPath "refine.sdv"
@@ -73,14 +80,14 @@ Function Run-CodeQL {
 		[string]$Name,
 		[string]$Configuration,
 		[string]$Platform,
-		[string]$SearchPath,
-		[string]$OutputPath
+		[string]$SearchPath
 	)
 
 	$projpath = Resolve-Path (Join-Path $SolutionPath $Name)
 	$project = [string]::Format("{0}.vcxproj", $Name)
 	$output = [string]::Format("{0}.sarif", $Name)
 	$database = Join-Path "database" $Name
+	$sarif = Join-Path $projpath $output
 
 	# write a bat file to wrap msbuild parameters
 	$bat = [string]::Format("{0}.bat", $Name)
@@ -120,7 +127,7 @@ Function Run-CodeQL {
 	$c += " windows_driver_recommended.qls"
 	$c += " --format=sarifv2.1.0"
 	$c += " --output="
-	$c += (Join-Path $OutputPath $output)
+	$c += $sarif
 	$c += " --search-path="
 	$c += $SearchPath
 
@@ -129,6 +136,8 @@ Function Run-CodeQL {
 		Write-Host -ForegroundColor Red "ERROR: CodeQL failed, code:" $LASTEXITCODE
 		Exit $LASTEXITCODE
 	}
+
+	Copy-Item $sarif -Destination $SolutionPath
 }
 
 #
@@ -165,9 +174,11 @@ elseif ($Type -eq "codeql") {
 	}
 	New-Item -ItemType Directory "database"
 
-	Run-CodeQL $solutionpath "xen" $configuration["codeql"] $platform[$Arch] $searchpath $archivepath
-	Run-CodeQL $solutionpath "xenfilt" $configuration["codeql"] $platform[$Arch] $searchpath $archivepath
-	Run-CodeQL $solutionpath "xenbus" $configuration["codeql"] $platform[$Arch] $searchpath $archivepath
+	Run-CodeQL $solutionpath "xen" $configuration["codeql"] $platform[$Arch] $searchpath
+	Run-CodeQL $solutionpath "xenfilt" $configuration["codeql"] $platform[$Arch] $searchpath
+	Run-CodeQL $solutionpath "xenbus" $configuration["codeql"] $platform[$Arch] $searchpath
+
+	Copy-Item -Path (Join-Path -Path $SolutionPath -ChildPath "*.sarif") -Destination $archivepath
 }
 elseif ($Type -eq "sdv") {
 	$archivepath = "xenbus"
