@@ -1945,7 +1945,7 @@ StorePermissionToString(
 
     ASSERT(BufferSize > 1);
 
-    switch (Permission->Mask) {
+    switch ((ULONG)Permission->Mask) {
     case XENBUS_STORE_PERM_NONE:
         *Buffer = 'n';
         break;

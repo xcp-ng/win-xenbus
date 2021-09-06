@@ -32,6 +32,11 @@
     <IntDir>..\$(ProjectName)\$(ConfigurationName)\$(Platform)\</IntDir>
     <OutDir>..\$(ConfigurationName)\$(Platform)\</OutDir>
   </PropertyGroup>
+  <ItemDefinitionGroup>
+    <DriverSign>
+      <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
+    </DriverSign>
+  </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(Platform)'=='Win32'">
     <ArchiveDir>..\..\$(SolutionName)\x86</ArchiveDir>
   </PropertyGroup>

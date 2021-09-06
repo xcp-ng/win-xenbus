@@ -13,4 +13,10 @@
   <Target Name="Build">
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -NonInteractive -File $(Script) $(Platform) $(SolutionDir) $(IncludeDir) $(SourceDir)" />
   </Target>
+  <Target Name="GetProjectInfoForReference"
+          Returns="@(ProjectInfoForReference)">
+    <ItemGroup>
+      <ProjectInfoForReference Include="@(LibFullPath)" />
+    </ItemGroup>
+  </Target>
 </Project>
