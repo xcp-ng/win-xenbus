@@ -171,30 +171,30 @@ EmulatedSetObjectDiskData(
     if (Type != XENFILT_EMULATED_OBJECT_TYPE_IDE)
         goto fail1;
 
-    Controller = strtol(InstanceID, &End, 10);
+    Controller = strtoul(InstanceID, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
-    if (*End != '.' || Controller > 1)
+    if (Controller > 1 || *End != '.')
         goto fail2;
 
     End++;
 
-    Target = strtol(End, &End, 10);
+    Target = strtoul(End, &End, 10);
 
     status = STATUS_INVALID_PARAMETER;
-    if (*End != '.' || Target > 1)
+    if (Target > 1 || *End != '.')
         goto fail3;
 
     End++;
 
-    Lun = strtol(End, &End, 10);
-
-    status = STATUS_INVALID_PARAMETER;
-    if (*End != '\0')
-        goto fail4;
+    Lun = strtoul(End, &End, 10);
 
     status = STATUS_NOT_SUPPORTED;
     if (Lun != 0)
+        goto fail4;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (*End != '\0')
         goto fail5;
 
     EmulatedObject->Data.Disk.Index = Controller << 1 | Target;
