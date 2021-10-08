@@ -1107,7 +1107,7 @@ FdoQueryDeviceRelations(
                 if (PdoGetDevicePnpState(Pdo) == Deleted)
                     PdoDestroy(Pdo);
 
-                continue;
+                goto next;
             }
 
             if (PdoGetDevicePnpState(Pdo) == Present)
@@ -1116,6 +1116,7 @@ FdoQueryDeviceRelations(
             ObReferenceObject(PdoGetPhysicalDeviceObject(Pdo));
             Relations->Objects[Relations->Count++] = PdoGetPhysicalDeviceObject(Pdo);
 
+next:
             ListEntry = Next;
         }
 
