@@ -92,6 +92,7 @@ typedef struct _XENBUS_VIRQ {
 
 typedef struct _XENBUS_HOLE {
     PXENBUS_RANGE_SET               RangeSet;
+    ULONG                           Count;
     PVOID                           VirtualAddress;
     PHYSICAL_ADDRESS                PhysicalAddress;
 } XENBUS_HOLE, *PXENBUS_HOLE;
@@ -3209,16 +3210,79 @@ FdoSuspendCallbackLate(
     ASSERT(NT_SUCCESS(status));
 }
 
-static NTSTATUS
-FdoCreateHole(
+static FORCEINLINE NTSTATUS
+__FdoCreateMemoryHole(
     IN  PXENBUS_FDO Fdo
     )
 {
     PXENBUS_HOLE    Hole = &Fdo->Hole;
     PMDL            Mdl;
     PFN_NUMBER      Pfn;
-    ULONG           Count;
     NTSTATUS        status;
+
+    Mdl = Fdo->Mdl;
+    Hole->VirtualAddress = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+
+    Pfn = MmGetMdlPfnArray(Mdl)[0];
+    Hole->PhysicalAddress.QuadPart = (ULONGLONG)Pfn << PAGE_SHIFT;
+
+    Hole->Count = BYTES_TO_PAGES(Mdl->ByteCount);
+    ASSERT3U(Hole->Count, ==, 1u << PAGE_ORDER_2M);
+
+    status = STATUS_UNSUCCESSFUL;
+    if (MemoryDecreaseReservation(PAGE_ORDER_2M, 1, &Pfn) != 1)
+        goto fail1;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    Hole->Count = 0;
+    Hole->PhysicalAddress.QuadPart = 0;
+    Hole->VirtualAddress = NULL;
+
+    return status;
+}
+
+static FORCEINLINE VOID
+__FdoDestroyMemoryHole(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    PXENBUS_HOLE    Hole = &Fdo->Hole;
+    PMDL            Mdl;
+    PFN_NUMBER      Pfn;
+    ULONG           Index;
+
+    Mdl = Fdo->Mdl;
+    Pfn = MmGetMdlPfnArray(Mdl)[0];
+
+    ASSERT3U(Hole->Count, ==, 1u << PAGE_ORDER_2M);
+    if (MemoryPopulatePhysmap(PAGE_ORDER_2M, 1, &Pfn) == 1)
+        goto done;
+
+    for (Index = 0; Index < Hole->Count; Index++) {
+        if (MemoryPopulatePhysmap(PAGE_ORDER_4K, 1, &Pfn) != 1)
+            BUG("FAILED TO RE-POPULATE HOLE");
+
+        Pfn++;
+    }
+
+done:
+    Hole->Count = 0;
+    Hole->PhysicalAddress.QuadPart = 0;
+    Hole->VirtualAddress = NULL;
+}
+
+static NTSTATUS
+FdoCreateHole(
+    IN  PXENBUS_FDO     Fdo
+    )
+{
+    PXENBUS_HOLE        Hole = &Fdo->Hole;
+    PFN_NUMBER          Pfn;
+    NTSTATUS            status;
 
     status = XENBUS_RANGE_SET(Create,
                               &Fdo->RangeSetInterface,
@@ -3227,45 +3291,30 @@ FdoCreateHole(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    Mdl = Fdo->Mdl;
-    Hole->VirtualAddress = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
-
-    Pfn = MmGetMdlPfnArray(Mdl)[0];
-    Hole->PhysicalAddress.QuadPart = (ULONGLONG)Pfn << PAGE_SHIFT;
-
-    Count = BYTES_TO_PAGES(Mdl->ByteCount);
-    ASSERT3U(Count, ==, 1u << PAGE_ORDER_2M);
+    status = __FdoCreateMemoryHole(Fdo);
+    if (!NT_SUCCESS(status))
+        goto fail2;
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
                               Hole->RangeSet,
                               0,
-                              Count);
+                              Hole->Count);
     if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = STATUS_UNSUCCESSFUL;
-    if (MemoryDecreaseReservation(PAGE_ORDER_2M, 1, &Pfn) != 1)
         goto fail3;
 
-    Info("%08x - %08x\n", Pfn, Pfn + Count - 1);
+    Pfn = (PFN_NUMBER)(Hole->PhysicalAddress.QuadPart >> PAGE_SHIFT);
+    Info("%08x - %08x\n", Pfn, Pfn + Hole->Count - 1);
 
     return STATUS_SUCCESS;
 
 fail3:
     Error("fail3\n");
 
-    XENBUS_RANGE_SET(Get,
-                     &Fdo->RangeSetInterface,
-                     Hole->RangeSet,
-                     0,
-                     Count);
+    __FdoDestroyMemoryHole(Fdo);
 
 fail2:
     Error("fail2\n");
-
-    Hole->PhysicalAddress.QuadPart = 0;
-    Hole->VirtualAddress = NULL;
 
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
@@ -3342,37 +3391,16 @@ FdoDestroyHole(
     )
 {
     PXENBUS_HOLE    Hole = &Fdo->Hole;
-    PMDL            Mdl;
-    PFN_NUMBER      Pfn;
-    ULONG           Count;
-    ULONG           Index;
     NTSTATUS        status;
 
-    Mdl = Fdo->Mdl;
-    Pfn = MmGetMdlPfnArray(Mdl)[0];
-    Count = BYTES_TO_PAGES(Mdl->ByteCount);
-    ASSERT3U(Count, ==, 1u << PAGE_ORDER_2M);
-
-    if (MemoryPopulatePhysmap(PAGE_ORDER_2M, 1, &Pfn) == 1)
-        goto done;
-
-    for (Index = 0; Index < Count; Index++) {
-        if (MemoryPopulatePhysmap(PAGE_ORDER_4K, 1, &Pfn) != 1)
-            BUG("FAILED TO RE-POPULATE HOLE");
-
-        Pfn++;
-    }
-
-done:
     status = XENBUS_RANGE_SET(Get,
                               &Fdo->RangeSetInterface,
                               Hole->RangeSet,
                               0,
-                              Count);
+                              Hole->Count);
     ASSERT(NT_SUCCESS(status));
 
-    Hole->PhysicalAddress.QuadPart = 0;
-    Hole->VirtualAddress = NULL;
+    __FdoDestroyMemoryHole(Fdo);
 
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
