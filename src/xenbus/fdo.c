@@ -90,6 +90,12 @@ typedef struct _XENBUS_VIRQ {
     ULONG                   Count;
 } XENBUS_VIRQ, *PXENBUS_VIRQ;
 
+typedef struct _XENBUS_HOLE {
+    PXENBUS_RANGE_SET               RangeSet;
+    PVOID                           VirtualAddress;
+    PHYSICAL_ADDRESS                PhysicalAddress;
+} XENBUS_HOLE, *PXENBUS_HOLE;
+
 struct _XENBUS_FDO {
     PXENBUS_DX                      Dx;
     PDEVICE_OBJECT                  LowerDeviceObject;
@@ -148,9 +154,8 @@ struct _XENBUS_FDO {
     XENBUS_RANGE_SET_INTERFACE      RangeSetInterface;
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
 
-    PUCHAR                          Buffer;
     PMDL                            Mdl;
-    PXENBUS_RANGE_SET               RangeSet;
+    XENBUS_HOLE                     Hole;
     LIST_ENTRY                      InterruptList;
 
     LIST_ENTRY                      VirqList;
@@ -3209,30 +3214,32 @@ FdoCreateHole(
     IN  PXENBUS_FDO Fdo
     )
 {
+    PXENBUS_HOLE    Hole = &Fdo->Hole;
     PMDL            Mdl;
     PFN_NUMBER      Pfn;
-    LONGLONG        Start;
     ULONG           Count;
     NTSTATUS        status;
 
     status = XENBUS_RANGE_SET(Create,
                               &Fdo->RangeSetInterface,
                               "hole",
-                              &Fdo->RangeSet);
+                              &Hole->RangeSet);
     if (!NT_SUCCESS(status))
         goto fail1;
 
     Mdl = Fdo->Mdl;
+    Hole->VirtualAddress = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
 
     Pfn = MmGetMdlPfnArray(Mdl)[0];
+    Hole->PhysicalAddress.QuadPart = (ULONGLONG)Pfn << PAGE_SHIFT;
 
-    Start = Pfn;
     Count = BYTES_TO_PAGES(Mdl->ByteCount);
+    ASSERT3U(Count, ==, 1u << PAGE_ORDER_2M);
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
-                              Start,
+                              Hole->RangeSet,
+                              0,
                               Count);
     if (!NT_SUCCESS(status))
         goto fail2;
@@ -3241,7 +3248,7 @@ FdoCreateHole(
     if (MemoryDecreaseReservation(PAGE_ORDER_2M, 1, &Pfn) != 1)
         goto fail3;
 
-    Trace("%08x - %08x\n", Start, Start + Count - 1);
+    Info("%08x - %08x\n", Pfn, Pfn + Count - 1);
 
     return STATUS_SUCCESS;
 
@@ -3250,17 +3257,20 @@ fail3:
 
     XENBUS_RANGE_SET(Get,
                      &Fdo->RangeSetInterface,
-                     Fdo->RangeSet,
-                     Start,
+                     Hole->RangeSet,
+                     0,
                      Count);
 
 fail2:
     Error("fail2\n");
 
+    Hole->PhysicalAddress.QuadPart = 0;
+    Hole->VirtualAddress = NULL;
+
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
-                     Fdo->RangeSet);
-    Fdo->RangeSet = NULL;
+                     Hole->RangeSet);
+    Hole->RangeSet = NULL;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -3276,33 +3286,24 @@ FdoAllocateHole(
     OUT PPHYSICAL_ADDRESS   PhysicalAddress
     )
 {
-    LONGLONG                Start;
+    PXENBUS_HOLE            Hole = &Fdo->Hole;
+    LONGLONG                Index;
     NTSTATUS                status;
 
     status = XENBUS_RANGE_SET(Pop,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
+                              Hole->RangeSet,
                               Count,
-                              &Start);
+                              &Index);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    Trace("%08x - %08x\n", Start, Start + Count - 1);
+    if (VirtualAddress != NULL)
+        *VirtualAddress = (PUCHAR)Hole->VirtualAddress +
+                          (Index << PAGE_SHIFT);
 
-    if (VirtualAddress != NULL) {
-        PUCHAR  StartVa = Fdo->Buffer;
-        PMDL    Mdl = Fdo->Mdl;
-        ULONG   Index;
-        ULONG   ByteOffset;
-
-        Index = (ULONG)((PFN_NUMBER)Start - MmGetMdlPfnArray(Mdl)[0]);
-        ByteOffset = Index * PAGE_SIZE;
-        ASSERT3U(ByteOffset, <=, Mdl->ByteCount);
-
-        *VirtualAddress = StartVa + ByteOffset;
-    }
-
-    PhysicalAddress->QuadPart = Start << PAGE_SHIFT;
+    PhysicalAddress->QuadPart = Hole->PhysicalAddress.QuadPart +
+                                (Index << PAGE_SHIFT);
 
     return STATUS_SUCCESS;;
 
@@ -3319,18 +3320,18 @@ FdoFreeHole(
     IN  ULONG               Count
     )
 {
-    LONGLONG                Start;
+    PXENBUS_HOLE            Hole = &Fdo->Hole;
+    LONGLONG                Index;
     NTSTATUS                status;
 
-    ASSERT3U(PhysicalAddress.QuadPart & (PAGE_SIZE - 1), ==, 0);
-    Start = PhysicalAddress.QuadPart >> PAGE_SHIFT;
-
-    Trace("%08x - %08x\n", Start, Start + Count - 1);
+    Index = PhysicalAddress.QuadPart - Hole->PhysicalAddress.QuadPart;
+    ASSERT3U(Index & (PAGE_SIZE - 1), ==, 0);
+    Index >>= PAGE_SHIFT;
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
-                              Start,
+                              Hole->RangeSet,
+                              Index,
                               Count);
     ASSERT(NT_SUCCESS(status));
 }
@@ -3340,23 +3341,18 @@ FdoDestroyHole(
     IN  PXENBUS_FDO Fdo
     )
 {
+    PXENBUS_HOLE    Hole = &Fdo->Hole;
     PMDL            Mdl;
     PFN_NUMBER      Pfn;
-    LONGLONG        Start;
     ULONG           Count;
     ULONG           Index;
     NTSTATUS        status;
 
     Mdl = Fdo->Mdl;
-
     Pfn = MmGetMdlPfnArray(Mdl)[0];
-
-    Start = Pfn;
     Count = BYTES_TO_PAGES(Mdl->ByteCount);
+    ASSERT3U(Count, ==, 1u << PAGE_ORDER_2M);
 
-    Trace("%08x - %08x\n", Start, Start + Count - 1);
-
-    ASSERT3U(Count & ((1u << PAGE_ORDER_2M) - 1), ==, 0);
     if (MemoryPopulatePhysmap(PAGE_ORDER_2M, 1, &Pfn) == 1)
         goto done;
 
@@ -3370,15 +3366,18 @@ FdoDestroyHole(
 done:
     status = XENBUS_RANGE_SET(Get,
                               &Fdo->RangeSetInterface,
-                              Fdo->RangeSet,
-                              Start,
+                              Hole->RangeSet,
+                              0,
                               Count);
     ASSERT(NT_SUCCESS(status));
 
+    Hole->PhysicalAddress.QuadPart = 0;
+    Hole->VirtualAddress = NULL;
+
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
-                     Fdo->RangeSet);
-    Fdo->RangeSet = NULL;
+                     Hole->RangeSet);
+    Hole->RangeSet = NULL;
 }
 
 static VOID
@@ -5498,6 +5497,7 @@ __FdoAllocateBuffer(
     IN  PXENBUS_FDO     Fdo
     )
 {
+    ULONG               Count;
     ULONG               Size;
     PHYSICAL_ADDRESS    Low;
     PHYSICAL_ADDRESS    High;
@@ -5506,7 +5506,8 @@ __FdoAllocateBuffer(
     PMDL                Mdl;
     NTSTATUS            status;
 
-    Size = 2 << 20;
+    Count = 1u << PAGE_ORDER_2M;
+    Size = Count << PAGE_SHIFT;
 
     Low.QuadPart = 0;
     High = SystemMaximumPhysicalAddress();
@@ -5538,7 +5539,6 @@ __FdoAllocateBuffer(
     ASSERT3U(Mdl->ByteOffset, ==, 0);
     ASSERT3U(Mdl->ByteCount, ==, Size);
 
-    Fdo->Buffer = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
     Fdo->Mdl = Mdl;
 
     return STATUS_SUCCESS;
@@ -5559,11 +5559,16 @@ __FdoFreeBuffer(
     IN  PXENBUS_FDO Fdo
     )
 {
-    ExFreePool(Fdo->Mdl);
+    PMDL            Mdl;
+    PVOID           Buffer;
+
+    Mdl = Fdo->Mdl;
     Fdo->Mdl = NULL;
 
-    MmFreeContiguousMemory(Fdo->Buffer);
-    Fdo->Buffer = NULL;
+    ExFreePool(Mdl);
+
+    Buffer = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+    MmFreeContiguousMemory(Buffer);
 }
 
 static NTSTATUS
