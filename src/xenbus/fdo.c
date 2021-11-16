@@ -3275,6 +3275,71 @@ done:
     Hole->VirtualAddress = NULL;
 }
 
+static FORCEINLINE NTSTATUS
+__FdoCreatePciHole(
+    IN  PXENBUS_FDO                 Fdo
+    )
+{
+    PXENBUS_HOLE                    Hole = &Fdo->Hole;
+    ULONG                           Index;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
+    SIZE_T                          Size;
+    NTSTATUS                        status;
+
+    for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
+        Translated = &Fdo->TranslatedResourceList->PartialDescriptors[Index];
+
+        if (Translated->Type == CmResourceTypeMemory)
+            goto found;
+    }
+
+    status = STATUS_OBJECT_NAME_NOT_FOUND;
+    goto fail1;
+
+found:
+    Hole->PhysicalAddress = Translated->u.Memory.Start;
+    Size = Translated->u.Memory.Length;
+    Hole->Count = (ULONG)(Size >> PAGE_SHIFT);
+
+    Hole->VirtualAddress = MmMapIoSpace(Hole->PhysicalAddress,
+                                        Size,
+                                        MmCached);
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Hole->VirtualAddress == NULL)
+        goto fail2;
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    Hole->VirtualAddress = NULL;
+    Hole->Count = 0;
+    Hole->PhysicalAddress.QuadPart = 0;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+static FORCEINLINE VOID
+__FdoDestroyPciHole(
+    IN  PXENBUS_FDO Fdo
+    )
+{
+    PXENBUS_HOLE    Hole = &Fdo->Hole;
+    SIZE_T          Size;
+
+    Size = (ULONGLONG)Hole->Count << PAGE_SHIFT;
+    MmUnmapIoSpace(Hole->VirtualAddress, Size);
+
+    Hole->VirtualAddress = NULL;
+    Hole->Count = 0;
+    Hole->PhysicalAddress.QuadPart = 0;
+}
+
 static NTSTATUS
 FdoCreateHole(
     IN  PXENBUS_FDO     Fdo
@@ -3291,7 +3356,10 @@ FdoCreateHole(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = __FdoCreateMemoryHole(Fdo);
+    status = (Fdo->Mdl != NULL) ?
+             __FdoCreateMemoryHole(Fdo) :
+             __FdoCreatePciHole(Fdo);
+
     if (!NT_SUCCESS(status))
         goto fail2;
 
@@ -3304,7 +3372,10 @@ FdoCreateHole(
         goto fail3;
 
     Pfn = (PFN_NUMBER)(Hole->PhysicalAddress.QuadPart >> PAGE_SHIFT);
-    Info("%08x - %08x\n", Pfn, Pfn + Hole->Count - 1);
+    Info("(%s) %08x - %08x\n",
+         (Fdo->Mdl != NULL) ? "MEMORY" : "PCI",
+         Pfn,
+         Pfn + Hole->Count - 1);
 
     return STATUS_SUCCESS;
 
@@ -3400,7 +3471,10 @@ FdoDestroyHole(
                               Hole->Count);
     ASSERT(NT_SUCCESS(status));
 
-    __FdoDestroyMemoryHole(Fdo);
+    if (Fdo->Mdl != NULL)
+        __FdoDestroyMemoryHole(Fdo);
+    else
+        __FdoDestroyPciHole(Fdo);
 
     XENBUS_RANGE_SET(Destroy,
                      &Fdo->RangeSetInterface,
@@ -5525,6 +5599,8 @@ __FdoAllocateBuffer(
     IN  PXENBUS_FDO     Fdo
     )
 {
+    HANDLE              ParametersKey;
+    ULONG               UseMemoryHole;
     ULONG               Count;
     ULONG               Size;
     PHYSICAL_ADDRESS    Low;
@@ -5533,6 +5609,18 @@ __FdoAllocateBuffer(
     PVOID               Buffer;
     PMDL                Mdl;
     NTSTATUS            status;
+
+    ParametersKey = DriverGetParametersKey();
+
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     "UseMemoryHole",
+                                     &UseMemoryHole);
+    if (!NT_SUCCESS(status))
+        UseMemoryHole = 1;
+
+    ASSERT(Fdo->Mdl == NULL);
+    if (UseMemoryHole == 0)
+        goto done;
 
     Count = 1u << PAGE_ORDER_2M;
     Size = Count << PAGE_SHIFT;
@@ -5569,6 +5657,7 @@ __FdoAllocateBuffer(
 
     Fdo->Mdl = Mdl;
 
+done:
     return STATUS_SUCCESS;
 
 fail2:
@@ -5591,6 +5680,9 @@ __FdoFreeBuffer(
     PVOID           Buffer;
 
     Mdl = Fdo->Mdl;
+    if (Mdl == NULL)
+        return;
+
     Fdo->Mdl = NULL;
 
     ExFreePool(Mdl);
