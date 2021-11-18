@@ -166,6 +166,7 @@ struct _XENBUS_FDO {
 
     PXENBUS_DEBUG_CALLBACK          DebugCallback;
     PXENBUS_SUSPEND_CALLBACK        SuspendCallbackLate;
+    BOOLEAN                         ConsoleAcquired;
     PLOG_DISPOSITION                LogDisposition;
 };
 
@@ -3057,11 +3058,13 @@ __FdoD3ToD0(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = LogAddDisposition(DriverGetConsoleLogLevel(),
-                               FdoOutputBuffer,
-                               Fdo,
-                               &Fdo->LogDisposition);
-    ASSERT(NT_SUCCESS(status));
+    if (Fdo->ConsoleAcquired) {
+        status = LogAddDisposition(DriverGetConsoleLogLevel(),
+                                   FdoOutputBuffer,
+                                   Fdo,
+                                   &Fdo->LogDisposition);
+        ASSERT(NT_SUCCESS(status));
+    }
 
     status = XENBUS_STORE(WatchAdd,
                           &Fdo->StoreInterface,
@@ -3137,8 +3140,10 @@ fail3:
 fail2:
     Error("fail2\n");
 
-    LogRemoveDisposition(Fdo->LogDisposition);
-    Fdo->LogDisposition = NULL;
+    if (Fdo->ConsoleAcquired) {
+        LogRemoveDisposition(Fdo->LogDisposition);
+        Fdo->LogDisposition = NULL;
+    }
 
     FdoVirqTeardown(Fdo);
 
@@ -3186,8 +3191,10 @@ __FdoD0ToD3(
                         Fdo->ScanWatch);
     Fdo->ScanWatch = NULL;
 
-    LogRemoveDisposition(Fdo->LogDisposition);
-    Fdo->LogDisposition = NULL;
+    if (Fdo->ConsoleAcquired) {
+        LogRemoveDisposition(Fdo->LogDisposition);
+        Fdo->LogDisposition = NULL;
+    }
 
     FdoVirqTeardown(Fdo);
 
@@ -3569,18 +3576,18 @@ FdoD3ToD0(
         goto fail6;
 
     status = XENBUS_CONSOLE(Acquire, &Fdo->ConsoleInterface);
-    if (!NT_SUCCESS(status))
-        goto fail7;
+    if (NT_SUCCESS(status))
+        Fdo->ConsoleAcquired = TRUE;
 
     if (Fdo->BalloonInterface.Interface.Context != NULL) {
         status = XENBUS_BALLOON(Acquire, &Fdo->BalloonInterface);
         if (!NT_SUCCESS(status))
-            goto fail8;
+            goto fail7;
     }
 
     status = __FdoD3ToD0(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail8;
 
     status = XENBUS_SUSPEND(Register,
                             &Fdo->SuspendInterface,
@@ -3589,7 +3596,7 @@ FdoD3ToD0(
                             Fdo,
                             &Fdo->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail9;
 
     status = XENBUS_DEBUG(Register,
                           &Fdo->DebugInterface,
@@ -3598,7 +3605,7 @@ FdoD3ToD0(
                           Fdo,
                           &Fdo->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail10;
 
     KeLowerIrql(Irql);
 
@@ -3629,32 +3636,32 @@ not_active:
 
     return STATUS_SUCCESS;
 
-fail11:
-    Error("fail11\n");
+fail10:
+    Error("fail10\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Fdo->SuspendInterface,
                    Fdo->SuspendCallbackLate);
     Fdo->SuspendCallbackLate = NULL;
 
-fail10:
-    Error("fail10\n");
-
-    __FdoD0ToD3(Fdo);
-
 fail9:
     Error("fail9\n");
 
-    if (Fdo->BalloonInterface.Interface.Context != NULL)
-        XENBUS_BALLOON(Release, &Fdo->BalloonInterface);
+    __FdoD0ToD3(Fdo);
 
 fail8:
     Error("fail8\n");
 
-    XENBUS_CONSOLE(Release, &Fdo->ConsoleInterface);
+    if (Fdo->BalloonInterface.Interface.Context != NULL)
+        XENBUS_BALLOON(Release, &Fdo->BalloonInterface);
 
 fail7:
     Error("fail7\n");
+
+    if (Fdo->ConsoleAcquired) {
+        XENBUS_CONSOLE(Release, &Fdo->ConsoleInterface);
+        Fdo->ConsoleAcquired = FALSE;
+    }
 
     XENBUS_STORE(Release, &Fdo->StoreInterface);
 
@@ -3780,7 +3787,10 @@ FdoD0ToD3(
     if (Fdo->BalloonInterface.Interface.Context != NULL)
         XENBUS_BALLOON(Release, &Fdo->BalloonInterface);
 
-    XENBUS_CONSOLE(Release, &Fdo->ConsoleInterface);
+    if (Fdo->ConsoleAcquired) {
+        XENBUS_CONSOLE(Release, &Fdo->ConsoleInterface);
+        Fdo->ConsoleAcquired = FALSE;
+    }
 
     XENBUS_STORE(Release, &Fdo->StoreInterface);
 
