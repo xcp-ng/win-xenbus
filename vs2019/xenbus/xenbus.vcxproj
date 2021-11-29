@@ -33,6 +33,7 @@
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <AdditionalDependencies>$(ProjectDir)..\$(ConfigurationName)\$(Platform)\xen.lib;$(DDK_LIB_PATH)/libcntpr.lib;$(DDK_LIB_PATH)/procgrp.lib;$(DDK_LIB_PATH)/rtlver.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <CETCompat>true</CETCompat>
     </Link>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>

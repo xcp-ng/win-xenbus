@@ -34,6 +34,7 @@
       <AdditionalDependencies>$(DDK_LIB_PATH)/libcntpr.lib;$(DDK_LIB_PATH)/aux_klib.lib;$(DDK_LIB_PATH)/procgrp.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <ModuleDefinitionFile>../../src/xen/xen.def</ModuleDefinitionFile>
+      <CETCompat>true</CETCompat>
     </Link>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
