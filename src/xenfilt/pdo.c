@@ -523,27 +523,6 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoQueryStopDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 PdoQueryStopDevice(
     IN  PXENFILT_PDO    Pdo,
@@ -559,15 +538,10 @@ PdoQueryStopDevice(
     __PdoSetDevicePnpState(Pdo, StopPending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoQueryStopDeviceCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -576,27 +550,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoCancelStopDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -615,15 +568,10 @@ PdoCancelStopDevice(
 
     __PdoRestoreDevicePnpState(Pdo, StopPending);
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoCancelStopDeviceCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -632,27 +580,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoStopDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -682,15 +609,10 @@ done:
     __PdoSetDevicePnpState(Pdo, Stopped);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoStopDeviceCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -699,27 +621,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoQueryRemoveDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -737,15 +638,10 @@ PdoQueryRemoveDevice(
     __PdoSetDevicePnpState(Pdo, RemovePending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoQueryRemoveDeviceCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -754,27 +650,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoCancelRemoveDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -792,15 +667,10 @@ PdoCancelRemoveDevice(
     __PdoRestoreDevicePnpState(Pdo, RemovePending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoCancelRemoveDeviceCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -809,27 +679,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoSurpriseRemovalCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -847,15 +696,10 @@ PdoSurpriseRemoval(
     __PdoSetDevicePnpState(Pdo, SurpriseRemovePending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoSurpriseRemovalCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -928,27 +772,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoQueryInterfaceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 #define DEFINE_PDO_QUERY_INTERFACE(_Interface)                      \
@@ -1041,15 +864,10 @@ PdoQueryInterface(
     }
 
 done:
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoQueryInterfaceCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -1283,26 +1101,6 @@ PdoEject(
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoDispatchPnpCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 PdoDispatchPnp(
     IN  PXENFILT_PDO    Pdo,
@@ -1370,15 +1168,10 @@ PdoDispatchPnp(
         if (!NT_SUCCESS(status))
             goto fail1;
 
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp,
-                               PdoDispatchPnpCompletion,
-                               Pdo,
-                               TRUE,
-                               TRUE,
-                               TRUE);
+        IoSkipCurrentIrpStackLocation(Irp);
 
         status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+        IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
         break;
     }
 
@@ -1894,26 +1687,6 @@ PdoSystemPower(
     return STATUS_SUCCESS;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoDispatchPowerCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 PdoDispatchPower(
     IN  PXENFILT_PDO    Pdo,
@@ -1934,15 +1707,10 @@ PdoDispatchPower(
 
     if (MinorFunction != IRP_MN_QUERY_POWER &&
         MinorFunction != IRP_MN_SET_POWER) {
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp,
-                               PdoDispatchPowerCompletion,
-                               Pdo,
-                               TRUE,
-                               TRUE,
-                               TRUE);
+        IoSkipCurrentIrpStackLocation(Irp);
 
         status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+        IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
         goto done;
     }
@@ -1980,15 +1748,10 @@ PdoDispatchPower(
         break;
 
     default:
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp,
-                               PdoDispatchPowerCompletion,
-                               Pdo,
-                               TRUE,
-                               TRUE,
-                               TRUE);
+        IoSkipCurrentIrpStackLocation(Irp);
 
         status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+        IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
         break;
     }
 
@@ -2010,27 +1773,6 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-PdoDispatchDefaultCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_PDO        Pdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 PdoDispatchDefault(
     IN  PXENFILT_PDO    Pdo,
@@ -2043,15 +1785,10 @@ PdoDispatchDefault(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           PdoDispatchDefaultCompletion,
-                           Pdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Pdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Pdo->Dx->RemoveLock, Irp);
 
     return status;
 

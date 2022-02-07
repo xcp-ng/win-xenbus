@@ -581,27 +581,6 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoQueryStopDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 FdoQueryStopDevice(
     IN  PXENFILT_FDO    Fdo,
@@ -617,15 +596,10 @@ FdoQueryStopDevice(
     __FdoSetDevicePnpState(Fdo, StopPending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           FdoQueryStopDeviceCompletion,
-                           Fdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -634,27 +608,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoCancelStopDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -673,15 +626,10 @@ FdoCancelStopDevice(
 
     __FdoRestoreDevicePnpState(Fdo, StopPending);
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           FdoCancelStopDeviceCompletion,
-                           Fdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -690,27 +638,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoStopDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -739,15 +666,10 @@ FdoStopDevice(
     __FdoSetDevicePnpState(Fdo, Stopped);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           FdoStopDeviceCompletion,
-                           Fdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -756,27 +678,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoQueryRemoveDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -794,15 +695,10 @@ FdoQueryRemoveDevice(
     __FdoSetDevicePnpState(Fdo, RemovePending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           FdoQueryRemoveDeviceCompletion,
-                           Fdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -811,27 +707,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoCancelRemoveDeviceCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -849,15 +724,10 @@ FdoCancelRemoveDevice(
     __FdoRestoreDevicePnpState(Fdo, RemovePending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           FdoCancelRemoveDeviceCompletion,
-                           Fdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -866,27 +736,6 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
-}
-
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoSurpriseRemovalCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -904,15 +753,10 @@ FdoSurpriseRemoval(
     __FdoSetDevicePnpState(Fdo, SurpriseRemovePending);
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           FdoSurpriseRemovalCompletion,
-                           Fdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
     return status;
 
@@ -974,10 +818,9 @@ FdoRemoveDevice(
 done:
     __FdoSetDevicePnpState(Fdo, Deleted);
 
-    IoReleaseRemoveLockAndWait(&Fdo->Dx->RemoveLock, Irp);
-
     status = FdoForwardIrpSynchronously(Fdo, Irp);
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    IoReleaseRemoveLockAndWait(&Fdo->Dx->RemoveLock, Irp);
 
     __FdoAcquireMutex(Fdo);
     ASSERT3U(Fdo->References, !=, 0);
@@ -989,6 +832,8 @@ done:
         FdoDestroy(Fdo);
         DriverReleaseMutex();
     }
+
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
 
@@ -1159,26 +1004,6 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoDispatchPnpCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 FdoDispatchPnp(
     IN  PXENFILT_FDO    Fdo,
@@ -1234,15 +1059,10 @@ FdoDispatchPnp(
         if (!NT_SUCCESS(status))
             goto fail1;
 
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp,
-                               FdoDispatchPnpCompletion,
-                               Fdo,
-                               TRUE,
-                               TRUE,
-                               TRUE);
+        IoSkipCurrentIrpStackLocation(Irp);
 
         status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+        IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
         break;
     }
 
@@ -1754,26 +1574,6 @@ FdoSystemPower(
     return STATUS_SUCCESS;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoDispatchPowerCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 FdoDispatchPower(
     IN  PXENFILT_FDO    Fdo,
@@ -1794,15 +1594,10 @@ FdoDispatchPower(
 
     if (MinorFunction != IRP_MN_QUERY_POWER &&
         MinorFunction != IRP_MN_SET_POWER) {
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp,
-                               FdoDispatchPowerCompletion,
-                               Fdo,
-                               TRUE,
-                               TRUE,
-                               TRUE);
+        IoSkipCurrentIrpStackLocation(Irp);
 
         status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+        IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
         goto done;
     }
@@ -1840,15 +1635,10 @@ FdoDispatchPower(
         break;
 
     default:
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp,
-                               FdoDispatchPowerCompletion,
-                               Fdo,
-                               TRUE,
-                               TRUE,
-                               TRUE);
+        IoSkipCurrentIrpStackLocation(Irp);
 
         status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+        IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
         break;
     }
 
@@ -1870,27 +1660,6 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
-static NTSTATUS
-FdoDispatchDefaultCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
-    )
-{
-    PXENFILT_FDO        Fdo = Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        IoMarkIrpPending(Irp);
-
-    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
-
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS
 FdoDispatchDefault(
     IN  PXENFILT_FDO    Fdo,
@@ -1903,15 +1672,10 @@ FdoDispatchDefault(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-    IoSetCompletionRoutine(Irp,
-                           FdoDispatchDefaultCompletion,
-                           Fdo,
-                           TRUE,
-                           TRUE,
-                           TRUE);
+    IoSkipCurrentIrpStackLocation(Irp);
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    IoReleaseRemoveLock(&Fdo->Dx->RemoveLock, Irp);
 
     return status;
 
