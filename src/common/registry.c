@@ -641,8 +641,15 @@ RegistryEnumerateValues(
         Ansi.MaximumLength = (USHORT)((Basic->NameLength / sizeof (WCHAR)) + sizeof (CHAR));
         Ansi.Buffer = __RegistryAllocate(Ansi.MaximumLength);
 
+        status = STATUS_NO_MEMORY;
+        if (Ansi.Buffer == NULL)
+            goto fail6;
+
         status = RtlUnicodeStringToAnsiString(&Ansi, &Unicode, FALSE);
-        ASSERT(NT_SUCCESS(status));
+        if (!NT_SUCCESS(status)) {
+            __RegistryFree(Ansi.Buffer);
+            goto fail7;
+        }
 
         Ansi.Length = (USHORT)(strlen(Ansi.Buffer) * sizeof (CHAR));        
 
@@ -651,7 +658,7 @@ RegistryEnumerateValues(
         __RegistryFree(Ansi.Buffer);
 
         if (!NT_SUCCESS(status))
-            goto fail6;
+            goto fail8;
     }
 
     __RegistryFree(Basic);
@@ -660,6 +667,8 @@ RegistryEnumerateValues(
 
     return STATUS_SUCCESS;
 
+fail8:
+fail7:
 fail6:
 fail5:
     __RegistryFree(Basic);
