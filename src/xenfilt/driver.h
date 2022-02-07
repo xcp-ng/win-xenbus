@@ -37,11 +37,6 @@ DriverGetDriverObject(
     VOID
     );
 
-extern HANDLE
-DriverGetParametersKey(
-    VOID
-    );
-
 extern VOID
 DriverAcquireMutex(
     VOID

@@ -47,7 +47,6 @@
 
 typedef struct _XENFILT_DRIVER {
     PDRIVER_OBJECT              DriverObject;
-    HANDLE                      ParametersKey;
 
     MUTEX                       Mutex;
     LIST_ENTRY                  List;
@@ -113,28 +112,31 @@ DriverGetDriverObject(
     return __DriverGetDriverObject();
 }
 
-static FORCEINLINE VOID
-__DriverSetParametersKey(
-    IN  HANDLE  Key
+static FORCEINLINE NTSTATUS
+__DriverOpenParametersKey(
+    OUT PHANDLE     ParametersKey
     )
 {
-    Driver.ParametersKey = Key;
-}
+    HANDLE          ServiceKey;
+    NTSTATUS        status;
 
-static FORCEINLINE HANDLE
-__DriverGetParametersKey(
-    VOID
-    )
-{
-    return Driver.ParametersKey;
-}
+    status = RegistryOpenServiceKey(KEY_READ, &ServiceKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
-HANDLE
-DriverGetParametersKey(
-    VOID
-    )
-{
-    return __DriverGetParametersKey();
+    status = RegistryOpenSubKey(ServiceKey, "Parameters", KEY_READ, ParametersKey);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    RegistryCloseKey(ServiceKey);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    RegistryCloseKey(ServiceKey);
+
+fail1:
+    return status;
 }
 
 static FORCEINLINE VOID
@@ -244,7 +246,9 @@ __DriverGetActive(
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    ParametersKey = __DriverGetParametersKey();
+    status = __DriverOpenParametersKey(&ParametersKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     status = RtlStringCbPrintfA(Name, MAXNAMELEN, "Active%s", Key);
     ASSERT(NT_SUCCESS(status));
@@ -254,14 +258,14 @@ __DriverGetActive(
                                   NULL,
                                   &Ansi);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     Length = Ansi[0].Length + sizeof (CHAR);
     *Value = __AllocatePoolWithTag(NonPagedPool, Length, 'TLIF');
 
     status = STATUS_NO_MEMORY;
     if (*Value == NULL)
-        goto fail2;
+        goto fail3;
 
     status = RtlStringCbPrintfA(*Value,
                                 Length,
@@ -271,12 +275,19 @@ __DriverGetActive(
 
     RegistryFreeSzValue(Ansi);
 
+    RegistryCloseKey(ParametersKey);
+
     Trace("<====\n");
 
     return STATUS_SUCCESS;
 
+fail3:
+    Error("fail3\n");
+
 fail2:
     Error("fail2\n");
+
+    RegistryCloseKey(ParametersKey);
 
 fail1:
     if (status != STATUS_OBJECT_NAME_NOT_FOUND)
@@ -409,8 +420,6 @@ DriverUnload(
     IN  PDRIVER_OBJECT  DriverObject
     )
 {
-    HANDLE              ParametersKey;
-
     ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
 
     Trace("====>\n");
@@ -427,10 +436,6 @@ DriverUnload(
 
     EmulatedTeardown(Driver.EmulatedContext);
     Driver.EmulatedContext = NULL;
-
-    ParametersKey = __DriverGetParametersKey();
-    __DriverSetParametersKey(NULL);
-    RegistryCloseKey(ParametersKey);
 
     RegistryTeardown();
 
@@ -744,8 +749,11 @@ DriverGetEmulatedType(
     HANDLE                          ParametersKey;
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     ULONG                           Index;
+    NTSTATUS                        status;
 
-    ParametersKey = __DriverGetParametersKey();
+    status = __DriverOpenParametersKey(&ParametersKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     Type = XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
     Index = 0;
@@ -753,7 +761,6 @@ DriverGetEmulatedType(
     do {
         ULONG           Length;
         PANSI_STRING    Ansi;
-        NTSTATUS        status;
 
         Length = (ULONG)strlen(&Id[Index]);
         if (Length == 0)
@@ -779,7 +786,14 @@ DriverGetEmulatedType(
         Index += Length + 1;
     } while (Type == XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN);
 
+    RegistryCloseKey(ParametersKey);
+
     return Type;
+
+fail1:
+    Error("fail1 %08x\n", status);
+
+    return XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN;
 }
 
 DRIVER_ADD_DEVICE   DriverAddDevice;
@@ -886,8 +900,6 @@ DriverEntry(
     IN  PUNICODE_STRING         RegistryPath
     )
 {
-    HANDLE                      ServiceKey;
-    HANDLE                      ParametersKey;
     PXENFILT_EMULATED_CONTEXT   EmulatedContext;
     ULONG                       Index;
     NTSTATUS                    status;
@@ -926,19 +938,9 @@ DriverEntry(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = RegistryOpenServiceKey(KEY_READ, &ServiceKey);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = RegistryOpenSubKey(ServiceKey, "Parameters", KEY_READ, &ParametersKey);
-    if (!NT_SUCCESS(status))
-        goto fail3;
-
-    __DriverSetParametersKey(ParametersKey);
-
     status = EmulatedInitialize(&EmulatedContext);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail2;
 
     __DriverSetEmulatedContext(EmulatedContext);
 
@@ -947,8 +949,6 @@ DriverEntry(
                                   (PINTERFACE)&Driver.EmulatedInterface,
                                   sizeof (Driver.EmulatedInterface));
     ASSERT(NT_SUCCESS(status));
-
-    RegistryCloseKey(ServiceKey);
 
     DriverObject->DriverExtension->AddDevice = DriverAddDevice;
 
@@ -965,17 +965,6 @@ DriverEntry(
 done:
     Trace("<====\n");
     return STATUS_SUCCESS;
-
-fail4:
-    Error("fail4\n");
-
-    __DriverSetParametersKey(NULL);
-    RegistryCloseKey(ParametersKey);
-
-fail3:
-    Error("fail3\n");
-
-    RegistryCloseKey(ServiceKey);
 
 fail2:
     Error("fail2\n");
