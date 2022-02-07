@@ -5695,9 +5695,10 @@ __FdoFreeBuffer(
 
     Fdo->Mdl = NULL;
 
+    Buffer = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+
     ExFreePool(Mdl);
 
-    Buffer = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
     MmFreeContiguousMemory(Buffer);
 }
 
