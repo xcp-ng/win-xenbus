@@ -639,6 +639,8 @@ SharedInfoAcquire(
         Processor = &Context->Processor[Index];
 
         status = SystemProcessorVcpuId(Index, &Processor->vcpu_id);
+        if (status == STATUS_NOT_SUPPORTED)
+            continue;
         if (!NT_SUCCESS(status))
             goto fail7;
 

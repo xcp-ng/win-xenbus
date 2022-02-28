@@ -514,13 +514,14 @@ EvtchnFifoAcquire(
             goto fail1;
 
         status = SystemProcessorVcpuId(Index, &vcpu_id);
-        ASSERT(NT_SUCCESS(status));
+        if (!NT_SUCCESS(status))
+            goto fail2;
 
         Pfn = MmGetMdlPfnArray(Mdl)[0];
 
         status = EventChannelInitControl(Pfn, vcpu_id);
         if (!NT_SUCCESS(status))
-            goto fail2;
+            goto fail3;
 
         Address.QuadPart = (ULONGLONG)Pfn << PAGE_SHIFT;
 
@@ -541,6 +542,9 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
 
 fail2:
     Error("fail2\n");

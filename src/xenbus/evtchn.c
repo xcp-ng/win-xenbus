@@ -284,17 +284,21 @@ EvtchnOpenVirq(
         goto fail1;
 
     status = SystemProcessorVcpuId(Cpu, &vcpu_id);
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail2;
 
     status = EventChannelBindVirq(Index, vcpu_id, &LocalPort);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     Channel->Parameters.Virq.Index = Index;
 
     Channel->LocalPort = LocalPort;
 
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
 
 fail2:
     Error("fail2\n");
@@ -769,11 +773,12 @@ EvtchnBind(
     LocalPort = Channel->LocalPort;
 
     status = SystemProcessorVcpuId(Cpu, &vcpu_id);
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail2;
 
     status = EventChannelBindVirtualCpu(LocalPort, vcpu_id);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     Channel->Cpu = Cpu;
 
@@ -783,6 +788,9 @@ done:
     KeReleaseSpinLock(&Channel->Lock, Irql);
 
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
 
 fail2:
     Error("fail2\n");
@@ -1292,7 +1300,8 @@ EvtchnInterruptEnable(
             continue;
 
         status = SystemProcessorVcpuId(Cpu, &vcpu_id);
-        ASSERT(NT_SUCCESS(status));
+        if (!NT_SUCCESS(status))
+            continue;
 
         Vector = FdoGetInterruptVector(Context->Fdo, Processor->Interrupt);
 
@@ -1359,7 +1368,8 @@ EvtchnInterruptDisable(
             continue;
 
         status = SystemProcessorVcpuId(Cpu, &vcpu_id);
-        ASSERT(NT_SUCCESS(status));
+        if (!NT_SUCCESS(status))
+            continue;
 
         (VOID) HvmSetEvtchnUpcallVector(vcpu_id, 0);
         Processor->UpcallEnabled = FALSE;

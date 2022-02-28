@@ -54,6 +54,7 @@ typedef struct _SYSTEM_PROCESSOR {
     CHAR        Manufacturer[13];
     UCHAR       ApicID;
     UCHAR       ProcessorID;
+    BOOLEAN     Initialized;
     NTSTATUS    Status;
     KEVENT      Event;
     vcpu_info_t *Vcpu;
@@ -643,9 +644,14 @@ SystemProcessorVcpuId(
     if (Cpu >= Context->ProcessorCount)
         goto fail1;
 
+    status = STATUS_NOT_SUPPORTED;
+    if (!Processor->Initialized)
+        goto fail2;
+
     *vcpu_id = Processor->ProcessorID;
     return STATUS_SUCCESS;
 
+fail2:
 fail1:
     return status;
 }
@@ -666,14 +672,18 @@ SystemProcessorVcpuInfo(
         goto fail1;
 
     status = STATUS_NOT_SUPPORTED;
-    if (Processor->Registered == NULL)
+    if (!Processor->Initialized)
         goto fail2;
+
+    if (Processor->Registered == NULL)
+        goto fail3;
 
     ASSERT(*Processor->Registered);
     *Vcpu = Processor->Vcpu;
 
     return STATUS_SUCCESS;
 
+fail3:
 fail2:
 fail1:
     return status;
@@ -701,6 +711,8 @@ SystemProcessorRegisterVcpuInfo(
     status = STATUS_UNSUCCESSFUL;
     if (Cpu >= Context->ProcessorCount)
         goto fail1;
+
+    ASSERT(Processor->Initialized);
 
     ASSERT(Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA);
     MdlMappedSystemVa = Mdl->MappedSystemVa;
@@ -864,6 +876,7 @@ SystemProcessorChangeCallback(
         Processor = &Context->Processor[Cpu];
 
         KeInitializeEvent(&Processor->Event, NotificationEvent, FALSE);
+        Processor->Initialized = TRUE;
 
         KeInitializeDpc(&Processor->Dpc, SystemProcessorDpc, NULL);
         KeSetImportanceDpc(&Processor->Dpc, HighImportance);
@@ -991,9 +1004,12 @@ SystemDeregisterProcessorChangeCallback(
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
 
+        // Should check Processor->Initialized, but these operations are harmless to
+        // uninitialized SYSTEM_PROCESSOR structures.
         SystemProcessorDeregisterVcpuInfo(Cpu);
         SystemProcessorTeardown(Cpu);
 
+        Processor->Initialized = FALSE;
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
         RtlZeroMemory(&Processor->Event, sizeof (KEVENT));
         Processor->Status = 0;
@@ -1214,6 +1230,9 @@ SystemCheckProcessors(
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++)
     {
         PSYSTEM_PROCESSOR   Processor = &Context->Processor[Cpu];
+
+        if (!Processor->Initialized)
+            continue;
 
         (VOID) KeWaitForSingleObject(&Processor->Event,
                                      Executive,
