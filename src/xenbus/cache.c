@@ -688,12 +688,12 @@ CacheSpill(
     if (Cache->Count <= Count)
         goto done;
 
-    ListEntry = Cache->SlabList.Blink;
-    while (ListEntry != &Cache->SlabList) {
-        PLIST_ENTRY         Prev = ListEntry->Blink;
+    while (!IsListEmpty(&Cache->SlabList)) {
         PXENBUS_CACHE_SLAB  Slab;
 
-        ASSERT(!IsListEmpty(&Cache->SlabList));
+        // Actual list removal is done in CacheDestroySlab()
+        ListEntry = Cache->SlabList.Blink;
+        ASSERT(ListEntry != &Cache->SlabList);
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
@@ -705,8 +705,6 @@ CacheSpill(
             break;
 
         CacheDestroySlab(Cache, Slab);
-
-        ListEntry = Prev;
     }
 
     CacheAudit(Cache);
