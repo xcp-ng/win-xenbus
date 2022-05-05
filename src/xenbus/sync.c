@@ -88,7 +88,6 @@ typedef enum _SYNC_REQUEST {
 
 typedef struct _SYNC_PROCESSOR {
     KDPC            Dpc;
-    SYNC_REQUEST    Request;
 } SYNC_PROCESSOR, *PSYNC_PROCESSOR;
 
 typedef struct  _SYNC_CONTEXT {
@@ -96,6 +95,7 @@ typedef struct  _SYNC_CONTEXT {
     SYNC_CALLBACK       Early;
     SYNC_CALLBACK       Late;
     LONG                ProcessorCount;
+    SYNC_REQUEST        Request;
     LONG                CompletionCount;
     SYNC_PROCESSOR      Processor[1];
 } SYNC_CONTEXT, *PSYNC_CONTEXT;
@@ -228,6 +228,7 @@ SyncWorker(
     ULONG               Index;
     PSYNC_PROCESSOR     Processor;
     PROCESSOR_NUMBER    ProcNumber;
+    SYNC_REQUEST        Request;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(_Context);
@@ -243,34 +244,35 @@ SyncWorker(
     Trace("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
     InterlockedIncrement(&Context->CompletionCount);
 
+    Request = SYNC_REQUEST_NONE;
     for (;;) {
         KeMemoryBarrier();
 
-        if (Processor->Request == SYNC_REQUEST_EXIT) {
+        if (Context->Request == SYNC_REQUEST_EXIT) {
             if (Context->Late != NULL)
                 Context->Late(Context->Argument, Index);
 
             break;
         }
 
-        if (Processor->Request == SYNC_REQUEST_NONE) {
+        if (Context->Request == Request) {
             _mm_pause();
             continue;
         }
 
-        if (Processor->Request == SYNC_REQUEST_DISABLE_INTERRUPTS) {
+        if (Context->Request == SYNC_REQUEST_DISABLE_INTERRUPTS) {
             NTSTATUS    status = __SyncProcessorDisableInterrupts();
                     
             if (!NT_SUCCESS(status))
                 continue;
-        } else if (Processor->Request == SYNC_REQUEST_ENABLE_INTERRUPTS) {
+        } else if (Context->Request == SYNC_REQUEST_ENABLE_INTERRUPTS) {
             if (Context->Early != NULL)
                 Context->Early(Context->Argument, Index);
 
             __SyncProcessorEnableInterrupts();
         }
 
-        Processor->Request = SYNC_REQUEST_NONE;
+        Request = Context->Request;
     }
 
     Trace("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
@@ -347,7 +349,6 @@ SyncDisableInterrupts(
     )
 {
     PSYNC_CONTEXT   Context = SyncContext;
-    LONG            Index;
     NTSTATUS        status;
 
     Trace("====>\n");
@@ -357,12 +358,7 @@ SyncDisableInterrupts(
     Context->CompletionCount = 0;
     KeMemoryBarrier();
 
-    for (Index = 0; Index < Context->ProcessorCount; Index++) {
-        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
-
-        Processor->Request = SYNC_REQUEST_DISABLE_INTERRUPTS;
-    }
-
+    Context->Request = SYNC_REQUEST_DISABLE_INTERRUPTS;
     KeMemoryBarrier();
 
     for (;;) {
@@ -381,7 +377,6 @@ SyncEnableInterrupts(
     )
 {
     PSYNC_CONTEXT   Context = SyncContext;
-    LONG            Index;
 
     ASSERT(SyncOwner >= 0);
 
@@ -393,12 +388,7 @@ SyncEnableInterrupts(
 
     __SyncProcessorEnableInterrupts();
 
-    for (Index = 0; Index < Context->ProcessorCount; Index++) {
-        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
-
-        Processor->Request = SYNC_REQUEST_ENABLE_INTERRUPTS;
-    }
-
+    Context->Request = SYNC_REQUEST_ENABLE_INTERRUPTS;
     KeMemoryBarrier();
 
     __SyncWait();
@@ -414,7 +404,6 @@ SyncRelease(
     )
 {
     PSYNC_CONTEXT   Context = SyncContext;
-    LONG            Index;
 
     Trace("====>\n");
 
@@ -428,12 +417,7 @@ SyncRelease(
 
     InterlockedIncrement(&Context->CompletionCount);
 
-    for (Index = 0; Index < Context->ProcessorCount; Index++) {
-        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
-
-        Processor->Request = SYNC_REQUEST_EXIT;
-    }
-
+    Context->Request = SYNC_REQUEST_EXIT;
     KeMemoryBarrier();
 
     __SyncWait();
