@@ -79,10 +79,16 @@
 __declspec(allocate("sync"))
 static UCHAR        __Section[PAGE_SIZE];
 
-typedef struct  _SYNC_PROCESSOR {
-    KDPC                Dpc;
-    BOOLEAN             DisableInterrupts;
-    BOOLEAN             Exit;
+typedef enum _SYNC_REQUEST {
+    SYNC_REQUEST_NONE,
+    SYNC_REQUEST_DISABLE_INTERRUPTS,
+    SYNC_REQUEST_ENABLE_INTERRUPTS,
+    SYNC_REQUEST_EXIT,
+} SYNC_REQUEST;
+
+typedef struct _SYNC_PROCESSOR {
+    KDPC            Dpc;
+    SYNC_REQUEST    Request;
 } SYNC_PROCESSOR, *PSYNC_PROCESSOR;
 
 typedef struct  _SYNC_CONTEXT {
@@ -219,7 +225,6 @@ SyncWorker(
     )
 {
     PSYNC_CONTEXT       Context = SyncContext;
-    BOOLEAN             InterruptsDisabled;
     ULONG               Index;
     PSYNC_PROCESSOR     Processor;
     PROCESSOR_NUMBER    ProcNumber;
@@ -229,7 +234,6 @@ SyncWorker(
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
-    InterruptsDisabled = FALSE;
     Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
 
     ASSERT(SyncOwner >= 0 && Index != (ULONG)SyncOwner);
@@ -240,41 +244,37 @@ SyncWorker(
     InterlockedIncrement(&Context->CompletionCount);
 
     for (;;) {
-        if (Processor->Exit) {
+        KeMemoryBarrier();
+
+        if (Processor->Request == SYNC_REQUEST_EXIT) {
             if (Context->Late != NULL)
                 Context->Late(Context->Argument, Index);
 
             break;
         }
 
-        if (Processor->DisableInterrupts == InterruptsDisabled) {
+        if (Processor->Request == SYNC_REQUEST_NONE) {
             _mm_pause();
-            KeMemoryBarrier();
-
             continue;
         }
 
-        if (Processor->DisableInterrupts) {
+        if (Processor->Request == SYNC_REQUEST_DISABLE_INTERRUPTS) {
             NTSTATUS    status = __SyncProcessorDisableInterrupts();
                     
             if (!NT_SUCCESS(status))
                 continue;
-
-            InterruptsDisabled = TRUE;
-        } else {
-            InterruptsDisabled = FALSE;
-
+        } else if (Processor->Request == SYNC_REQUEST_ENABLE_INTERRUPTS) {
             if (Context->Early != NULL)
                 Context->Early(Context->Argument, Index);
 
             __SyncProcessorEnableInterrupts();
         }
+
+        Processor->Request = SYNC_REQUEST_NONE;
     }
 
     Trace("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
     InterlockedIncrement(&Context->CompletionCount);
-
-    ASSERT(!InterruptsDisabled);
 }
 
 __drv_maxIRQL(DISPATCH_LEVEL)
@@ -360,7 +360,7 @@ SyncDisableInterrupts(
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
 
-        Processor->DisableInterrupts = TRUE;
+        Processor->Request = SYNC_REQUEST_DISABLE_INTERRUPTS;
     }
 
     KeMemoryBarrier();
@@ -396,7 +396,7 @@ SyncEnableInterrupts(
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
 
-        Processor->DisableInterrupts = FALSE;
+        Processor->Request = SYNC_REQUEST_ENABLE_INTERRUPTS;
     }
 
     KeMemoryBarrier();
@@ -431,7 +431,7 @@ SyncRelease(
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
 
-        Processor->Exit = TRUE;
+        Processor->Request = SYNC_REQUEST_EXIT;
     }
 
     KeMemoryBarrier();
