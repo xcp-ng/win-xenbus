@@ -122,11 +122,92 @@ __SyncRelease(
     ASSERT3U(Old, ==, Index);
 }
 
-
 KDEFERRED_ROUTINE   SyncWorker;
 
 #pragma intrinsic(_enable)
 #pragma intrinsic(_disable)
+
+#pragma warning(push)
+#pragma warning(disable:28167) // Function changes IRQL and does not restore it before exit
+#pragma warning(disable:28156) // Actual IRQL is inconsistent with required IRQL
+
+static FORCEINLINE NTSTATUS
+__SyncProcessorDisableInterrupts(
+    VOID
+    )
+{
+    PSYNC_CONTEXT   Context = SyncContext;
+    ULONG           Attempts;
+    LONG            Old;
+    LONG            New;
+    NTSTATUS        status;
+
+    (VOID) KfRaiseIrql(HIGH_LEVEL);
+    status = STATUS_SUCCESS;
+
+    InterlockedIncrement(&Context->CompletionCount);
+
+    Attempts = 0;
+    while (++Attempts <= 1000) {
+        KeMemoryBarrier();
+
+        if (Context->CompletionCount == Context->ProcessorCount)
+            break;
+
+        _mm_pause();
+    }
+
+    do {
+        Old = Context->CompletionCount;
+        New = Old - 1;
+
+        if (Old == Context->ProcessorCount)
+            break;
+    } while (InterlockedCompareExchange(&Context->CompletionCount, New, Old) != Old);
+
+    if (Old < Context->ProcessorCount) {
+#pragma prefast(suppress:28138) // Use constant rather than variable
+        KeLowerIrql(DISPATCH_LEVEL);
+        status = STATUS_UNSUCCESSFUL;
+    }
+
+    if (NT_SUCCESS(status))
+        _disable();
+
+    return status;
+}
+
+static FORCEINLINE VOID
+__SyncProcessorEnableInterrupts(
+    VOID
+    )
+{
+    PSYNC_CONTEXT   Context = SyncContext;
+
+    _enable();
+
+#pragma prefast(suppress:28138) // Use constant rather than variable
+    KeLowerIrql(DISPATCH_LEVEL);
+
+    InterlockedIncrement(&Context->CompletionCount);
+}
+
+static FORCEINLINE VOID
+__SyncWait(
+    VOID
+    )
+{
+    PSYNC_CONTEXT   Context = SyncContext;
+
+    for (;;) {
+        KeMemoryBarrier();
+
+        if (Context->CompletionCount == Context->ProcessorCount)
+            break;
+
+        _mm_pause();
+    }
+}
 
 VOID
 #pragma prefast(suppress:28166) // Function does not restore IRQL
@@ -174,44 +255,10 @@ SyncWorker(
         }
 
         if (Processor->DisableInterrupts) {
-            ULONG       Attempts;
-            NTSTATUS    status;
-
-            (VOID) KfRaiseIrql(HIGH_LEVEL);
-            status = STATUS_SUCCESS;
-
-            InterlockedIncrement(&Context->CompletionCount);
-
-            Attempts = 0;
-            while (Context->CompletionCount < Context->ProcessorCount) {
-                _mm_pause();
-                KeMemoryBarrier();
-
-                if (++Attempts > 1000) {
-                    LONG    Old;
-                    LONG    New;
-
-                    do {
-                        Old = Context->CompletionCount;
-                        New = Old - 1;
-
-                        if (Old == Context->ProcessorCount)
-                            break;
-                    } while (InterlockedCompareExchange(&Context->CompletionCount, New, Old) != Old);
-
-                    if (Old < Context->ProcessorCount) {
-#pragma prefast(suppress:28138) // Use constant rather than variable
-                        KeLowerIrql(DISPATCH_LEVEL);
-                        status = STATUS_UNSUCCESSFUL;
-                        break;
-                    }
-                }
-            }
+            NTSTATUS    status = __SyncProcessorDisableInterrupts();
                     
             if (!NT_SUCCESS(status))
                 continue;
-
-            _disable();
 
             InterruptsDisabled = TRUE;
         } else {
@@ -220,12 +267,7 @@ SyncWorker(
             if (Context->Early != NULL)
                 Context->Early(Context->Argument, Index);
 
-            _enable();
-
-#pragma prefast(suppress:28138) // Use constant rather than variable
-            KeLowerIrql(DISPATCH_LEVEL);
-
-            InterlockedIncrement(&Context->CompletionCount);
+            __SyncProcessorEnableInterrupts();
         }
     }
 
@@ -289,12 +331,10 @@ SyncCapture(
         KeInsertQueueDpc(&Processor->Dpc, NULL, NULL);
     }
 
-    InterlockedIncrement(&Context->CompletionCount);
+    KeMemoryBarrier();
 
-    while (Context->CompletionCount < Context->ProcessorCount) {
-        _mm_pause();
-        KeMemoryBarrier();
-    }
+    InterlockedIncrement(&Context->CompletionCount);
+    __SyncWait();
 
     Trace("<==== (%u:%u)\n", Group, Number);
 }
@@ -308,7 +348,6 @@ SyncDisableInterrupts(
 {
     PSYNC_CONTEXT   Context = SyncContext;
     LONG            Index;
-    ULONG           Attempts;
     NTSTATUS        status;
 
     Trace("====>\n");
@@ -326,47 +365,13 @@ SyncDisableInterrupts(
 
     KeMemoryBarrier();
 
-again:
-    (VOID) KfRaiseIrql(HIGH_LEVEL);
-    status = STATUS_SUCCESS;
+    for (;;) {
+        status = __SyncProcessorDisableInterrupts();
+        if (NT_SUCCESS(status))
+            break;
 
-    InterlockedIncrement(&Context->CompletionCount);
-
-    Attempts = 0;
-    while (Context->CompletionCount < Context->ProcessorCount) {
-        _mm_pause();
-        KeMemoryBarrier();
-
-        if (++Attempts > 1000) {
-            LONG    Old;
-            LONG    New;
-
-            do {
-                Old = Context->CompletionCount;
-                New = Old - 1;
-
-                if (Old == Context->ProcessorCount)
-                    break;
-            } while (InterlockedCompareExchange(&Context->CompletionCount, New, Old) != Old);
-
-            if (Old < Context->ProcessorCount) {
-                LogPrintf(LOG_LEVEL_WARNING,
-                          "SYNC: %d < %d\n",
-                          Old,
-                          Context->ProcessorCount);
-
-#pragma prefast(suppress:28138) // Use constant rather than variable
-                KeLowerIrql(DISPATCH_LEVEL);
-                status = STATUS_UNSUCCESSFUL;
-                break;
-            }
-        }
+        LogPrintf(LOG_LEVEL_WARNING, "SYNC: RE-TRY\n");
     }
-            
-    if (!NT_SUCCESS(status))
-        goto again;
-
-    _disable();
 }
 
 __drv_requiresIRQL(HIGH_LEVEL)
@@ -376,7 +381,6 @@ SyncEnableInterrupts(
     )
 {
     PSYNC_CONTEXT   Context = SyncContext;
-    KIRQL           Irql;
     LONG            Index;
 
     ASSERT(SyncOwner >= 0);
@@ -384,13 +388,10 @@ SyncEnableInterrupts(
     if (Context->Early != NULL)
         Context->Early(Context->Argument, SyncOwner);
 
-    _enable();
-
-    Irql = KeGetCurrentIrql();
-    ASSERT3U(Irql, ==, HIGH_LEVEL);
-
     Context->CompletionCount = 0;
     KeMemoryBarrier();
+
+    __SyncProcessorEnableInterrupts();
 
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
@@ -400,15 +401,7 @@ SyncEnableInterrupts(
 
     KeMemoryBarrier();
 
-    InterlockedIncrement(&Context->CompletionCount);
-
-    while (Context->CompletionCount < Context->ProcessorCount) {
-        _mm_pause();
-        KeMemoryBarrier();
-    }
-
-#pragma prefast(suppress:28138) // Use constant rather than variable
-    KeLowerIrql(DISPATCH_LEVEL);
+    __SyncWait();
 
     Trace("<====\n");
 }
@@ -433,6 +426,8 @@ SyncRelease(
     Context->CompletionCount = 0;
     KeMemoryBarrier();
 
+    InterlockedIncrement(&Context->CompletionCount);
+
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
 
@@ -441,12 +436,7 @@ SyncRelease(
 
     KeMemoryBarrier();
 
-    InterlockedIncrement(&Context->CompletionCount);
-
-    while (Context->CompletionCount < Context->ProcessorCount) {
-        _mm_pause();
-        KeMemoryBarrier();
-    }
+    __SyncWait();
 
     RtlZeroMemory(Context, PAGE_SIZE);
 
@@ -454,3 +444,5 @@ SyncRelease(
 
     Trace("<====\n");
 }
+
+#pragma warning(pop)
