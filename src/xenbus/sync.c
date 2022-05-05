@@ -82,6 +82,7 @@ static UCHAR        __Section[PAGE_SIZE];
 typedef enum _SYNC_REQUEST {
     SYNC_REQUEST_NONE,
     SYNC_REQUEST_DISABLE_INTERRUPTS,
+    SYNC_REQUEST_RUN_EARLY,
     SYNC_REQUEST_ENABLE_INTERRUPTS,
     SYNC_REQUEST_EXIT,
 } SYNC_REQUEST;
@@ -180,6 +181,19 @@ __SyncProcessorDisableInterrupts(
 }
 
 static FORCEINLINE VOID
+__SyncProcessorRunEarly(
+    IN  ULONG       Index
+    )
+{
+    PSYNC_CONTEXT   Context = SyncContext;
+
+    if (Context->Early != NULL)
+        Context->Early(Context->Argument, Index);
+
+    InterlockedIncrement(&Context->CompletionCount);
+}
+
+static FORCEINLINE VOID
 __SyncProcessorEnableInterrupts(
     VOID
     )
@@ -258,10 +272,9 @@ SyncWorker(
                     
             if (!NT_SUCCESS(status))
                 continue;
+        } else if (Context->Request == SYNC_REQUEST_RUN_EARLY) {
+            __SyncProcessorRunEarly(Index);
         } else if (Context->Request == SYNC_REQUEST_ENABLE_INTERRUPTS) {
-            if (Context->Early != NULL)
-                Context->Early(Context->Argument, Index);
-
             __SyncProcessorEnableInterrupts();
         }
 
@@ -364,6 +377,26 @@ SyncDisableInterrupts(
 }
 
 __drv_requiresIRQL(HIGH_LEVEL)
+VOID
+SyncRunEarly(
+    )
+{
+    PSYNC_CONTEXT   Context = SyncContext;
+
+    ASSERT(SyncOwner >= 0);
+
+    Context->CompletionCount = 0;
+    KeMemoryBarrier();
+
+    __SyncProcessorRunEarly(SyncOwner);
+
+    Context->Request = SYNC_REQUEST_RUN_EARLY;
+    KeMemoryBarrier();
+
+    __SyncWait();
+}
+
+__drv_requiresIRQL(HIGH_LEVEL)
 __drv_setsIRQL(DISPATCH_LEVEL)
 VOID
 SyncEnableInterrupts(
@@ -372,9 +405,6 @@ SyncEnableInterrupts(
     PSYNC_CONTEXT   Context = SyncContext;
 
     ASSERT(SyncOwner >= 0);
-
-    if (Context->Early != NULL)
-        Context->Early(Context->Argument, SyncOwner);
 
     Context->CompletionCount = 0;
     KeMemoryBarrier();

@@ -60,6 +60,13 @@ SyncDisableInterrupts(
 
 extern
 __drv_requiresIRQL(HIGH_LEVEL)
+VOID
+SyncRunEarly(
+    VOID
+    );
+
+extern
+__drv_requiresIRQL(HIGH_LEVEL)
 __drv_setsIRQL(DISPATCH_LEVEL)
 VOID
 SyncEnableInterrupts(

@@ -284,6 +284,7 @@ SuspendTrigger(
 
     Context->Success = NT_SUCCESS(status) ? TRUE : FALSE;
 
+    SyncRunEarly();
     SyncEnableInterrupts();
     SyncRelease();
 
