@@ -287,6 +287,8 @@ SuspendTrigger(
     SyncEnableInterrupts();
     SyncRelease();
 
+    Context->Success = FALSE;
+
     LogPrintf(LOG_LEVEL_INFO, "SUSPEND: <====\n");
 
     KeLowerIrql(Irql);
