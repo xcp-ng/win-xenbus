@@ -76,6 +76,13 @@ SyncEnableInterrupts(
 extern
 __drv_requiresIRQL(DISPATCH_LEVEL)
 VOID
+SyncRunLate(
+    VOID
+    );
+
+extern
+__drv_requiresIRQL(DISPATCH_LEVEL)
+VOID
 SyncRelease(
     VOID
     );

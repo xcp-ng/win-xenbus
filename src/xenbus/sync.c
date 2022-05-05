@@ -84,6 +84,7 @@ typedef enum _SYNC_REQUEST {
     SYNC_REQUEST_DISABLE_INTERRUPTS,
     SYNC_REQUEST_RUN_EARLY,
     SYNC_REQUEST_ENABLE_INTERRUPTS,
+    SYNC_REQUEST_RUN_LATE,
     SYNC_REQUEST_EXIT,
 } SYNC_REQUEST;
 
@@ -209,6 +210,19 @@ __SyncProcessorEnableInterrupts(
 }
 
 static FORCEINLINE VOID
+__SyncProcessorRunLate(
+    IN  ULONG       Index
+    )
+{
+    PSYNC_CONTEXT   Context = SyncContext;
+
+    if (Context->Late != NULL)
+        Context->Late(Context->Argument, Index);
+
+    InterlockedIncrement(&Context->CompletionCount);
+}
+
+static FORCEINLINE VOID
 __SyncWait(
     VOID
     )
@@ -255,12 +269,8 @@ SyncWorker(
     for (;;) {
         KeMemoryBarrier();
 
-        if (Context->Request == SYNC_REQUEST_EXIT) {
-            if (Context->Late != NULL)
-                Context->Late(Context->Argument, Index);
-
+        if (Context->Request == SYNC_REQUEST_EXIT)
             break;
-        }
 
         if (Context->Request == Request) {
             _mm_pause();
@@ -276,6 +286,8 @@ SyncWorker(
             __SyncProcessorRunEarly(Index);
         } else if (Context->Request == SYNC_REQUEST_ENABLE_INTERRUPTS) {
             __SyncProcessorEnableInterrupts();
+        } else if (Context->Request == SYNC_REQUEST_RUN_LATE) {
+            __SyncProcessorRunLate(Index);
         }
 
         Request = Context->Request;
@@ -421,6 +433,27 @@ SyncEnableInterrupts(
 
 __drv_requiresIRQL(DISPATCH_LEVEL)
 VOID
+SyncRunLate(
+    )
+{
+    PSYNC_CONTEXT   Context = SyncContext;
+
+    ASSERT(SyncOwner >= 0);
+
+    Context->CompletionCount = 0;
+    KeMemoryBarrier();
+
+    __SyncProcessorRunLate(SyncOwner);
+
+    Context->Request = SYNC_REQUEST_RUN_LATE;
+    KeMemoryBarrier();
+
+    __SyncWait();
+}
+
+
+__drv_requiresIRQL(DISPATCH_LEVEL)
+VOID
 #pragma prefast(suppress:28167) // Function changes IRQL
 SyncRelease(
     VOID
@@ -431,9 +464,6 @@ SyncRelease(
     Trace("====>\n");
 
     ASSERT(SyncOwner >= 0);
-
-    if (Context->Late != NULL)
-        Context->Late(Context->Argument, SyncOwner);
 
     Context->CompletionCount = 0;
     KeMemoryBarrier();

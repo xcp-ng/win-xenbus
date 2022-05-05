@@ -286,6 +286,7 @@ SuspendTrigger(
 
     SyncRunEarly();
     SyncEnableInterrupts();
+    SyncRunLate();
     SyncRelease();
 
     Context->Success = FALSE;
