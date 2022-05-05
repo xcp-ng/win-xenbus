@@ -86,18 +86,14 @@ typedef enum _SYNC_REQUEST {
     SYNC_REQUEST_EXIT,
 } SYNC_REQUEST;
 
-typedef struct _SYNC_PROCESSOR {
-    KDPC            Dpc;
-} SYNC_PROCESSOR, *PSYNC_PROCESSOR;
-
 typedef struct  _SYNC_CONTEXT {
-    PVOID               Argument;
-    SYNC_CALLBACK       Early;
-    SYNC_CALLBACK       Late;
-    LONG                ProcessorCount;
-    SYNC_REQUEST        Request;
-    LONG                CompletionCount;
-    SYNC_PROCESSOR      Processor[1];
+    PVOID           Argument;
+    SYNC_CALLBACK   Early;
+    SYNC_CALLBACK   Late;
+    LONG            ProcessorCount;
+    SYNC_REQUEST    Request;
+    LONG            CompletionCount;
+    KDPC            Dpc[1];
 } SYNC_CONTEXT, *PSYNC_CONTEXT;
 
 static PSYNC_CONTEXT    SyncContext = (PVOID)__Section;
@@ -226,7 +222,6 @@ SyncWorker(
 {
     PSYNC_CONTEXT       Context = SyncContext;
     ULONG               Index;
-    PSYNC_PROCESSOR     Processor;
     PROCESSOR_NUMBER    ProcNumber;
     SYNC_REQUEST        Request;
 
@@ -238,8 +233,6 @@ SyncWorker(
     Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
 
     ASSERT(SyncOwner >= 0 && Index != (ULONG)SyncOwner);
-
-    Processor = &Context->Processor[Index];
 
     Trace("====> (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
     InterlockedIncrement(&Context->CompletionCount);
@@ -316,10 +309,10 @@ SyncCapture(
     Context->ProcessorCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
-        PSYNC_PROCESSOR Processor = &Context->Processor[Index];
-        NTSTATUS        status;
+        PKDPC       Dpc = &Context->Dpc[Index];
+        NTSTATUS    status;
 
-        ASSERT3U((ULONG_PTR)(Processor + 1), <, (ULONG_PTR)__Section + PAGE_SIZE);
+        ASSERT3U((ULONG_PTR)(Dpc + 1), <, (ULONG_PTR)__Section + PAGE_SIZE);
 
         status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
         ASSERT(NT_SUCCESS(status));
@@ -328,9 +321,9 @@ SyncCapture(
             ProcNumber.Number == Number)
             continue;
 
-        KeInitializeDpc(&Processor->Dpc, SyncWorker, NULL);
-        KeSetTargetProcessorDpcEx(&Processor->Dpc, &ProcNumber);
-        KeInsertQueueDpc(&Processor->Dpc, NULL, NULL);
+        KeInitializeDpc(Dpc, SyncWorker, NULL);
+        KeSetTargetProcessorDpcEx(Dpc, &ProcNumber);
+        KeInsertQueueDpc(Dpc, NULL, NULL);
     }
 
     KeMemoryBarrier();
