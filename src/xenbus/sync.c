@@ -89,7 +89,6 @@ typedef struct  _SYNC_CONTEXT {
     PVOID               Argument;
     SYNC_CALLBACK       Early;
     SYNC_CALLBACK       Late;
-    ULONG               Sequence;
     LONG                ProcessorCount;
     LONG                CompletionCount;
     SYNC_PROCESSOR      Processor[1];
@@ -160,8 +159,6 @@ SyncWorker(
     InterlockedIncrement(&Context->CompletionCount);
 
     for (;;) {
-        ULONG   Sequence;
-
         if (Processor->Exit) {
             if (Context->Late != NULL)
                 Context->Late(Context->Argument, Index);
@@ -176,8 +173,6 @@ SyncWorker(
             continue;
         }
 
-        Sequence = Context->Sequence;
-
         if (Processor->DisableInterrupts) {
             ULONG       Attempts;
             NTSTATUS    status;
@@ -188,8 +183,7 @@ SyncWorker(
             InterlockedIncrement(&Context->CompletionCount);
 
             Attempts = 0;
-            while (Context->Sequence == Sequence &&
-                   Context->CompletionCount < Context->ProcessorCount) {
+            while (Context->CompletionCount < Context->ProcessorCount) {
                 _mm_pause();
                 KeMemoryBarrier();
 
@@ -233,8 +227,7 @@ SyncWorker(
 
             InterlockedIncrement(&Context->CompletionCount);
 
-            while (Context->Sequence == Sequence &&
-                   Context->CompletionCount < Context->ProcessorCount) {
+            while (Context->CompletionCount < Context->ProcessorCount) {
                 _mm_pause();
                 KeMemoryBarrier();
             }
@@ -279,8 +272,8 @@ SyncCapture(
     Context->Early = Early;
     Context->Late = Late;
 
-    Context->Sequence++;
     Context->CompletionCount = 0;
+    KeMemoryBarrier();
 
     Context->ProcessorCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
@@ -328,8 +321,8 @@ SyncDisableInterrupts(
 
     ASSERT(SyncOwner >= 0);
 
-    Context->Sequence++;
     Context->CompletionCount = 0;
+    KeMemoryBarrier();
 
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
@@ -402,8 +395,8 @@ SyncEnableInterrupts(
     Irql = KeGetCurrentIrql();
     ASSERT3U(Irql, ==, HIGH_LEVEL);
 
-    Context->Sequence++;
     Context->CompletionCount = 0;
+    KeMemoryBarrier();
 
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
@@ -443,8 +436,8 @@ SyncRelease(
     if (Context->Late != NULL)
         Context->Late(Context->Argument, SyncOwner);
 
-    Context->Sequence++;
     Context->CompletionCount = 0;
+    KeMemoryBarrier();
 
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PSYNC_PROCESSOR Processor = &Context->Processor[Index];
