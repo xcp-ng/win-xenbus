@@ -226,12 +226,6 @@ SyncWorker(
             KeLowerIrql(DISPATCH_LEVEL);
 
             InterlockedIncrement(&Context->CompletionCount);
-
-            while (Context->CompletionCount < Context->ProcessorCount) {
-                _mm_pause();
-                KeMemoryBarrier();
-            }
-
         }
     }
 
