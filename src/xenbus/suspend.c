@@ -51,7 +51,6 @@ struct _XENBUS_SUSPEND_CONTEXT {
     PXENBUS_FDO                 Fdo;
     KSPIN_LOCK                  Lock;
     LONG                        References;
-    BOOLEAN                     Success;
     ULONG                       Count;
     LIST_ENTRY                  EarlyList;
     LIST_ENTRY                  LateList;
@@ -193,9 +192,6 @@ SuspendEarly(
     LogPrintf(LOG_LEVEL_INFO,
               "SUSPEND: EARLY (%u)\n", Cpu);
 
-    if (!Context->Success)
-        return;
-
     //
     // No lock is required here as the VM is single-threaded with interrupts
     // disabled.
@@ -236,7 +232,7 @@ SuspendLate(
     LogPrintf(LOG_LEVEL_INFO,
               "SUSPEND: LATE (%u)\n", Cpu);
 
-    if (!Context->Success || Cpu != 0)
+    if (Cpu != 0)
         return;
 
     // No lock is required here as the VM is single-threaded
@@ -282,14 +278,15 @@ SuspendTrigger(
 
     __SuspendLogTimers("POST-SUSPEND");
 
-    Context->Success = NT_SUCCESS(status) ? TRUE : FALSE;
+    if (NT_SUCCESS(status))
+        SyncRunEarly();
 
-    SyncRunEarly();
     SyncEnableInterrupts();
-    SyncRunLate();
-    SyncRelease();
 
-    Context->Success = FALSE;
+    if (NT_SUCCESS(status))
+        SyncRunLate();
+
+    SyncRelease();
 
     LogPrintf(LOG_LEVEL_INFO, "SUSPEND: <====\n");
 
