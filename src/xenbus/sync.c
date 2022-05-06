@@ -267,6 +267,8 @@ SyncWorker(
 
     Request = SYNC_REQUEST_NONE;
     for (;;) {
+        NTSTATUS status;
+
         KeMemoryBarrier();
 
         if (Context->Request == SYNC_REQUEST_EXIT)
@@ -277,20 +279,31 @@ SyncWorker(
             continue;
         }
 
-        if (Context->Request == SYNC_REQUEST_DISABLE_INTERRUPTS) {
-            NTSTATUS    status = __SyncProcessorDisableInterrupts();
-                    
-            if (!NT_SUCCESS(status))
-                continue;
-        } else if (Context->Request == SYNC_REQUEST_RUN_EARLY) {
+        status = STATUS_SUCCESS;
+
+        switch (Context->Request) {
+        case SYNC_REQUEST_DISABLE_INTERRUPTS:
+            status = __SyncProcessorDisableInterrupts();
+            break;
+
+        case SYNC_REQUEST_RUN_EARLY:
             __SyncProcessorRunEarly(Index);
-        } else if (Context->Request == SYNC_REQUEST_ENABLE_INTERRUPTS) {
+            break;
+
+        case SYNC_REQUEST_ENABLE_INTERRUPTS:
             __SyncProcessorEnableInterrupts();
-        } else if (Context->Request == SYNC_REQUEST_RUN_LATE) {
+            break;
+
+        case SYNC_REQUEST_RUN_LATE:
             __SyncProcessorRunLate(Index);
+            break;
+
+        default:
+            break;
         }
 
-        Request = Context->Request;
+        if (NT_SUCCESS(status))
+            Request = Context->Request;
     }
 
     Trace("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
