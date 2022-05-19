@@ -3389,7 +3389,10 @@ FdoCreateHole(
 fail3:
     Error("fail3\n");
 
-    __FdoDestroyMemoryHole(Fdo);
+    if (Fdo->Mdl != NULL)
+        __FdoDestroyMemoryHole(Fdo);
+    else
+        __FdoDestroyPciHole(Fdo);
 
 fail2:
     Error("fail2\n");
