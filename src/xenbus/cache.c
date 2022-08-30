@@ -52,20 +52,25 @@ typedef struct _XENBUS_CACHE_MAGAZINE {
     PVOID   Slot[XENBUS_CACHE_MAGAZINE_SLOTS];
 } XENBUS_CACHE_MAGAZINE, *PXENBUS_CACHE_MAGAZINE;
 
-
 #define XENBUS_CACHE_SLAB_MAGIC 'BALS'
 
-typedef struct _XENBUS_CACHE_SLAB {
-    ULONG           Magic;
-    PXENBUS_CACHE   Cache;
-    LIST_ENTRY      ListEntry;
-    USHORT          MaximumOccupancy;
-    USHORT          CurrentOccupancy;
-    ULONG           *Mask;
-    UCHAR           Buffer[1];
-} XENBUS_CACHE_SLAB, *PXENBUS_CACHE_SLAB;
+typedef struct _XENBUS_CACHE_MASK {
+    ULONG   Size;
+    ULONG   Mask[1];
+} XENBUS_CACHE_MASK, *PXENBUS_CACHE_MASK;
 
 #define BITS_PER_ULONG  (sizeof (ULONG) * 8)
+
+typedef struct _XENBUS_CACHE_SLAB {
+    ULONG               Magic;
+    PXENBUS_CACHE       Cache;
+    LIST_ENTRY          ListEntry;
+    USHORT              MaximumOccupancy;
+    USHORT              CurrentOccupancy;
+    PXENBUS_CACHE_MASK  Mask;
+    UCHAR               Buffer[1];
+} XENBUS_CACHE_SLAB, *PXENBUS_CACHE_SLAB;
+
 #define MAXNAMELEN      128
 
 struct _XENBUS_CACHE {
@@ -195,6 +200,79 @@ CachePutObjectToMagazine(
     return STATUS_UNSUCCESSFUL;
 }
 
+static PXENBUS_CACHE_MASK
+CacheMaskCreate(
+    IN  ULONG           Size
+    )
+{
+    ULONG               NumberOfBytes;
+    PXENBUS_CACHE_MASK  Mask;
+
+    NumberOfBytes = FIELD_OFFSET(XENBUS_CACHE_MASK, Mask) +
+        (P2ROUNDUP(ULONG, Size, BITS_PER_ULONG) / 8);
+
+    Mask = __CacheAllocate(NumberOfBytes);
+    if (Mask == NULL)
+        goto fail1;
+
+    Mask->Size = Size;
+
+    return Mask;
+
+fail1:
+    return NULL;
+}
+
+static VOID
+CacheMaskDestroy(
+    IN  PXENBUS_CACHE_MASK  Mask
+    )
+{
+    __CacheFree(Mask);
+}
+
+static FORCEINLINE VOID
+__CacheMaskSet(
+    IN  PXENBUS_CACHE_MASK  Mask,
+    IN  ULONG               Bit
+    )
+{
+    ULONG                   Index = Bit / BITS_PER_ULONG;
+    ULONG                   Value = 1u << (Bit % BITS_PER_ULONG);
+
+    ASSERT3U(Bit, <, Mask->Size);
+
+    Mask->Mask[Index] |= Value;
+}
+
+static FORCEINLINE BOOLEAN
+__CacheMaskTest(
+    IN  PXENBUS_CACHE_MASK  Mask,
+    IN  ULONG               Bit
+    )
+{
+    ULONG                   Index = Bit / BITS_PER_ULONG;
+    ULONG                   Value = 1u << (Bit % BITS_PER_ULONG);
+
+    ASSERT3U(Bit, <, Mask->Size);
+
+    return (Mask->Mask[Index] & Value) ? TRUE : FALSE;
+}
+
+static FORCEINLINE VOID
+__CacheMaskClear(
+    IN  PXENBUS_CACHE_MASK  Mask,
+    IN  ULONG               Bit
+    )
+{
+    ULONG                   Index = Bit / BITS_PER_ULONG;
+    ULONG                   Value = 1u << (Bit % BITS_PER_ULONG);
+
+    ASSERT3U(Bit, <, Mask->Size);
+
+    Mask->Mask[Index] &= ~Value;
+}
+
 static VOID
 CacheInsertSlab(
     IN  PXENBUS_CACHE       Cache,
@@ -294,7 +372,6 @@ CacheCreateSlab(
     PXENBUS_CACHE_SLAB  Slab;
     ULONG               NumberOfBytes;
     ULONG               Count;
-    ULONG               Size;
     LONG                Index;
     LONG                SlabCount;
     NTSTATUS            status;
@@ -324,10 +401,7 @@ CacheCreateSlab(
     Slab->Cache = Cache;
     Slab->MaximumOccupancy = (USHORT)Count;
 
-    Size = P2ROUNDUP(ULONG, Count, BITS_PER_ULONG);
-    Size /= 8;
-
-    Slab->Mask = __CacheAllocate(Size);
+    Slab->Mask = CacheMaskCreate(Count);
     if (Slab->Mask == NULL)
         goto fail3;
 
@@ -357,7 +431,7 @@ fail4:
         __CacheDtor(Cache, Object);
     }
 
-    __CacheFree(Slab->Mask);
+    CacheMaskDestroy(Slab->Mask);
 
 fail3:
     Error("fail3\n");
@@ -409,69 +483,8 @@ CacheDestroySlab(
     ASSERT(Cache->CurrentSlabs != 0);
     InterlockedDecrement(&Cache->CurrentSlabs);
 
-    __CacheFree(Slab->Mask);
+    CacheMaskDestroy(Slab->Mask);
     __CacheFree(Slab);
-}
-
-static FORCEINLINE ULONG
-__CacheMaskScan(
-    IN  ULONG   *Mask,
-    IN  ULONG   Maximum
-    )
-{
-    ULONG       Size;
-    ULONG       Index;
-
-    Size = P2ROUNDUP(ULONG, Maximum, BITS_PER_ULONG);
-    Size /= sizeof (ULONG);
-    ASSERT(Size != 0);
-
-    for (Index = 0; Index < Size; Index++) {
-        ULONG   Free = ~Mask[Index];
-        ULONG   Bit;
-
-        if (!_BitScanForward(&Bit, Free))
-            continue;
-
-        Bit += Index * BITS_PER_ULONG;
-        if (Bit < Maximum)
-            return Bit;
-    }
-
-    return Maximum;
-}
-
-static FORCEINLINE VOID
-__CacheMaskSet(
-    IN  ULONG   *Mask,
-    IN  ULONG   Bit
-    )
-{
-    ULONG       Index = Bit / BITS_PER_ULONG;
-
-    Mask[Index] |= 1u << (Bit % BITS_PER_ULONG);
-}
-
-static FORCEINLINE BOOLEAN
-__CacheMaskTest(
-    IN  ULONG   *Mask,
-    IN  ULONG   Bit
-    )
-{
-    ULONG       Index = Bit / BITS_PER_ULONG;
-
-    return (Mask[Index] & (1u << (Bit % BITS_PER_ULONG))) ? TRUE : FALSE;
-}
-
-static FORCEINLINE VOID
-__CacheMaskClear(
-    IN  ULONG   *Mask,
-    IN  ULONG   Bit
-    )
-{
-    ULONG       Index = Bit / BITS_PER_ULONG;
-
-    Mask[Index] &= ~(1u << (Bit % BITS_PER_ULONG));
 }
 
 // Must be called with lock held
@@ -490,7 +503,13 @@ CacheGetObjectFromSlab(
     if (Slab->CurrentOccupancy == Slab->MaximumOccupancy)
         return NULL;
 
-    Index = __CacheMaskScan(Slab->Mask, Slab->MaximumOccupancy);
+    Index = 0;
+    while (Index < Slab->MaximumOccupancy) {
+        if (!__CacheMaskTest(Slab->Mask, Index))
+            break;
+
+        Index++;
+    }
     BUG_ON(Index >= Slab->MaximumOccupancy);
 
     __CacheMaskSet(Slab->Mask, Index);
