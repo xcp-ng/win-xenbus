@@ -66,7 +66,7 @@ typedef struct _XENBUS_CACHE_SLAB {
     ULONG               Magic;
     PXENBUS_CACHE       Cache;
     LIST_ENTRY          ListEntry;
-    PXENBUS_CACHE_MASK  Mask;
+    PXENBUS_CACHE_MASK  Allocated;
     UCHAR               Buffer[1];
 } XENBUS_CACHE_SLAB, *PXENBUS_CACHE_SLAB;
 
@@ -312,7 +312,7 @@ CacheInsertSlab(
 
     PLIST_ENTRY             ListEntry;
 
-    ASSERT(CacheMaskCount(New->Mask) < CacheMaskSize(New->Mask));
+    ASSERT(CacheMaskCount(New->Allocated) < CacheMaskSize(New->Allocated));
 
     Cache->Cursor = NULL;
 
@@ -323,12 +323,12 @@ CacheInsertSlab(
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
-        if (CacheMaskCount(Slab->Mask) < CacheMaskCount(New->Mask)) {
+        if (CacheMaskCount(Slab->Allocated) < CacheMaskCount(New->Allocated)) {
             INSERT_BEFORE(ListEntry, &New->ListEntry);
             goto done;
         }
 
-        if (CacheMaskCount(Slab->Mask) < CacheMaskSize(Slab->Mask) &&
+        if (CacheMaskCount(Slab->Allocated) < CacheMaskSize(Slab->Allocated) &&
             Cache->Cursor == NULL)
             Cache->Cursor = ListEntry;
     }
@@ -362,7 +362,7 @@ CacheAudit(
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
-        if (CacheMaskCount(Slab->Mask) < CacheMaskSize(Slab->Mask)) {
+        if (CacheMaskCount(Slab->Allocated) < CacheMaskSize(Slab->Allocated)) {
             ASSERT3P(Cache->Cursor, ==, ListEntry);
             break;
         }
@@ -376,9 +376,9 @@ CacheAudit(
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
-        ASSERT3U(CacheMaskCount(Slab->Mask), <=, Count);
+        ASSERT3U(CacheMaskCount(Slab->Allocated), <=, Count);
 
-        Count = CacheMaskCount(Slab->Mask);
+        Count = CacheMaskCount(Slab->Allocated);
     }
 }
 #else
@@ -422,11 +422,11 @@ CacheCreateSlab(
     Slab->Magic = XENBUS_CACHE_SLAB_MAGIC;
     Slab->Cache = Cache;
 
-    Slab->Mask = CacheMaskCreate(Count);
-    if (Slab->Mask == NULL)
+    Slab->Allocated = CacheMaskCreate(Count);
+    if (Slab->Allocated == NULL)
         goto fail3;
 
-    for (Index = 0; Index < (LONG)CacheMaskSize(Slab->Mask); Index++) {
+    for (Index = 0; Index < (LONG)CacheMaskSize(Slab->Allocated); Index++) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
         status = __CacheCtor(Cache, Object);
@@ -452,7 +452,7 @@ fail4:
         __CacheDtor(Cache, Object);
     }
 
-    CacheMaskDestroy(Slab->Mask);
+    CacheMaskDestroy(Slab->Allocated);
 
 fail3:
     Error("fail3\n");
@@ -477,8 +477,8 @@ CacheDestroySlab(
 {
     LONG                    Index;
 
-    ASSERT3U(Cache->Count, >=, CacheMaskSize(Slab->Mask));
-    Cache->Count -= CacheMaskSize(Slab->Mask);
+    ASSERT3U(Cache->Count, >=, CacheMaskSize(Slab->Allocated));
+    Cache->Count -= CacheMaskSize(Slab->Allocated);
 
     //
     // The only reason the cursor should be pointing at this slab is
@@ -492,7 +492,7 @@ CacheDestroySlab(
     ASSERT(Cache->Cursor != &Cache->SlabList ||
            IsListEmpty(&Cache->SlabList));
 
-    Index = CacheMaskSize(Slab->Mask);
+    Index = CacheMaskSize(Slab->Allocated);
     while (--Index >= 0) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
@@ -502,7 +502,7 @@ CacheDestroySlab(
     ASSERT(Cache->CurrentSlabs != 0);
     InterlockedDecrement(&Cache->CurrentSlabs);
 
-    CacheMaskDestroy(Slab->Mask);
+    CacheMaskDestroy(Slab->Allocated);
     __CacheFree(Slab);
 }
 
@@ -518,20 +518,20 @@ CacheGetObjectFromSlab(
 
     Cache = Slab->Cache;
 
-    ASSERT(CacheMaskCount(Slab->Mask) <= CacheMaskSize(Slab->Mask));
-    if (CacheMaskCount(Slab->Mask) == CacheMaskSize(Slab->Mask))
+    ASSERT(CacheMaskCount(Slab->Allocated) <= CacheMaskSize(Slab->Allocated));
+    if (CacheMaskCount(Slab->Allocated) == CacheMaskSize(Slab->Allocated))
 	    return NULL;
 
     Index = 0;
-    while (Index < CacheMaskSize(Slab->Mask)) {
-        if (!__CacheMaskTest(Slab->Mask, Index))
+    while (Index < CacheMaskSize(Slab->Allocated)) {
+        if (!__CacheMaskTest(Slab->Allocated, Index))
             break;
 
         Index++;
     }
-    BUG_ON(Index >= CacheMaskSize(Slab->Mask));
+    BUG_ON(Index >= CacheMaskSize(Slab->Allocated));
 
-    __CacheMaskSet(Slab->Mask, Index);
+    __CacheMaskSet(Slab->Allocated, Index);
 
     Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
     ASSERT3U(Index, ==, (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) /
@@ -553,9 +553,9 @@ CachePutObjectToSlab(
     Cache = Slab->Cache;
 
     Index = (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) / Cache->Size;
-    BUG_ON(Index >= CacheMaskSize(Slab->Mask));
+    BUG_ON(Index >= CacheMaskSize(Slab->Allocated));
 
-    __CacheMaskClear(Slab->Mask, Index);
+    __CacheMaskClear(Slab->Allocated, Index);
 }
 
 static PVOID
@@ -596,7 +596,7 @@ again:
         Object = CacheGetObjectFromSlab(Slab);
         ASSERT(Object != NULL);
 
-        if (CacheMaskCount(Slab->Mask) == CacheMaskSize(Slab->Mask))
+        if (CacheMaskCount(Slab->Allocated) == CacheMaskSize(Slab->Allocated))
             Cache->Cursor = Slab->ListEntry.Flink;
     }
 
@@ -731,11 +731,11 @@ CacheSpill(
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
-        if (CacheMaskCount(Slab->Mask) != 0)
+        if (CacheMaskCount(Slab->Allocated) != 0)
             break;
 
-        ASSERT(Cache->Count >= CacheMaskSize(Slab->Mask));
-        if (Cache->Count - CacheMaskSize(Slab->Mask) < Count)
+        ASSERT(Cache->Count >= CacheMaskSize(Slab->Allocated));
+        if (Cache->Count - CacheMaskSize(Slab->Allocated) < Count)
             break;
 
         CacheDestroySlab(Cache, Slab);
