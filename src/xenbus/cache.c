@@ -66,6 +66,7 @@ typedef struct _XENBUS_CACHE_SLAB {
     ULONG               Magic;
     PXENBUS_CACHE       Cache;
     LIST_ENTRY          ListEntry;
+    PXENBUS_CACHE_MASK  Constructed;
     PXENBUS_CACHE_MASK  Allocated;
     UCHAR               Buffer[1];
 } XENBUS_CACHE_SLAB, *PXENBUS_CACHE_SLAB;
@@ -394,7 +395,6 @@ CacheCreateSlab(
     PXENBUS_CACHE_SLAB  Slab;
     ULONG               NumberOfBytes;
     ULONG               Count;
-    LONG                Index;
     LONG                SlabCount;
     NTSTATUS            status;
 
@@ -422,17 +422,13 @@ CacheCreateSlab(
     Slab->Magic = XENBUS_CACHE_SLAB_MAGIC;
     Slab->Cache = Cache;
 
-    Slab->Allocated = CacheMaskCreate(Count);
-    if (Slab->Allocated == NULL)
+    Slab->Constructed = CacheMaskCreate(Count);
+    if (Slab->Constructed == NULL)
         goto fail3;
 
-    for (Index = 0; Index < (LONG)CacheMaskSize(Slab->Allocated); Index++) {
-        PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
-
-        status = __CacheCtor(Cache, Object);
-        if (!NT_SUCCESS(status))
-            goto fail4;
-    }
+    Slab->Allocated = CacheMaskCreate(Count);
+    if (Slab->Allocated == NULL)
+        goto fail4;
 
     CacheInsertSlab(Cache, Slab);
     Cache->Count += Count;
@@ -446,13 +442,7 @@ CacheCreateSlab(
 fail4:
     Error("fail4\n");
 
-    while (--Index >= 0) {
-        PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
-
-        __CacheDtor(Cache, Object);
-    }
-
-    CacheMaskDestroy(Slab->Allocated);
+    CacheMaskDestroy(Slab->Constructed);
 
 fail3:
     Error("fail3\n");
@@ -496,13 +486,17 @@ CacheDestroySlab(
     while (--Index >= 0) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
-        __CacheDtor(Cache, Object);
+        if (__CacheMaskTest(Slab->Constructed, Index)) {
+            __CacheDtor(Cache, Object);
+            __CacheMaskClear(Slab->Constructed, Index);
+        }
     }
 
     ASSERT(Cache->CurrentSlabs != 0);
     InterlockedDecrement(&Cache->CurrentSlabs);
 
     CacheMaskDestroy(Slab->Allocated);
+    CacheMaskDestroy(Slab->Constructed);
     __CacheFree(Slab);
 }
 
@@ -515,29 +509,54 @@ CacheGetObjectFromSlab(
     PXENBUS_CACHE           Cache;
     ULONG                   Index;
     PVOID                   Object;
+    NTSTATUS                status;
 
     Cache = Slab->Cache;
 
     ASSERT(CacheMaskCount(Slab->Allocated) <= CacheMaskSize(Slab->Allocated));
-    if (CacheMaskCount(Slab->Allocated) == CacheMaskSize(Slab->Allocated))
-	    return NULL;
 
-    Index = 0;
+    status = STATUS_NO_MEMORY;
+    if (CacheMaskCount(Slab->Allocated) == CacheMaskSize(Slab->Allocated))
+	    goto fail1;
+
+    //
+    // If there are unallocated but constructed objects then look for one of those,
+    // otherwise look for a free unconstructed object. (NOTE: The 'Constructed' mask
+    // should always be contiguous).
+    //
+    Index = (CacheMaskCount(Slab->Allocated) < CacheMaskCount(Slab->Constructed)) ?
+        0 : CacheMaskCount(Slab->Constructed);
+
     while (Index < CacheMaskSize(Slab->Allocated)) {
         if (!__CacheMaskTest(Slab->Allocated, Index))
             break;
 
         Index++;
     }
-    BUG_ON(Index >= CacheMaskSize(Slab->Allocated));
-
-    __CacheMaskSet(Slab->Allocated, Index);
 
     Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
     ASSERT3U(Index, ==, (ULONG)((PUCHAR)Object - &Slab->Buffer[0]) /
              Cache->Size);
 
+    if (!__CacheMaskTest(Slab->Constructed, Index)) {
+        status = __CacheCtor(Cache, Object);
+        if (!NT_SUCCESS(status))
+            goto fail2;
+
+        __CacheMaskSet(Slab->Constructed, Index);
+    }
+
+    __CacheMaskSet(Slab->Allocated, Index);
+
     return Object;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return NULL;
 }
 
 // Must be called with lock held
