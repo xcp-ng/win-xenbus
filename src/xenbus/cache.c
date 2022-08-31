@@ -299,7 +299,8 @@ CacheCreateSlab(
     LONG                SlabCount;
     NTSTATUS            status;
 
-    NumberOfBytes = P2ROUNDUP(FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer) +
+    NumberOfBytes = P2ROUNDUP(ULONG,
+                              FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer) +
                               Cache->Size,
                               PAGE_SIZE);
     Count = (NumberOfBytes - FIELD_OFFSET(XENBUS_CACHE_SLAB, Buffer)) /
@@ -323,7 +324,7 @@ CacheCreateSlab(
     Slab->Cache = Cache;
     Slab->MaximumOccupancy = (USHORT)Count;
 
-    Size = P2ROUNDUP(Count, BITS_PER_ULONG);
+    Size = P2ROUNDUP(ULONG, Count, BITS_PER_ULONG);
     Size /= 8;
 
     Slab->Mask = __CacheAllocate(Size);
@@ -421,7 +422,7 @@ __CacheMaskScan(
     ULONG       Size;
     ULONG       Index;
 
-    Size = P2ROUNDUP(Maximum, BITS_PER_ULONG);
+    Size = P2ROUNDUP(ULONG, Maximum, BITS_PER_ULONG);
     Size /= sizeof (ULONG);
     ASSERT(Size != 0);
 
@@ -777,7 +778,7 @@ CacheCreate(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Size = P2ROUNDUP(Size, sizeof (ULONG_PTR));
+    Size = P2ROUNDUP(ULONG, Size, sizeof (ULONG_PTR));
 
     if (Cap == 0)
         Cap = ULONG_MAX;

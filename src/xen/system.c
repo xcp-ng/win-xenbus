@@ -922,7 +922,7 @@ SystemAllocateVcpuInfo(
 
     Size = sizeof (vcpu_info_t) * HVM_MAX_VCPUS;
     Size += sizeof (BOOLEAN) * HVM_MAX_VCPUS;
-    Size = P2ROUNDUP(Size, PAGE_SIZE);
+    Size = P2ROUNDUP(ULONG, Size, PAGE_SIZE);
 
     Context->Mdl = DriverGetNamedPages("VCPU_INFO", Size >> PAGE_SHIFT);
 

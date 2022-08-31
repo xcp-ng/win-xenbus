@@ -36,8 +36,8 @@
 
 #include "assert.h"
 
-#define	P2ROUNDUP(_x, _a)   \
-        (-(-(_x) & -(_a)))
+#define	P2ROUNDUP(_t, _x, _a)   \
+        (-(-((_t)(_x)) & -(((_t)(_a)))))
 
 static FORCEINLINE LONG
 __ffs(
