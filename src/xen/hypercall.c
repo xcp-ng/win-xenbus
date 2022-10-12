@@ -34,6 +34,7 @@
 
 #include <ntddk.h>
 #include <xen.h>
+#include <intrin.h>
 
 #include "hypercall.h"
 #include "dbg_print.h"

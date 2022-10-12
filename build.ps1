@@ -21,8 +21,8 @@ Function Build {
 	)
 
 	$visualstudioversion = $Env:VisualStudioVersion
-	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; "16.0" = "vs2019"; }
-	$configurationbase = @{ "14.0" = "Windows 8"; "15.0" = "Windows 8"; "16.0" = "Windows 8"; }
+	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; "16.0" = "vs2019"; "17.0" = "vs2022"; }
+	$configurationbase = @{ "14.0" = "Windows 8"; "15.0" = "Windows 8"; "16.0" = "Windows 8"; "17.0" = "Windows 10"; }
 
 	$params = @{
 		SolutionDir = $solutiondir[$visualstudioversion];
@@ -39,8 +39,8 @@ Function Build {
 
 Function SdvBuild {
 	$visualstudioversion = $Env:VisualStudioVersion
-	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; "16.0" = "vs2019"; }
-	$configurationbase = @{ "14.0" = "Windows 10"; "15.0" = "Windows 10"; "16.0" = "Windows 10"; }
+	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; "16.0" = "vs2019"; "17.0" = "vs2022"; }
+	$configurationbase = @{ "14.0" = "Windows 10"; "15.0" = "Windows 10"; "16.0" = "Windows 10"; "17.0" = "Windows 10"; }
 	$arch = "x64"
 
 	$params = @{
@@ -54,8 +54,8 @@ Function SdvBuild {
 
 function CodeQLBuild {
 	$visualstudioversion = $Env:VisualStudioVersion
-	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; "16.0" = "vs2019"; }
-	$configurationbase = @{ "14.0" = "Windows 10"; "15.0" = "Windows 10"; "16.0" = "Windows 10"; }
+	$solutiondir = @{ "14.0" = "vs2015"; "15.0" = "vs2017"; "16.0" = "vs2019"; "17.0" = "vs2022"; }
+	$configurationbase = @{ "14.0" = "Windows 10"; "15.0" = "Windows 10"; "16.0" = "Windows 10"; "17.0" = "Windows 10"; }
 	$arch = "x64"
 
 	$params = @{
@@ -108,7 +108,9 @@ if ([string]::IsNullOrEmpty($Env:MICRO_VERSION)) {
 }
 
 if ([string]::IsNullOrEmpty($Arch) -or $Arch -eq "x86" -or $Arch -eq "Win32") {
-	Build "x86" $Type
+	if ($Env:VisualStudioVersion -ne "17.0") {
+		Build "x86" $Type
+	}
 }
 
 if ([string]::IsNullOrEmpty($Arch) -or $Arch -eq "x64") {
