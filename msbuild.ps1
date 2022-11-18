@@ -7,7 +7,8 @@ param(
 	[Parameter(Mandatory = $true)]
 	[string]$Arch,
 	[Parameter(Mandatory = $true)]
-	[string]$Type
+	[string]$Type,
+	[string]$SignMode = "TestSign"
 )
 
 Function Run-MSBuild {
@@ -25,6 +26,7 @@ Function Run-MSBuild {
 	$c += " /m:4"
 	$c += [string]::Format(" /p:Configuration=""{0}""", $Configuration)
 	$c += [string]::Format(" /p:Platform=""{0}""", $Platform)
+	$c += [string]::Format(" /p:SignMode=""{0}""", $SignMode)
 	$c += [string]::Format(" /t:""{0}"" ", $Target)
 	if ($Inputs) {
 		$c += [string]::Format(" /p:Inputs=""{0}"" ", $Inputs)
@@ -99,6 +101,7 @@ Function Run-CodeQL {
 	$a += " /t:Build"
 	$a += [string]::Format(" /p:Configuration=""{0}""", $Configuration)
 	$a += [string]::Format(" /p:Platform=""{0}""", $Platform)
+	$a += [string]::Format(" /p:SignMode=""{0}""", $SignMode)
 	$a += " "
 	$a += Join-Path $projpath $project
 	$a | Set-Content $bat

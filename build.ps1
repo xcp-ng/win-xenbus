@@ -6,6 +6,7 @@ param(
 	[Parameter(Mandatory = $true)]
 	[string]$Type,
 	[string]$Arch,
+	[string]$SignMode = "TestSign",
 	[switch]$CodeQL,
 	[switch]$Sdv
 )
@@ -28,7 +29,8 @@ Function Build {
 		SolutionDir = $solutiondir[$visualstudioversion];
 		ConfigurationBase = $configurationbase[$visualstudioversion];
 		Arch = $Arch;
-		Type = $Type
+		Type = $Type;
+		SignMode = $SignMode
 		}
 	& ".\msbuild.ps1" @params
 	if ($LASTEXITCODE -ne 0) {
@@ -47,7 +49,8 @@ Function SdvBuild {
 		SolutionDir = $solutiondir[$visualstudioversion];
 		ConfigurationBase = $configurationbase[$visualstudioversion];
 		Arch = $arch;
-		Type = "sdv"
+		Type = "sdv";
+		SignMode = $SignMode
 		}
 	& ".\msbuild.ps1" @params
 }
@@ -62,7 +65,8 @@ function CodeQLBuild {
 		SolutionDir = $solutiondir[$visualstudioversion];
 		ConfigurationBase = $configurationbase[$visualstudioversion];
 		Arch = $arch;
-		Type = "codeql"
+		Type = "codeql";
+		SignMode = $SignMode
 		}
 	& ".\msbuild.ps1" @params
 }

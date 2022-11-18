@@ -70,10 +70,16 @@
   <ItemGroup>
     <PackageFiles Include="$(OutDir)\$(ProjectName)\*" />
   </ItemGroup>
-  <Target Name="Archive" AfterTargets="TestSign">
+  <Target Name="ArchiveUnsigned" AfterTargets="Inf2Cat" Condition="('$(SignMode)' != 'TestSign') AND ('$(SignMode)' != 'ProductionSign')">
     <Copy
-	SourceFiles="@(PackageFiles)"
-	DestinationFiles="@(PackageFiles->'$(ArchiveDir)\%(FileName)%(Extension)')"
-    />
+        SourceFiles="@(PackageFiles)"
+        DestinationFiles="@(PackageFiles->'$(ArchiveDir)\%(FileName)%(Extension)')"
+	/>
+  </Target>
+  <Target Name="ArchiveSigned" AfterTargets="TestSign;ProductionSign" Condition="('$(SignMode)' == 'TestSign' or '$(SignMode)' == 'ProductionSign')">
+    <Copy
+        SourceFiles="@(PackageFiles)"
+        DestinationFiles="@(PackageFiles->'$(ArchiveDir)\%(FileName)%(Extension)')"
+	/>
   </Target>
 </Project>
