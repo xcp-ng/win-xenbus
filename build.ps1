@@ -88,6 +88,10 @@ if ([string]::IsNullOrEmpty($Env:PRODUCT_NAME)) {
 	Set-Item -Path Env:PRODUCT_NAME -Value 'Xen'
 }
 
+if ([string]::IsNullOrEmpty($Env:COPYRIGHT)) {
+	Set-Item -Path Env:COPYRIGHT -Value 'Copyright (c) Xen Project.'
+}
+
 if ([string]::IsNullOrEmpty($Env:BUILD_NUMBER)) {
 	if (Test-Path ".build_number") {
 		$BuildNum = Get-Content -Path ".build_number"
