@@ -507,14 +507,20 @@ EvtchnFifoAcquire(
         PFN_NUMBER          Pfn;
         PHYSICAL_ADDRESS    Address;
 
+        status = SystemProcessorVcpuId(Index, &vcpu_id);
+
+        Index++;
+
+        if (status == STATUS_NOT_SUPPORTED)
+            continue;
+
+        if (!NT_SUCCESS(status))
+            goto fail1;
+
         Mdl = __AllocatePage();
 
         status = STATUS_NO_MEMORY;
         if (Mdl == NULL)
-            goto fail1;
-
-        status = SystemProcessorVcpuId(Index, &vcpu_id);
-        if (!NT_SUCCESS(status))
             goto fail2;
 
         Pfn = MmGetMdlPfnArray(Mdl)[0];
@@ -532,8 +538,6 @@ EvtchnFifoAcquire(
                   Address.LowPart);
 
         Context->ControlBlockMdl[vcpu_id] = Mdl;
-
-        Index++;
     }
 
     Trace("<====\n");
@@ -546,10 +550,10 @@ done:
 fail3:
     Error("fail3\n");
 
+    __FreePage(Mdl);
+
 fail2:
     Error("fail2\n");
-
-    __FreePage(Mdl);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -559,7 +563,11 @@ fail1:
     while (--Index >= 0) {
         unsigned int    vcpu_id;
 
-        (VOID) SystemProcessorVcpuId(Index, &vcpu_id);
+        status = SystemProcessorVcpuId(Index, &vcpu_id);
+        if (status == STATUS_NOT_SUPPORTED)
+            continue;
+
+        BUG_ON(!NT_SUCCESS(status));
 
         Mdl = Context->ControlBlockMdl[vcpu_id];
         Context->ControlBlockMdl[vcpu_id] = NULL;
