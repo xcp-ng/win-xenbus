@@ -106,4 +106,3 @@ AcpiTeardown(
     );
 
 #endif  // _XEN_ACPI_H
-

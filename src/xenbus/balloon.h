@@ -66,4 +66,3 @@ BalloonTeardown(
     );
 
 #endif  // _XENBUS_BALLOON_H
-

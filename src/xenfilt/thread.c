@@ -224,4 +224,3 @@ ThreadJoin(
 
     __ThreadFree(Thread);
 }
-

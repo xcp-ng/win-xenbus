@@ -66,4 +66,3 @@ DebugTeardown(
     );
 
 #endif  // _XENBUS_DEBUG_H
-

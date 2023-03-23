@@ -57,4 +57,3 @@ EvtchnFifoTeardown(
     );
 
 #endif  // _XENBUS_EVTCHN_FIFO_H
-

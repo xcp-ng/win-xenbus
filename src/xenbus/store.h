@@ -66,4 +66,3 @@ StoreTeardown(
     );
 
 #endif  // _XENBUS_STORE_H
-

@@ -43,5 +43,3 @@ _hypercall3@16    	proc
 _hypercall3@16    	endp
 
                         end
-
-

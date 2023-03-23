@@ -66,4 +66,3 @@ SharedInfoTeardown(
     );
 
 #endif  // _XENBUS_SHARED_INFO_H
-

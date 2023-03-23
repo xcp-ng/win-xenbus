@@ -66,4 +66,3 @@ GnttabTeardown(
     );
 
 #endif  // _XENBUS_GNTTAB_H
-

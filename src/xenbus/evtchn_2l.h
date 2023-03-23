@@ -57,4 +57,3 @@ EvtchnTwoLevelTeardown(
     );
 
 #endif  // _XENBUS_EVTCHN_H
-

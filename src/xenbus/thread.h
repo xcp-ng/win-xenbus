@@ -73,4 +73,3 @@ ThreadJoin(
     );
 
 #endif  // _XENBUS_THREAD_H
-

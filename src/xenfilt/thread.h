@@ -73,4 +73,3 @@ ThreadJoin(
     );
 
 #endif  // _XENFILT_THREAD_H
-

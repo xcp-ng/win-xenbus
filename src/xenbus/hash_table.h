@@ -68,4 +68,3 @@ HashTableDestroy(
     );
 
 #endif  // _XENBUS_HASH_TABLE_H
-

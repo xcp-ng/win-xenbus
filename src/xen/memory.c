@@ -126,5 +126,3 @@ MemoryPopulatePhysmap(
 
     return (ULONG)rc;
 }
-
-

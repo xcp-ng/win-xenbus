@@ -444,4 +444,3 @@ HashTableDestroy(
     ASSERT(IsZeroMemory(Table, sizeof (XENBUS_HASH_TABLE)));
     __HashTableFree(Table);
 }
-

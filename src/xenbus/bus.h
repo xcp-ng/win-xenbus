@@ -50,4 +50,3 @@ BusTeardown(
     );
 
 #endif  // _XENBUS_BUS_H
-

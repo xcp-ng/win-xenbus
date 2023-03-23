@@ -39,5 +39,3 @@ hypercall3 		proc
 hypercall3 		endp
 
                         end
-
-

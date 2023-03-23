@@ -53,4 +53,3 @@ DmaGetAdapter(
     );
 
 #endif  // _XENBUS_DMA_H
-

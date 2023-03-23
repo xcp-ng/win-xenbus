@@ -89,4 +89,3 @@ SyncRelease(
     );
 
 #endif  // _XENBUS_SYNC_H
-
