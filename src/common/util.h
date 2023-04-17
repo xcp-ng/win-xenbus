@@ -153,6 +153,9 @@ __AllocatePoolWithTag(
     __analysis_assume(PoolType == NonPagedPool ||
                       PoolType == PagedPool);
 
+    if (NumberOfBytes == 0)
+        return NULL;
+
 #if (_MSC_VER >= 1928) // VS 16.9 (EWDK 20344 or later)
     Buffer = ExAllocatePoolUninitialized(PoolType, NumberOfBytes, Tag);
 #else
