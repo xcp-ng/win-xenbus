@@ -98,7 +98,7 @@ Function Run-CodeQL {
 	}
 	$a = "msbuild.exe"
 	$a += " /m:4"
-	$a += " /t:Build"
+	$a += " /t:Rebuild"
 	$a += [string]::Format(" /p:Configuration=""{0}""", $Configuration)
 	$a += [string]::Format(" /p:Platform=""{0}""", $Platform)
 	$a += [string]::Format(" /p:SignMode=""{0}""", $SignMode)
