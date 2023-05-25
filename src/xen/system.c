@@ -1263,6 +1263,7 @@ SystemInitialize(
     LONG            References;
     HANDLE          ParametersKey;
     ULONG           RegisterVcpuInfo;
+    ULONG           ActiveProcessors;
     NTSTATUS        status;
 
     References = InterlockedIncrement(&Context->References);
@@ -1271,8 +1272,11 @@ SystemInitialize(
     if (References != 1)
         goto fail1;
 
+    ActiveProcessors = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
     Context->ProcessorCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
     Context->Processor = __SystemAllocate(sizeof (SYSTEM_PROCESSOR) * Context->ProcessorCount);
+
+    Info("CPUs %u / %u\n", ActiveProcessors, Context->ProcessorCount);
 
     status = STATUS_NO_MEMORY;
     if (Context->Processor == NULL)
