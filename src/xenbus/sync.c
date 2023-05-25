@@ -76,10 +76,6 @@
 //   the scheduler to run on the other CPUs again. It spins until all
 //   DPCs have completed and then returns.
 
-#pragma data_seg("sync")
-__declspec(allocate("sync"))
-static UCHAR        __Section[PAGE_SIZE];
-
 typedef enum _SYNC_REQUEST {
     SYNC_REQUEST_NONE,
     SYNC_REQUEST_DISABLE_INTERRUPTS,
@@ -96,11 +92,29 @@ typedef struct  _SYNC_CONTEXT {
     LONG            ProcessorCount;
     SYNC_REQUEST    Request;
     LONG            CompletionCount;
-    KDPC            Dpc[1];
+    PKDPC           Dpc;
 } SYNC_CONTEXT, *PSYNC_CONTEXT;
 
-static PSYNC_CONTEXT    SyncContext = (PVOID)__Section;
+static SYNC_CONTEXT     SyncContext;
 static LONG             SyncOwner = -1;
+
+#define XENBUS_SYNC_TAG 'CNYS'
+
+static FORCEINLINE PVOID
+__SyncAllocate(
+    IN  ULONG   Length
+    )
+{
+    return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_SYNC_TAG);
+}
+
+static FORCEINLINE VOID
+__SyncFree(
+    IN  PVOID   Buffer
+    )
+{
+    __FreePoolWithTag(Buffer, XENBUS_SYNC_TAG);
+}
 
 static FORCEINLINE VOID
 __SyncAcquire(
@@ -141,7 +155,7 @@ __SyncProcessorDisableInterrupts(
     VOID
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
     ULONG           Attempts;
     LONG            Old;
     LONG            New;
@@ -187,7 +201,7 @@ __SyncProcessorRunEarly(
     IN  ULONG       Index
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     if (Context->Early != NULL)
         Context->Early(Context->Argument, Index);
@@ -200,7 +214,7 @@ __SyncProcessorEnableInterrupts(
     VOID
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     _enable();
 
@@ -215,7 +229,7 @@ __SyncProcessorRunLate(
     IN  ULONG       Index
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     if (Context->Late != NULL)
         Context->Late(Context->Argument, Index);
@@ -228,7 +242,7 @@ __SyncWait(
     VOID
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     for (;;) {
         KeMemoryBarrier();
@@ -249,7 +263,7 @@ SyncWorker(
     IN  PVOID           Argument2
     )
 {
-    PSYNC_CONTEXT       Context = SyncContext;
+    PSYNC_CONTEXT       Context = &SyncContext;
     ULONG               Index;
     PROCESSOR_NUMBER    ProcNumber;
     SYNC_REQUEST        Request;
@@ -320,7 +334,7 @@ SyncCapture(
     IN  SYNC_CALLBACK   Late OPTIONAL
     )
 {
-    PSYNC_CONTEXT       Context = SyncContext;
+    PSYNC_CONTEXT       Context = &SyncContext;
     LONG                Index;
     PROCESSOR_NUMBER    ProcNumber;
     USHORT              Group;
@@ -336,7 +350,7 @@ SyncCapture(
 
     Trace("====> (%u:%u)\n", Group, Number);
 
-    ASSERT(IsZeroMemory(Context, PAGE_SIZE));
+    ASSERT(IsZeroMemory(Context, sizeof(SYNC_CONTEXT)));
 
     Context->Argument = Argument;
     Context->Early = Early;
@@ -346,12 +360,12 @@ SyncCapture(
     KeMemoryBarrier();
 
     Context->ProcessorCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    Context->Dpc = __SyncAllocate(Context->ProcessorCount * sizeof(KDPC));
+    ASSERT(Context->Dpc != NULL);
 
     for (Index = 0; Index < Context->ProcessorCount; Index++) {
         PKDPC       Dpc = &Context->Dpc[Index];
         NTSTATUS    status;
-
-        ASSERT3U((ULONG_PTR)(Dpc + 1), <, (ULONG_PTR)__Section + PAGE_SIZE);
 
         status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
         ASSERT(NT_SUCCESS(status));
@@ -380,7 +394,7 @@ SyncDisableInterrupts(
     VOID
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
     NTSTATUS        status;
 
     Trace("====>\n");
@@ -407,7 +421,7 @@ VOID
 SyncRunEarly(
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     ASSERT(SyncOwner >= 0);
 
@@ -428,7 +442,7 @@ VOID
 SyncEnableInterrupts(
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     ASSERT(SyncOwner >= 0);
 
@@ -450,7 +464,7 @@ VOID
 SyncRunLate(
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     ASSERT(SyncOwner >= 0);
 
@@ -473,7 +487,7 @@ SyncRelease(
     VOID
     )
 {
-    PSYNC_CONTEXT   Context = SyncContext;
+    PSYNC_CONTEXT   Context = &SyncContext;
 
     Trace("====>\n");
 
@@ -489,7 +503,8 @@ SyncRelease(
 
     __SyncWait();
 
-    RtlZeroMemory(Context, PAGE_SIZE);
+    __SyncFree(Context->Dpc);
+    RtlZeroMemory(Context, sizeof(SYNC_CONTEXT));
 
     __SyncRelease();
 
