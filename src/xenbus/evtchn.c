@@ -1753,6 +1753,9 @@ EvtchnRelease(
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR Processor;
 
+        if (!EvtchnIsProcessorEnabled(Context, Cpu))
+            continue;
+
         ASSERT(Context->Processor != NULL);
         Processor = &Context->Processor[Cpu];
 
