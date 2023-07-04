@@ -72,10 +72,15 @@ EvtchnTwoLevelIsProcessorEnabled(
     IN  ULONG                       Index
     )
 {
+    unsigned int                    vcpu_id;
+    NTSTATUS                        status;
+
     UNREFERENCED_PARAMETER(_Context);
     UNREFERENCED_PARAMETER(Index);
 
-    return TRUE;
+    status = SystemProcessorVcpuId(Index, &vcpu_id);
+
+    return NT_SUCCESS(status) ? TRUE : FALSE;
 }
 
 static BOOLEAN
