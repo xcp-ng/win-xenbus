@@ -1271,6 +1271,22 @@ EvtchnAbiRelease(
     RtlZeroMemory(&Context->EvtchnAbi, sizeof (XENBUS_EVTCHN_ABI));
 }
 
+static BOOLEAN
+EvtchnIsProcessorEnabled(
+    IN  PXENBUS_EVTCHN_CONTEXT      Context,
+    IN  ULONG                       Cpu
+    )
+{
+    if (!XENBUS_SHARED_INFO(UpcallSupported,
+                            &Context->SharedInfoInterface,
+                            Cpu))
+        return FALSE;
+
+    return XENBUS_EVTCHN_ABI(IsProcessorEnabled,
+                             &Context->EvtchnAbi,
+                             Cpu);
+}
+
 static VOID
 EvtchnInterruptEnable(
     IN  PXENBUS_EVTCHN_CONTEXT  Context
@@ -1297,14 +1313,14 @@ EvtchnInterruptEnable(
 
         Processor = &Context->Processor[Cpu];
 
-        if (Processor->Interrupt == NULL)
+        if (!EvtchnIsProcessorEnabled(Context, Cpu))
             continue;
+
+        ASSERT(Processor->Interrupt != NULL);
+        Vector = FdoGetInterruptVector(Context->Fdo, Processor->Interrupt);
 
         status = SystemProcessorVcpuId(Cpu, &vcpu_id);
-        if (!NT_SUCCESS(status))
-            continue;
-
-        Vector = FdoGetInterruptVector(Context->Fdo, Processor->Interrupt);
+        ASSERT(NT_SUCCESS(status));
 
         status = HvmSetEvtchnUpcallVector(vcpu_id, Vector);
         if (!NT_SUCCESS(status)) {
@@ -1368,9 +1384,10 @@ EvtchnInterruptDisable(
         if (!Processor->UpcallEnabled)
             continue;
 
+        ASSERT(EvtchnIsProcessorEnabled(Context, Cpu));
+
         status = SystemProcessorVcpuId(Cpu, &vcpu_id);
-        if (!NT_SUCCESS(status))
-            continue;
+        ASSERT(NT_SUCCESS(status));
 
         (VOID) HvmSetEvtchnUpcallVector(vcpu_id, 0);
         Processor->UpcallEnabled = FALSE;
@@ -1517,22 +1534,6 @@ EvtchnDebugCallback(
     }
 }
 
-static BOOLEAN
-EvtchnIsProcessorEnabled(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  ULONG                       Cpu
-    )
-{
-    if (!XENBUS_SHARED_INFO(UpcallSupported,
-                            &Context->SharedInfoInterface,
-                            Cpu))
-        return FALSE;
-
-    return XENBUS_EVTCHN_ABI(IsProcessorEnabled,
-                             &Context->EvtchnAbi,
-                             Cpu);
-}
-
 static NTSTATUS
 EvtchnAcquire(
     IN  PINTERFACE          Interface
@@ -1657,16 +1658,18 @@ fail9:
     for (Cpu = 0; Cpu < Context->ProcessorCount; Cpu++) {
         PXENBUS_EVTCHN_PROCESSOR Processor;
 
+        if (!EvtchnIsProcessorEnabled(Context, Cpu))
+            continue;
+
         ASSERT(Context->Processor != NULL);
         Processor = &Context->Processor[Cpu];
 
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
         RtlZeroMemory(&Processor->PendingList, sizeof (LIST_ENTRY));
 
-        if (Processor->Interrupt != NULL) {
-            FdoFreeInterrupt(Fdo, Processor->Interrupt);
-            Processor->Interrupt = NULL;
-        }
+        ASSERT(Processor->Interrupt != NULL);
+        FdoFreeInterrupt(Fdo, Processor->Interrupt);
+        Processor->Interrupt = NULL;
 
         Processor->Cpu = 0;
         Processor->Context = NULL;
@@ -1765,10 +1768,9 @@ EvtchnRelease(
         RtlZeroMemory(&Processor->Dpc, sizeof (KDPC));
         RtlZeroMemory(&Processor->PendingList, sizeof (LIST_ENTRY));
 
-        if (Processor->Interrupt != NULL) {
-            FdoFreeInterrupt(Fdo, Processor->Interrupt);
-            Processor->Interrupt = NULL;
-        }
+        ASSERT(Processor->Interrupt != NULL);
+        FdoFreeInterrupt(Fdo, Processor->Interrupt);
+        Processor->Interrupt = NULL;
 
         Processor->Cpu = 0;
         Processor->Context = NULL;
