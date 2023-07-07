@@ -338,8 +338,14 @@ CacheInsertSlab(
     InsertTailList(&Cache->SlabList, &New->ListEntry);
 
 done:
-    if (Cache->Cursor == NULL)
+    if (Cache->Cursor == NULL) {
+        //
+        // A newly inserted slab has either just been created, or has just had
+        // an object freed back to it. Either will it should never be full.
+        //
+        ASSERT(CacheMaskCount(New->Allocated) < CacheMaskSize(New->Allocated));
         Cache->Cursor = &New->ListEntry;
+    }
 
 #undef  INSERT_BEFORE
 }
@@ -475,13 +481,16 @@ CacheDestroySlab(
     // The only reason the cursor should be pointing at this slab is
     // if it is the only one in the list.
     //
-    if (Cache->Cursor == &Slab->ListEntry)
+    if (Cache->Cursor == &Slab->ListEntry) {
+        ASSERT3P(Slab->ListEntry.Flink, ==, &Cache->SlabList);
+        ASSERT3P(Slab->ListEntry.Blink, ==, &Cache->SlabList);
         Cache->Cursor = &Cache->SlabList;
+    }
 
     RemoveEntryList(&Slab->ListEntry);
 
-    ASSERT(Cache->Cursor != &Cache->SlabList ||
-           IsListEmpty(&Cache->SlabList));
+    ASSERT(IMPLY(Cache->Cursor == &Cache->SlabList,
+                 IsListEmpty(&Cache->SlabList)));
 
     Index = CacheMaskSize(Slab->Allocated);
     while (--Index >= 0) {
@@ -608,7 +617,7 @@ CacheGet(
 
 again:
     if (Cache->Cursor != &Cache->SlabList) {
-        PLIST_ENTRY ListEntry = Cache->Cursor;
+        PLIST_ENTRY         ListEntry = Cache->Cursor;
         PXENBUS_CACHE_SLAB  Slab;
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
@@ -616,11 +625,15 @@ again:
         Object = CacheGetObjectFromSlab(Slab);
         ASSERT(Object != NULL);
 
+        //
+        // If the slab is now fully occupied, ove the cursor on to the next
+        // slab. If there are no more slabed then Flink will be pointing at
+        // Cache->SlabList so we will create a new slab next time round, if
+        // necessary.
+        //
         if (CacheMaskCount(Slab->Allocated) == CacheMaskSize(Slab->Allocated))
             Cache->Cursor = Slab->ListEntry.Flink;
-    }
-
-    if (Object == NULL) {
+    } else {
         NTSTATUS status;
 
         ASSERT3P(Cache->Cursor, ==, &Cache->SlabList);
@@ -684,7 +697,11 @@ CachePut(
 
     CachePutObjectToSlab(Slab, Object);
 
-    /* Re-insert to keep slab list ordered */
+    //
+    // To maintain the order, and the invariant that the cursor always points,
+    // to the first slab with available space we must remove this slab from the
+    // list and re-insert it at it's (now) correct location.
+    //
     RemoveEntryList(&Slab->ListEntry);
     CacheInsertSlab(Cache, Slab);
 
@@ -745,12 +762,16 @@ CacheSpill(
     while (!IsListEmpty(&Cache->SlabList)) {
         PXENBUS_CACHE_SLAB  Slab;
 
-        // Actual list removal is done in CacheDestroySlab()
         ListEntry = Cache->SlabList.Blink;
         ASSERT(ListEntry != &Cache->SlabList);
 
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
+        //
+        // Slabs are kept in order of maximum to minimum occupancy so we know
+        // that if the last slab in the list is not empty, then none of the
+        // slabs before it will be empty.
+        //
         if (CacheMaskCount(Slab->Allocated) != 0)
             break;
 
