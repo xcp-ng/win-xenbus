@@ -53,7 +53,7 @@ struct _XENBUS_SHARED_INFO_CONTEXT {
     PXENBUS_FDO                     Fdo;
     KSPIN_LOCK                      Lock;
     LONG                            References;
-    PHYSICAL_ADDRESS                Address;
+    PMDL                            Mdl;
     shared_info_t                   *Shared;
     PXENBUS_SHARED_INFO_PROCESSOR   Processor;
     ULONG                           ProcessorCount;
@@ -459,17 +459,21 @@ SharedInfoMap(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
     )
 {
+    PFN_NUMBER                      Pfn;
+    PHYSICAL_ADDRESS                Address;
     NTSTATUS                        status;
 
-    status = MemoryAddToPhysmap((PFN_NUMBER)(Context->Address.QuadPart >> PAGE_SHIFT),
-                                XENMAPSPACE_shared_info,
-                                0);
+    Pfn = MmGetMdlPfnArray(Context->Mdl)[0];
+
+    status = MemoryAddToPhysmap(Pfn, XENMAPSPACE_shared_info, 0);
     ASSERT(NT_SUCCESS(status));
+
+    Address.QuadPart = Pfn << PAGE_SHIFT;
 
     LogPrintf(LOG_LEVEL_INFO,
               "SHARED_INFO: MAP XENMAPSPACE_shared_info @ %08x.%08x\n",
-              Context->Address.HighPart,
-              Context->Address.LowPart);
+              Address.HighPart,
+              Address.LowPart);
 }
 
 static VOID
@@ -477,11 +481,14 @@ SharedInfoUnmap(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
     )
 {
+    PFN_NUMBER                      Pfn;
+
     LogPrintf(LOG_LEVEL_INFO,
               "SHARED_INFO: UNMAP XENMAPSPACE_shared_info\n");
 
+    Pfn = MmGetMdlPfnArray(Context->Mdl)[0];
 
-    (VOID) MemoryRemoveFromPhysmap((PFN_NUMBER)(Context->Address.QuadPart >> PAGE_SHIFT));
+    (VOID) MemoryRemoveFromPhysmap(Pfn);
 }
 
 static VOID
@@ -502,12 +509,17 @@ SharedInfoDebugCallback(
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Argument;
+    PFN_NUMBER                  Pfn;
+    PHYSICAL_ADDRESS            Address;
+
+    Pfn = MmGetMdlPfnArray(Context->Mdl)[0];
+    Address.QuadPart = Pfn << PAGE_SHIFT;
 
     XENBUS_DEBUG(Printf,
                  &Context->DebugInterface,
                  "Address = %08x.%08x\n",
-                 Context->Address.HighPart,
-                 Context->Address.LowPart);
+                 Address.HighPart,
+                 Address.LowPart);
 
     if (!Crashing) {
         shared_info_t   *Shared;
@@ -593,9 +605,13 @@ SharedInfoAcquire(
 
     Trace("====>\n");
 
-    status = FdoAllocateHole(Fdo, 1, &Context->Shared, &Context->Address);
-    if (!NT_SUCCESS(status))
+    Context->Mdl = FdoHoleAllocate(Fdo, 1);
+
+    status = STATUS_NO_MEMORY;
+    if (Context->Mdl == NULL)
         goto fail1;
+
+    Context->Shared = Context->Mdl->StartVa;
 
     SharedInfoMap(Context);
     SharedInfoEvtchnMaskAll(Context);
@@ -715,9 +731,10 @@ fail2:
 
     SharedInfoUnmap(Context);
 
-    FdoFreeHole(Fdo, Context->Address, 1);
-    Context->Address.QuadPart = 0;
     Context->Shared = NULL;
+
+    FdoHoleFree(Fdo, Context->Mdl);
+    Context->Mdl = NULL;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -777,9 +794,10 @@ SharedInfoRelease (
 
     SharedInfoUnmap(Context);
 
-    FdoFreeHole(Fdo, Context->Address, 1);
-    Context->Address.QuadPart = 0;
     Context->Shared = NULL;
+
+    FdoHoleFree(Fdo, Context->Mdl);
+    Context->Mdl = NULL;
 
     Trace("<====\n");
 

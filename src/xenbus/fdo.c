@@ -91,12 +91,12 @@ typedef struct _XENBUS_VIRQ {
     ULONG                   Count;
 } XENBUS_VIRQ, *PXENBUS_VIRQ;
 
-typedef struct _XENBUS_HOLE {
-    PXENBUS_RANGE_SET               RangeSet;
-    ULONG                           Count;
-    PVOID                           VirtualAddress;
-    PHYSICAL_ADDRESS                PhysicalAddress;
-} XENBUS_HOLE, *PXENBUS_HOLE;
+typedef struct _XENBUS_PCI_HOLE {
+    PXENBUS_RANGE_SET   RangeSet;
+    ULONG               Count;
+    PVOID               VirtualAddress;
+    PHYSICAL_ADDRESS    PhysicalAddress;
+} XENBUS_PCI_HOLE, *PXENBUS_PCI_HOLE;
 
 struct _XENBUS_FDO {
     PXENBUS_DX                      Dx;
@@ -156,8 +156,8 @@ struct _XENBUS_FDO {
     XENBUS_RANGE_SET_INTERFACE      RangeSetInterface;
     XENBUS_BALLOON_INTERFACE        BalloonInterface;
 
-    PMDL                            Mdl;
-    XENBUS_HOLE                     Hole;
+    ULONG                           UseMemoryHole;
+    XENBUS_PCI_HOLE                 PciHole;
     LIST_ENTRY                      InterruptList;
 
     LIST_ENTRY                      VirqList;
@@ -3218,81 +3218,23 @@ FdoSuspendCallbackLate(
     ASSERT(NT_SUCCESS(status));
 }
 
-static FORCEINLINE NTSTATUS
-__FdoCreateMemoryHole(
-    IN  PXENBUS_FDO Fdo
-    )
-{
-    PXENBUS_HOLE    Hole = &Fdo->Hole;
-    PMDL            Mdl;
-    PFN_NUMBER      Pfn;
-    NTSTATUS        status;
-
-    Mdl = Fdo->Mdl;
-    Hole->VirtualAddress = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
-
-    Pfn = MmGetMdlPfnArray(Mdl)[0];
-    Hole->PhysicalAddress.QuadPart = (ULONGLONG)Pfn << PAGE_SHIFT;
-
-    Hole->Count = BYTES_TO_PAGES(Mdl->ByteCount);
-    ASSERT3U(Hole->Count, ==, 1u << PAGE_ORDER_2M);
-
-    status = STATUS_UNSUCCESSFUL;
-    if (MemoryDecreaseReservation(PAGE_ORDER_2M, 1, &Pfn) != 1)
-        goto fail1;
-
-    return STATUS_SUCCESS;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    Hole->Count = 0;
-    Hole->PhysicalAddress.QuadPart = 0;
-    Hole->VirtualAddress = NULL;
-
-    return status;
-}
-
-static FORCEINLINE VOID
-__FdoDestroyMemoryHole(
-    IN  PXENBUS_FDO Fdo
-    )
-{
-    PXENBUS_HOLE    Hole = &Fdo->Hole;
-    PMDL            Mdl;
-    PFN_NUMBER      Pfn;
-    ULONG           Index;
-
-    Mdl = Fdo->Mdl;
-    Pfn = MmGetMdlPfnArray(Mdl)[0];
-
-    ASSERT3U(Hole->Count, ==, 1u << PAGE_ORDER_2M);
-    if (MemoryPopulatePhysmap(PAGE_ORDER_2M, 1, &Pfn) == 1)
-        goto done;
-
-    for (Index = 0; Index < Hole->Count; Index++) {
-        if (MemoryPopulatePhysmap(PAGE_ORDER_4K, 1, &Pfn) != 1)
-            BUG("FAILED TO RE-POPULATE HOLE");
-
-        Pfn++;
-    }
-
-done:
-    Hole->Count = 0;
-    Hole->PhysicalAddress.QuadPart = 0;
-    Hole->VirtualAddress = NULL;
-}
-
-static FORCEINLINE NTSTATUS
-__FdoCreatePciHole(
+static NTSTATUS
+FdoPciHoleCreate(
     IN  PXENBUS_FDO                 Fdo
     )
 {
-    PXENBUS_HOLE                    Hole = &Fdo->Hole;
+    PXENBUS_PCI_HOLE                Hole = &Fdo->PciHole;
     ULONG                           Index;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
-    SIZE_T                          Size;
+    PFN_NUMBER                      Pfn;
     NTSTATUS                        status;
+
+    status = XENBUS_RANGE_SET(Create,
+                              &Fdo->RangeSetInterface,
+                              "PCI",
+                              &Hole->RangeSet);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     for (Index = 0; Index < Fdo->TranslatedResourceList->Count; Index++) {
         Translated = &Fdo->TranslatedResourceList->PartialDescriptors[Index];
@@ -3302,74 +3244,19 @@ __FdoCreatePciHole(
     }
 
     status = STATUS_OBJECT_NAME_NOT_FOUND;
-    goto fail1;
+    goto fail2;
 
 found:
-    Hole->PhysicalAddress = Translated->u.Memory.Start;
-    Size = Translated->u.Memory.Length;
-    Hole->Count = (ULONG)(Size >> PAGE_SHIFT);
-
-    Hole->VirtualAddress = MmMapIoSpace(Hole->PhysicalAddress,
-                                        Size,
+    Hole->VirtualAddress = MmMapIoSpace(Translated->u.Memory.Start,
+                                        Translated->u.Memory.Length,
                                         MmCached);
 
     status = STATUS_UNSUCCESSFUL;
     if (Hole->VirtualAddress == NULL)
-        goto fail2;
+        goto fail3;
 
-    return STATUS_SUCCESS;
-
-fail2:
-    Error("fail2\n");
-
-    Hole->VirtualAddress = NULL;
-    Hole->Count = 0;
-    Hole->PhysicalAddress.QuadPart = 0;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
-}
-
-static FORCEINLINE VOID
-__FdoDestroyPciHole(
-    IN  PXENBUS_FDO Fdo
-    )
-{
-    PXENBUS_HOLE    Hole = &Fdo->Hole;
-    SIZE_T          Size;
-
-    Size = (ULONGLONG)Hole->Count << PAGE_SHIFT;
-    MmUnmapIoSpace(Hole->VirtualAddress, Size);
-
-    Hole->VirtualAddress = NULL;
-    Hole->Count = 0;
-    Hole->PhysicalAddress.QuadPart = 0;
-}
-
-static NTSTATUS
-FdoCreateHole(
-    IN  PXENBUS_FDO     Fdo
-    )
-{
-    PXENBUS_HOLE        Hole = &Fdo->Hole;
-    PFN_NUMBER          Pfn;
-    NTSTATUS            status;
-
-    status = XENBUS_RANGE_SET(Create,
-                              &Fdo->RangeSetInterface,
-                              "hole",
-                              &Hole->RangeSet);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = (Fdo->Mdl != NULL) ?
-             __FdoCreateMemoryHole(Fdo) :
-             __FdoCreatePciHole(Fdo);
-
-    if (!NT_SUCCESS(status))
-        goto fail2;
+    Hole->PhysicalAddress = Translated->u.Memory.Start;
+    Hole->Count = (ULONG)(Translated->u.Memory.Length >> PAGE_SHIFT);
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
@@ -3377,23 +3264,26 @@ FdoCreateHole(
                               0,
                               Hole->Count);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     Pfn = (PFN_NUMBER)(Hole->PhysicalAddress.QuadPart >> PAGE_SHIFT);
-    Info("(%s) %08x - %08x\n",
-         (Fdo->Mdl != NULL) ? "MEMORY" : "PCI",
+    Info("%08x - %08x\n",
          Pfn,
          Pfn + Hole->Count - 1);
 
     return STATUS_SUCCESS;
 
+fail4:
+    Error("fail4\n");
+
+    MmUnmapIoSpace(Hole->VirtualAddress, Hole->Count << PAGE_SHIFT);
+
+    Hole->VirtualAddress = NULL;
+    Hole->Count = 0;
+    Hole->PhysicalAddress.QuadPart = 0;
+
 fail3:
     Error("fail3\n");
-
-    if (Fdo->Mdl != NULL)
-        __FdoDestroyMemoryHole(Fdo);
-    else
-        __FdoDestroyPciHole(Fdo);
 
 fail2:
     Error("fail2\n");
@@ -3409,17 +3299,50 @@ fail1:
     return status;
 }
 
-NTSTATUS
-FdoAllocateHole(
-    IN  PXENBUS_FDO         Fdo,
-    IN  ULONG               Count,
-    OUT PVOID               *VirtualAddress OPTIONAL,
-    OUT PPHYSICAL_ADDRESS   PhysicalAddress
+static VOID
+FdoPciHoleDestroy(
+    IN  PXENBUS_FDO     Fdo
     )
 {
-    PXENBUS_HOLE            Hole = &Fdo->Hole;
+    PXENBUS_PCI_HOLE    Hole = &Fdo->PciHole;
+    NTSTATUS            status;
+
+    BUG_ON(Hole->Count == 0);
+
+    status = XENBUS_RANGE_SET(Get,
+                              &Fdo->RangeSetInterface,
+                              Hole->RangeSet,
+                              0,
+                              Hole->Count);
+    ASSERT(NT_SUCCESS(status));
+
+    MmUnmapIoSpace(Hole->VirtualAddress, Hole->Count << PAGE_SHIFT);
+
+    Hole->VirtualAddress = NULL;
+    Hole->Count = 0;
+    Hole->PhysicalAddress.QuadPart = 0;
+
+    XENBUS_RANGE_SET(Destroy,
+                     &Fdo->RangeSetInterface,
+                     Hole->RangeSet);
+    Hole->RangeSet = NULL;
+}
+
+static PMDL
+FdoPciHoleAllocate(
+    IN  PXENBUS_FDO         Fdo,
+    IN  ULONG               Count
+    )
+{
+    PXENBUS_PCI_HOLE        Hole = &Fdo->PciHole;
     LONGLONG                Index;
+    PVOID                   VirtualAddress;
+    PHYSICAL_ADDRESS        PhysicalAddress;
+    PMDL                    Mdl;
+    PPFN_NUMBER             PfnArray;
     NTSTATUS                status;
+
+    BUG_ON(Hole->Count == 0);
 
     status = XENBUS_RANGE_SET(Pop,
                               &Fdo->RangeSetInterface,
@@ -3429,35 +3352,76 @@ FdoAllocateHole(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    if (VirtualAddress != NULL)
-        *VirtualAddress = (PUCHAR)Hole->VirtualAddress +
-                          (Index << PAGE_SHIFT);
+    VirtualAddress = (PUCHAR)Hole->VirtualAddress + (Index << PAGE_SHIFT);
 
-    PhysicalAddress->QuadPart = Hole->PhysicalAddress.QuadPart +
-                                (Index << PAGE_SHIFT);
+    Mdl = IoAllocateMdl(VirtualAddress,
+                        Count << PAGE_SHIFT,
+                        FALSE,
+                        FALSE,
+                        NULL);
 
-    return STATUS_SUCCESS;;
+    status = STATUS_NO_MEMORY;
+    if (Mdl == NULL)
+        goto fail2;
+
+    ASSERT3P(Mdl->StartVa, ==, VirtualAddress);
+    ASSERT3U(Mdl->ByteCount, ==, Count << PAGE_SHIFT);
+
+    PhysicalAddress.QuadPart = Hole->PhysicalAddress.QuadPart + (Index << PAGE_SHIFT);
+
+    PfnArray = MmGetMdlPfnArray(Mdl);
+    PfnArray[0] = (PFN_NUMBER)(PhysicalAddress.QuadPart >> PAGE_SHIFT);
+
+    for (Index = 0; Index < (LONGLONG)Count; Index++)
+        PfnArray[Index] = PfnArray[0] + (ULONG)Index;
+
+    return Mdl;
+
+fail2:
+    Error("fail2\n");
+
+    (VOID) XENBUS_RANGE_SET(Put,
+                            &Fdo->RangeSetInterface,
+                            Hole->RangeSet,
+                            Index,
+                            Count);
 
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    return status;
+    return NULL;
 }
 
-VOID
-FdoFreeHole(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PHYSICAL_ADDRESS    PhysicalAddress,
-    IN  ULONG               Count
+static VOID
+FdoPciHoleFree(
+    IN  PXENBUS_FDO     Fdo,
+    IN  PMDL            Mdl
     )
 {
-    PXENBUS_HOLE            Hole = &Fdo->Hole;
-    LONGLONG                Index;
-    NTSTATUS                status;
+    PXENBUS_PCI_HOLE    Hole = &Fdo->PciHole;
+    ULONG               Count;
+    PPFN_NUMBER         PfnArray;
+    LONGLONG            Index;
+    PHYSICAL_ADDRESS    PhysicalAddress;
+    NTSTATUS            status;
 
-    Index = PhysicalAddress.QuadPart - Hole->PhysicalAddress.QuadPart;
-    ASSERT3U(Index & (PAGE_SIZE - 1), ==, 0);
-    Index >>= PAGE_SHIFT;
+    BUG_ON(Hole->Count == 0);
+
+    Count = Mdl->ByteCount >> PAGE_SHIFT;
+    ASSERT3U(Count, <, Hole->Count);
+
+    PfnArray = MmGetMdlPfnArray(Mdl);
+
+    // Verify that the PFNs are contiguous
+    for (Index = 0; Index < (LONGLONG)Count; Index++)
+        BUG_ON(PfnArray[Index] != PfnArray[0] + Index);
+
+    PhysicalAddress.QuadPart = PfnArray[0] << PAGE_SHIFT;
+
+    Index = (PhysicalAddress.QuadPart - Hole->PhysicalAddress.QuadPart) >> PAGE_SHIFT;
+
+    ASSERT3U(Index, <, Hole->Count);
+    ASSERT3U(Index + Count, <=, Hole->Count);
 
     status = XENBUS_RANGE_SET(Put,
                               &Fdo->RangeSetInterface,
@@ -3465,33 +3429,90 @@ FdoFreeHole(
                               Index,
                               Count);
     ASSERT(NT_SUCCESS(status));
+
+    ExFreePool(Mdl);
+}
+
+static PMDL
+FdoMemoryHoleAllocate(
+    IN  PXENBUS_FDO     Fdo,
+    IN  ULONG           Count
+    )
+{
+    PMDL                Mdl;
+    PPFN_NUMBER         PfnArray;
+    NTSTATUS            status;
+
+    UNREFERENCED_PARAMETER(Fdo);
+
+    Mdl = __AllocatePages(Count, TRUE);
+
+    status = STATUS_NO_MEMORY;
+    if (Mdl == NULL)
+        goto fail1;
+
+    PfnArray = MmGetMdlPfnArray(Mdl);
+
+    status = STATUS_UNSUCCESSFUL;
+    if (MemoryDecreaseReservation(PAGE_ORDER_4K, Count, PfnArray) != Count)
+        goto fail2;
+
+    return Mdl;
+
+fail2:
+    Error("fail2\n");
+
+    __FreePages(Mdl);
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return NULL;
 }
 
 static VOID
-FdoDestroyHole(
-    IN  PXENBUS_FDO Fdo
+FdoMemoryHoleFree(
+    IN  PXENBUS_FDO     Fdo,
+    IN  PMDL            Mdl
     )
 {
-    PXENBUS_HOLE    Hole = &Fdo->Hole;
-    NTSTATUS        status;
+    ULONG               Count;
+    PPFN_NUMBER         PfnArray;
 
-    status = XENBUS_RANGE_SET(Get,
-                              &Fdo->RangeSetInterface,
-                              Hole->RangeSet,
-                              0,
-                              Hole->Count);
-    ASSERT(NT_SUCCESS(status));
+    UNREFERENCED_PARAMETER(Fdo);
 
-    if (Fdo->Mdl != NULL)
-        __FdoDestroyMemoryHole(Fdo);
-    else
-        __FdoDestroyPciHole(Fdo);
+    Count = Mdl->ByteCount >> PAGE_SHIFT;
+    PfnArray = MmGetMdlPfnArray(Mdl);
 
-    XENBUS_RANGE_SET(Destroy,
-                     &Fdo->RangeSetInterface,
-                     Hole->RangeSet);
-    Hole->RangeSet = NULL;
+    if (MemoryPopulatePhysmap(PAGE_ORDER_4K, Count, PfnArray) != Count)
+        BUG("FAILED TO RE-POPULATE HOLE");
+
+    __FreePages(Mdl);
 }
+
+PMDL
+FdoHoleAllocate(
+    IN  PXENBUS_FDO Fdo,
+    IN  ULONG       Count
+    )
+{
+    return (Fdo->UseMemoryHole != 0) ?
+        FdoMemoryHoleAllocate(Fdo, Count) :
+        FdoPciHoleAllocate(Fdo, Count);
+}
+
+VOID
+FdoHoleFree(
+    IN  PXENBUS_FDO Fdo,
+    IN  PMDL        Mdl
+    )
+{
+    if (Fdo->UseMemoryHole != 0)
+        FdoMemoryHoleFree(Fdo, Mdl);
+    else
+        FdoPciHoleFree(Fdo, Mdl);
+}
+
 
 static VOID
 FdoDebugCallback(
@@ -3566,10 +3587,11 @@ FdoD3ToD0(
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    // Subsequent interfaces require use of BAR space
-    status = FdoCreateHole(Fdo);
-    if (!NT_SUCCESS(status))
-        goto fail4;
+    if (Fdo->UseMemoryHole == 0) {
+        status = FdoPciHoleCreate(Fdo);
+        if (!NT_SUCCESS(status))
+            goto fail4;
+    }
 
     status = XENBUS_EVTCHN(Acquire, &Fdo->EvtchnInterface);
     if (!NT_SUCCESS(status))
@@ -3677,7 +3699,8 @@ fail6:
 fail5:
     Error("fail5\n");
 
-    FdoDestroyHole(Fdo);
+    if (Fdo->UseMemoryHole == 0)
+        FdoPciHoleDestroy(Fdo);
 
 fail4:
     Error("fail4\n");
@@ -3800,7 +3823,8 @@ FdoD0ToD3(
 
     XENBUS_EVTCHN(Release, &Fdo->EvtchnInterface);
 
-    FdoDestroyHole(Fdo);
+    if (Fdo->UseMemoryHole == 0)
+        FdoPciHoleDestroy(Fdo);
 
     XENBUS_RANGE_SET(Release, &Fdo->RangeSetInterface);
 
@@ -5605,107 +5629,6 @@ fail1:
                       (_Size),                                                          \
                       (_Optional))
 
-
-#define FDO_HOLE_SIZE   (2ull << 20)
-
-static FORCEINLINE NTSTATUS
-__FdoAllocateBuffer(
-    IN  PXENBUS_FDO     Fdo
-    )
-{
-    HANDLE              ParametersKey;
-    ULONG               UseMemoryHole;
-    ULONG               Count;
-    ULONG               Size;
-    PHYSICAL_ADDRESS    Low;
-    PHYSICAL_ADDRESS    High;
-    PHYSICAL_ADDRESS    Align;
-    PVOID               Buffer;
-    PMDL                Mdl;
-    NTSTATUS            status;
-
-    ParametersKey = DriverGetParametersKey();
-
-    status = RegistryQueryDwordValue(ParametersKey,
-                                     "UseMemoryHole",
-                                     &UseMemoryHole);
-    if (!NT_SUCCESS(status))
-        UseMemoryHole = 1;
-
-    ASSERT(Fdo->Mdl == NULL);
-    if (UseMemoryHole == 0)
-        goto done;
-
-    Count = 1u << PAGE_ORDER_2M;
-    Size = Count << PAGE_SHIFT;
-
-    Low.QuadPart = 0;
-    High = SystemMaximumPhysicalAddress();
-    Align.QuadPart = Size;
-
-    Buffer = MmAllocateContiguousNodeMemory((SIZE_T)Size,
-                                            Low,
-                                            High,
-                                            Align,
-                                            PAGE_READWRITE,
-                                            MM_ANY_NODE_OK);
-
-    status = STATUS_NO_MEMORY;
-    if (Buffer == NULL)
-        goto fail1;
-
-    Mdl = IoAllocateMdl(Buffer,
-                        Size,
-                        FALSE,
-                        FALSE,
-                        NULL);
-
-    status = STATUS_NO_MEMORY;
-    if (Mdl == NULL)
-        goto fail2;
-
-    MmBuildMdlForNonPagedPool(Mdl);
-
-    ASSERT3U(Mdl->ByteOffset, ==, 0);
-    ASSERT3U(Mdl->ByteCount, ==, Size);
-
-    Fdo->Mdl = Mdl;
-
-done:
-    return STATUS_SUCCESS;
-
-fail2:
-    Error("fail2\n");
-
-    MmFreeContiguousMemory(Buffer);
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
-}
-
-static FORCEINLINE VOID
-__FdoFreeBuffer(
-    IN  PXENBUS_FDO Fdo
-    )
-{
-    PMDL            Mdl;
-    PVOID           Buffer;
-
-    Mdl = Fdo->Mdl;
-    if (Mdl == NULL)
-        return;
-
-    Fdo->Mdl = NULL;
-
-    Buffer = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
-
-    ExFreePool(Mdl);
-
-    MmFreeContiguousMemory(Buffer);
-}
-
 static NTSTATUS
 FdoBalloonInitialize(
     IN  PXENBUS_FDO Fdo
@@ -5790,6 +5713,8 @@ FdoCreate(
     PXENBUS_DX                  Dx;
     PXENBUS_FDO                 Fdo;
     PCI_COMMON_HEADER           Header;
+    HANDLE                      ParametersKey;
+    ULONG                       UseMemoryHole;
     NTSTATUS                    status;
 
 #pragma prefast(suppress:28197) // Possibly leaking memory 'FunctionDeviceObject'
@@ -5857,53 +5782,59 @@ FdoCreate(
     if (!__FdoIsActive(Fdo))
         goto done;
 
-    status = __FdoAllocateBuffer(Fdo);
+    ParametersKey = DriverGetParametersKey();
+
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     "UseMemoryHole",
+                                     &UseMemoryHole);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        UseMemoryHole = 1;
+
+    Fdo->UseMemoryHole = UseMemoryHole;
 
     status = DebugInitialize(Fdo, &Fdo->DebugContext);
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail9;
 
     status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail10;
 
     status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
     if (!NT_SUCCESS(status))
-        goto fail12;
+        goto fail11;
 
     status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
     if (!NT_SUCCESS(status))
-        goto fail13;
+        goto fail12;
 
     status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
-        goto fail14;
+        goto fail13;
 
     status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
-        goto fail15;
+        goto fail14;
 
     status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
-        goto fail16;
+        goto fail15;
 
     status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
-        goto fail17;
+        goto fail16;
 
     status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
     if (!NT_SUCCESS(status))
-        goto fail18;
+        goto fail17;
 
     status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
     if (!NT_SUCCESS(status))
-        goto fail19;
+        goto fail18;
 
     status = FdoBalloonInitialize(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail20;
+        goto fail19;
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
                                XENBUS_DEBUG_INTERFACE_VERSION_MAX,
@@ -5974,73 +5905,70 @@ done:
 
     return STATUS_SUCCESS;
 
-fail20:
-    Error("fail20\n");
+fail19:
+    Error("fail19\n");
 
     UnplugTeardown(Fdo->UnplugContext);
     Fdo->UnplugContext = NULL;
 
-fail19:
-    Error("fail19\n");
+fail18:
+    Error("fail18\n");
 
     ConsoleTeardown(Fdo->ConsoleContext);
     Fdo->ConsoleContext = NULL;
 
-fail18:
-    Error("fail18\n");
+fail17:
+    Error("fail17\n");
 
     StoreTeardown(Fdo->StoreContext);
     Fdo->StoreContext = NULL;
 
-fail17:
-    Error("fail17\n");
+fail16:
+    Error("fail16\n");
 
     GnttabTeardown(Fdo->GnttabContext);
     Fdo->GnttabContext = NULL;
 
-fail16:
-    Error("fail16\n");
+fail15:
+    Error("fail15\n");
 
     CacheTeardown(Fdo->CacheContext);
     Fdo->CacheContext = NULL;
 
-fail15:
-    Error("fail15\n");
+fail14:
+    Error("fail14\n");
 
     RangeSetTeardown(Fdo->RangeSetContext);
     Fdo->RangeSetContext = NULL;
 
-fail14:
-    Error("fail14\n");
+fail13:
+    Error("fail13\n");
 
     EvtchnTeardown(Fdo->EvtchnContext);
     Fdo->EvtchnContext = NULL;
 
-fail13:
-    Error("fail13\n");
+fail12:
+    Error("fail12\n");
 
     SharedInfoTeardown(Fdo->SharedInfoContext);
     Fdo->SharedInfoContext = NULL;
 
-fail12:
-    Error("fail12\n");
+fail11:
+    Error("fail11\n");
 
     SuspendTeardown(Fdo->SuspendContext);
     Fdo->SuspendContext = NULL;
 
-fail11:
-    Error("fail11\n");
+fail10:
+    Error("fail10\n");
 
     DebugTeardown(Fdo->DebugContext);
     Fdo->DebugContext = NULL;
 
-fail10:
-    Error("fail10\n");
-
-    __FdoFreeBuffer(Fdo);
-
 fail9:
     Error("fail9\n");
+
+    Fdo->UseMemoryHole = 0;
 
     //
     // We don't want to call DriverClearActive() so just
@@ -6180,7 +6108,7 @@ FdoDestroy(
         DebugTeardown(Fdo->DebugContext);
         Fdo->DebugContext = NULL;
 
-        __FdoFreeBuffer(Fdo);
+        Fdo->UseMemoryHole = 0;
 
         FdoClearActive(Fdo);
     }

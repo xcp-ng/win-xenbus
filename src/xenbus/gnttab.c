@@ -70,7 +70,7 @@ struct _XENBUS_GNTTAB_ENTRY {
 };
 
 typedef struct _XENBUS_GNTTAB_MAP_ENTRY {
-    ULONG   NumberPages;
+    PMDL    Mdl;
     ULONG   MapHandles[1];
 } XENBUS_GNTTAB_MAP_ENTRY, *PXENBUS_GNTTAB_MAP_ENTRY;
 
@@ -79,7 +79,7 @@ struct _XENBUS_GNTTAB_CONTEXT {
     KSPIN_LOCK                  Lock;
     LONG                        References;
     ULONG                       MaximumFrameCount;
-    PHYSICAL_ADDRESS            Address;
+    PMDL                        Mdl;
     LONG                        FrameIndex;
     grant_entry_v1_t            *Table;
     XENBUS_RANGE_SET_INTERFACE  RangeSetInterface;
@@ -129,7 +129,7 @@ GnttabExpand(
     if (Index == Context->MaximumFrameCount)
         goto fail1;
 
-    Address = Context->Address;
+    Address.QuadPart = MmGetMdlPfnArray(Context->Mdl)[0] << PAGE_SHIFT;
     Address.QuadPart += (ULONGLONG)Index << PAGE_SHIFT;
 
     status = MemoryAddToPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT),
@@ -187,7 +187,7 @@ GnttabMap(
     for (Index = 0; Index <= Context->FrameIndex; Index++) {
         PHYSICAL_ADDRESS    Address;
 
-        Address = Context->Address;
+        Address.QuadPart = MmGetMdlPfnArray(Context->Mdl)[0] << PAGE_SHIFT;
         Address.QuadPart += (ULONGLONG)Index << PAGE_SHIFT;
 
         status = MemoryAddToPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT),
@@ -213,7 +213,7 @@ GnttabUnmap(
     for (Index = Context->FrameIndex; Index >= 0; --Index) {
         PHYSICAL_ADDRESS    Address;
 
-        Address = Context->Address;
+        Address.QuadPart = MmGetMdlPfnArray(Context->Mdl)[0] << PAGE_SHIFT;
         Address.QuadPart += (ULONGLONG)Index << PAGE_SHIFT;
 
         (VOID) MemoryRemoveFromPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT));
@@ -615,16 +615,16 @@ GnttabMapForeignPages(
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
+    PMDL                        Mdl;
     LONG                        PageIndex;
     PHYSICAL_ADDRESS            PageAddress;
     PXENBUS_GNTTAB_MAP_ENTRY    MapEntry;
     NTSTATUS                    status;
 
-    status = FdoAllocateHole(Context->Fdo,
-                             NumberPages,
-                             NULL,
-                             Address);
-    if (!NT_SUCCESS(status))
+    Mdl = FdoHoleAllocate(Context->Fdo, NumberPages);
+
+    status = STATUS_NO_MEMORY;
+    if (Mdl == NULL)
         goto fail1;
 
     MapEntry = __GnttabAllocate(FIELD_OFFSET(XENBUS_GNTTAB_MAP_ENTRY,
@@ -635,8 +635,10 @@ GnttabMapForeignPages(
     if (MapEntry == NULL)
         goto fail2;
 
+    MapEntry->Mdl = Mdl;
+
+    Address->QuadPart = MmGetMdlPfnArray(Mdl)[0] << PAGE_SHIFT;
     PageAddress.QuadPart = Address->QuadPart;
-    MapEntry->NumberPages = NumberPages;
 
     for (PageIndex = 0; PageIndex < (LONG)NumberPages; PageIndex++) {
         status = GrantTableMapForeignPage(Domain,
@@ -670,12 +672,14 @@ fail3:
                                           PageAddress);
     }
 
+    Address->QuadPart = 0;
+
     __GnttabFree(MapEntry);
 
 fail2:
     Error("fail2\n");
 
-    FdoFreeHole(Context->Fdo, *Address, NumberPages);
+    FdoHoleFree(Context->Fdo, Mdl);
 
 fail1:
     Error("fail1: (%08x)\n", status);
@@ -690,9 +694,11 @@ GnttabUnmapForeignPages(
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
-    ULONG                       PageIndex;
+    ULONG                       NumberPages;
     PHYSICAL_ADDRESS            PageAddress;
+    ULONG                       PageIndex;
     PXENBUS_GNTTAB_MAP_ENTRY    MapEntry;
+    PMDL                        Mdl;
     NTSTATUS                    status;
 
     status = HashTableLookup(Context->MapTable,
@@ -708,7 +714,10 @@ GnttabUnmapForeignPages(
 
     PageAddress.QuadPart = Address.QuadPart;
 
-    for (PageIndex = 0; PageIndex < MapEntry->NumberPages; PageIndex++) {
+    Mdl = MapEntry->Mdl;
+    NumberPages = Mdl->ByteCount >> PAGE_SHIFT;
+
+    for (PageIndex = 0; PageIndex < NumberPages; PageIndex++) {
         status = GrantTableUnmapForeignPage(MapEntry->MapHandles[PageIndex],
                                             PageAddress);
         BUG_ON(!NT_SUCCESS(status));
@@ -716,11 +725,9 @@ GnttabUnmapForeignPages(
         PageAddress.QuadPart += PAGE_SIZE;
     }
 
-    FdoFreeHole(Context->Fdo,
-                Address,
-                MapEntry->NumberPages);
-
     __GnttabFree(MapEntry);
+
+    FdoHoleFree(Context->Fdo, Mdl);
 
     return STATUS_SUCCESS;
 
@@ -750,14 +757,17 @@ GnttabDebugCallback(
     )
 {
     PXENBUS_GNTTAB_CONTEXT  Context = Argument;
+    PHYSICAL_ADDRESS        Address;
 
     UNREFERENCED_PARAMETER(Crashing);
+
+    Address.QuadPart = MmGetMdlPfnArray(Context->Mdl)[0] << PAGE_SHIFT;
 
     XENBUS_DEBUG(Printf,
                  &Context->DebugInterface,
                  "Address = %08x.%08x\n",
-                 Context->Address.HighPart,
-                 Context->Address.LowPart);
+                 Address.HighPart,
+                 Address.LowPart);
     
     XENBUS_DEBUG(Printf,
                  &Context->DebugInterface,
@@ -790,13 +800,13 @@ GnttabAcquire(
               "GNTTAB: MAX FRAMES = %u\n",
               Context->MaximumFrameCount);
 
-    status = FdoAllocateHole(Fdo,
-                             Context->MaximumFrameCount,
-                             &Context->Table,
-                             &Context->Address);
-    if (!NT_SUCCESS(status))
+    Context->Mdl = FdoHoleAllocate(Fdo, Context->MaximumFrameCount);
+
+    status = STATUS_NO_MEMORY;
+    if (Context->Mdl == NULL)
         goto fail2;
 
+    Context->Table = Context->Mdl->StartVa;
     Context->FrameIndex = -1;
 
     status = XENBUS_RANGE_SET(Acquire, &Context->RangeSetInterface);
@@ -894,7 +904,6 @@ fail5:
                      Context->RangeSet);
     Context->RangeSet = NULL;
 
-    Context->FrameIndex = 0;
 
 fail4:
     Error("fail4\n");
@@ -904,11 +913,11 @@ fail4:
 fail3:
     Error("fail3\n");
 
-    FdoFreeHole(Fdo,
-                Context->Address,
-                Context->MaximumFrameCount);
-    Context->Address.QuadPart = 0;
+    Context->FrameIndex = 0;
     Context->Table = NULL;
+
+    FdoHoleFree(Fdo, Context->Mdl);
+    Context->Mdl = NULL;
 
 fail2:
     Error("fail2\n");
@@ -968,15 +977,13 @@ GnttabRelease(
                      Context->RangeSet);
     Context->RangeSet = NULL;
 
-    Context->FrameIndex = 0;
-
     XENBUS_RANGE_SET(Release, &Context->RangeSetInterface);
 
-    FdoFreeHole(Fdo,
-                Context->Address,
-                Context->MaximumFrameCount);
-    Context->Address.QuadPart = 0;
+    Context->FrameIndex = 0;
     Context->Table = NULL;
+
+    FdoHoleFree(Fdo, Context->Mdl);
+    Context->Mdl = NULL;
 
     Context->MaximumFrameCount = 0;
 

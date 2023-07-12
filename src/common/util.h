@@ -180,28 +180,37 @@ __FreePoolWithTag(
 
 static FORCEINLINE PMDL
 __AllocatePages(
-    IN  ULONG           Count
+    IN  ULONG           Count,
+    IN  BOOLEAN         Contiguous
     )
 {
     PHYSICAL_ADDRESS    LowAddress;
     PHYSICAL_ADDRESS    HighAddress;
     LARGE_INTEGER       SkipBytes;
     SIZE_T              TotalBytes;
+    ULONG               Flags;
     PMDL                Mdl;
     PUCHAR              MdlMappedSystemVa;
     NTSTATUS            status;
 
     LowAddress.QuadPart = 0ull;
     HighAddress.QuadPart = ~0ull;
-    SkipBytes.QuadPart = 0ull;
     TotalBytes = (SIZE_T)PAGE_SIZE * Count;
+
+    if (Contiguous) {
+        SkipBytes.QuadPart = TotalBytes;
+        Flags = MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS;
+    } else {
+        SkipBytes.QuadPart = 0ull;
+        Flags = MM_ALLOCATE_FULLY_REQUIRED;
+    }
 
     Mdl = MmAllocatePagesForMdlEx(LowAddress,
                                   HighAddress,
                                   SkipBytes,
                                   TotalBytes,
                                   MmCached,
-                                  MM_ALLOCATE_FULLY_REQUIRED);
+                                  Flags);
 
     status = STATUS_NO_MEMORY;
     if (Mdl == NULL)
@@ -245,7 +254,7 @@ fail1:
     return NULL;
 }
 
-#define __AllocatePage()    __AllocatePages(1)
+#define __AllocatePage()    __AllocatePages(1, FALSE)
 
 static FORCEINLINE VOID
 __FreePages(
