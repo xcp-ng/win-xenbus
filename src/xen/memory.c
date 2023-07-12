@@ -83,6 +83,35 @@ fail1:
 
 __checkReturn
 XEN_API
+NTSTATUS
+MemoryRemoveFromPhysmap(
+    IN  PFN_NUMBER                  Pfn
+    )
+{
+    struct xen_remove_from_physmap  op;
+    LONG_PTR                        rc;
+    NTSTATUS                        status;
+
+    op.domid = DOMID_SELF;
+    op.gpfn = (xen_pfn_t)Pfn;
+
+    rc = MemoryOp(XENMEM_remove_from_physmap, &op);
+
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+__checkReturn
+XEN_API
 ULONG
 MemoryDecreaseReservation(
     IN  ULONG                       Order,

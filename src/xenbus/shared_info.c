@@ -477,12 +477,11 @@ SharedInfoUnmap(
     IN  PXENBUS_SHARED_INFO_CONTEXT Context
     )
 {
-    UNREFERENCED_PARAMETER(Context);
-
     LogPrintf(LOG_LEVEL_INFO,
               "SHARED_INFO: UNMAP XENMAPSPACE_shared_info\n");
 
-    // Not clear what to do here
+
+    (VOID) MemoryRemoveFromPhysmap((PFN_NUMBER)(Context->Address.QuadPart >> PAGE_SHIFT));
 }
 
 static VOID

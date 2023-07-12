@@ -163,7 +163,7 @@ GnttabExpand(
 fail3:
     Error("fail3\n");
 
-    // Not clear what to do here
+    (VOID) MemoryRemoveFromPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT));
 
 fail2:
     Error("fail2\n");
@@ -182,12 +182,14 @@ GnttabMap(
     )
 {
     LONG                        Index;
-    PHYSICAL_ADDRESS            Address;
     NTSTATUS                    status;
 
-    Address = Context->Address;
-
     for (Index = 0; Index <= Context->FrameIndex; Index++) {
+        PHYSICAL_ADDRESS    Address;
+
+        Address = Context->Address;
+        Address.QuadPart += (ULONGLONG)Index << PAGE_SHIFT;
+
         status = MemoryAddToPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT),
                                     XENMAPSPACE_grant_table,
                                     Index);
@@ -198,8 +200,6 @@ GnttabMap(
                   Index,
                   Address.HighPart,
                   Address.LowPart);
-
-        Address.QuadPart += PAGE_SIZE;
     }
 }
 
@@ -210,12 +210,18 @@ GnttabUnmap(
 {
     LONG                        Index;
 
-    // Not clear what to do here
+    for (Index = Context->FrameIndex; Index >= 0; --Index) {
+        PHYSICAL_ADDRESS    Address;
 
-    for (Index = Context->FrameIndex; Index >= 0; --Index)
+        Address = Context->Address;
+        Address.QuadPart += (ULONGLONG)Index << PAGE_SHIFT;
+
+        (VOID) MemoryRemoveFromPhysmap((PFN_NUMBER)(Address.QuadPart >> PAGE_SHIFT));
+
         LogPrintf(LOG_LEVEL_INFO,
                   "GNTTAB: UNMAP XENMAPSPACE_grant_table[%d]\n",
                   Index);
+    }
 }
 
 static VOID

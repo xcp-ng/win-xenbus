@@ -128,6 +128,13 @@ MemoryAddToPhysmap(
     IN  ULONG_PTR   Offset
     );
 
+__checkReturn
+XEN_API
+NTSTATUS
+MemoryRemoveFromPhysmap(
+    IN  PFN_NUMBER  Pfn
+    );
+
 #define PAGE_ORDER_4K   0
 #define PAGE_ORDER_2M   9
 
