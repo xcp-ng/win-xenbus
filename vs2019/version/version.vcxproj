@@ -5,12 +5,12 @@
     <ProjectGuid>{65FA97EA-A569-4FC1-BFE7-D68E109143F7}</ProjectGuid>
   </PropertyGroup>
   <PropertyGroup>
-    <Script>..\..\scripts\genfiles.ps1</Script>
+    <Script>..\..\..\genfiles.ps1</Script>
     <SolutionDir>..</SolutionDir>
     <IncludeDir>..\..\include</IncludeDir>
     <SourceDir>..\..\src</SourceDir>
   </PropertyGroup>
   <Target Name="Build">
-    <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command &quot;&amp; { $Env:Platform = '$(Platform)'; $Env:SolutionDir = '$(SolutionDir)'; $Env:IncludeDir = '$(IncludeDir)'; $Env:SourceDir = '$(SourceDir)'; &amp; ..\..\scripts\genfiles.ps1 }&quot;" />
+    <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command &quot;&amp; { $Env:Platform = '$(Platform)'; $Env:SolutionDir = '$(SolutionDir)'; $Env:IncludeDir = '$(IncludeDir)'; $Env:SourceDir = '$(SourceDir)'; . '$(Script)' }&quot;" />
   </Target>
 </Project>
