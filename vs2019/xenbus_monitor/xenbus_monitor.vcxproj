@@ -45,7 +45,7 @@
     <CustomBuildStep>
       <Outputs>$(TargetDir)$(TargetName).dll</Outputs>
       <Inputs>$(IntDir)$(TargetName).res</Inputs>
-      <Command>link -machine:x86 -dll -noentry -out:%(Outputs) %(Inputs)</Command>
+      <Command>link -machine:x86 -dll -noentry -out:"%(Outputs)" "%(Inputs)"</Command>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -55,7 +55,7 @@
     <CustomBuildStep>
       <Outputs>$(TargetDir)$(TargetName).dll</Outputs>
       <Inputs>$(IntDir)$(TargetName).res</Inputs>
-      <Command>link -machine:x64 -dll -noentry -out:%(Outputs) %(Inputs)</Command>
+      <Command>link -machine:x64 -dll -noentry -out:"%(Outputs)" "%(Inputs)"</Command>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
