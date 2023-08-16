@@ -10,12 +10,14 @@
 *.db-shm
 *.db
 *.db-wal
+*.vsidx
+*.obj
+*.tlog
+*.pdb
 vs2019/version/.revision
 vs2019/.vs/xenbus/v17/.suo
-*.vsidx
-vs2019/package/x64/package.vcxproj.FileListAbsolute.txt
-vs2019/xen/x64/xen.vcxproj.FileListAbsolute.txt
-vs2019/xenbus/x64/xenbus.vcxproj.FileListAbsolute.txt
-vs2019/xenbus_coinst/x64/Windows 10 Debug/xenbus_coinst.vcxproj.FileListAbsolute.txt
-vs2019/xenbus_monitor/x64/Windows 10 Debug/xenbus_monitor.vcxproj.FileListAbsolute.txt
-vs2019/xenfilt/x64/xenfilt.vcxproj.FileListAbsolute.txt
+vs2019/xenbus.inf
+include/version.h
+vs2019/Windows10Release/
+vs2019/*/Windows10Release/
+vs2019/*/x64/
