@@ -602,6 +602,8 @@ CacheGet(
 
     UNREFERENCED_PARAMETER(Interface);
 
+    ASSERT(Cache != NULL);
+
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
     Index = KeGetCurrentProcessorNumberEx(NULL);
 
@@ -677,6 +679,9 @@ CachePut(
     NTSTATUS                status;
 
     UNREFERENCED_PARAMETER(Interface);
+
+    ASSERT(Cache != NULL);
+    ASSERT(Object != NULL);
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
     Index = KeGetCurrentProcessorNumberEx(NULL);
@@ -837,6 +842,14 @@ CacheCreate(
     KIRQL                   Irql;
     NTSTATUS                status;
 
+    ASSERT(Name != NULL);
+    ASSERT(Size != 0);
+    ASSERT(Ctor != NULL);
+    ASSERT(Dtor != NULL);
+    ASSERT(AcquireLock != NULL);
+    ASSERT(ReleaseLock != NULL);
+    ASSERT(Cache != NULL);
+
     Trace("====> (%s)\n", Name);
 
     *Cache = __CacheAllocate(sizeof (XENBUS_CACHE));
@@ -967,6 +980,8 @@ CacheDestroy(
 {
     PXENBUS_CACHE_CONTEXT   Context = Interface->Context;
     KIRQL                   Irql;
+
+    ASSERT(Cache != NULL);
 
     Trace("====> (%s)\n", Cache->Name);
 
