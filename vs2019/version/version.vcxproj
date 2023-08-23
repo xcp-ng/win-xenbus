@@ -13,4 +13,7 @@
   <Target Name="Build">
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command &quot;&amp; { $Env:Platform = '$(Platform)'; $Env:SolutionDir = '$(SolutionDir)'; $Env:IncludeDir = '$(IncludeDir)'; $Env:SourceDir = '$(SourceDir)'; . '$(Script)' }&quot;" />
   </Target>
+  <Target Name="GetProjectInfoForReference">
+    <!-- Empty target to avoid error -->
+  </Target>
 </Project>
