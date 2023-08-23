@@ -34,6 +34,8 @@
 
 #include <ntddk.h>
 
+#pragma warning(disable: 4061)
+
 static FORCEINLINE const CHAR *
 PowerStateTypeName(
     IN  POWER_STATE_TYPE    Type

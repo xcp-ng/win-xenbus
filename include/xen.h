@@ -63,6 +63,8 @@
 #define XEN_API __declspec(dllimport)
 #endif  // XEN_API
 
+#pragma warning(disable: 4061)
+
 // Dummy function to cause XEN.SYS to be loaded and initialized
 XEN_API
 NTSTATUS

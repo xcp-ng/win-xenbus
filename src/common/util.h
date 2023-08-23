@@ -33,6 +33,7 @@
 #define _COMMON_UTIL_H
 
 #include <ntddk.h>
+#include <intrin.h>
 
 #include "assert.h"
 
@@ -87,7 +88,7 @@ __CpuId(
     OUT PULONG  EDX OPTIONAL
     )
 {
-    ULONG       Value[4] = {0};
+    int  Value[4] = {0};
 
     __cpuid(Value, Leaf);
 
@@ -138,6 +139,12 @@ __InterlockedSubtract(
     return New;
 }
 
+#if (NTDDI_VERSION >= NTDDI_WIN10_VB)
+#define ALLOCATE_POOL(a, b, c) ExAllocatePool2(a, b, c)
+#else
+#define ALLOCATE_POOL(a, b, c) ExAllocatePoolWithTag(a, b, c)
+#endif
+
 __checkReturn
 static FORCEINLINE PVOID
 __AllocatePoolWithTag(
@@ -152,7 +159,7 @@ __AllocatePoolWithTag(
                       PoolType == PagedPool);
 
 #pragma warning(suppress:28160) // annotation error
-    Buffer = ExAllocatePoolWithTag(PoolType, NumberOfBytes, Tag);
+    Buffer = ALLOCATE_POOL(PoolType, NumberOfBytes, Tag);
     if (Buffer == NULL)
         return NULL;
 
@@ -169,9 +176,25 @@ __FreePoolWithTag(
     ExFreePoolWithTag(Buffer, Tag);
 }
 
+#define FAIL_WITH_ERROR(mdl, status) \
+    { \
+        /* Print an error message with the name of the failed function and the status code */ \
+        Error("%s failed (%08x)\n", __FUNCTION__, status); \
+        \
+        /* If an MDL was allocated, free the pages and memory associated with it */ \
+        if (mdl != NULL) { \
+            MmFreePagesFromMdl(mdl); \
+            ExFreePool(mdl); \
+        } \
+        \
+        /* Return NULL to indicate failure */ \
+        return NULL; \
+    }
+
 static FORCEINLINE PMDL
 __AllocatePages(
-    IN  ULONG           Count
+    IN  ULONG           Count,
+    IN  BOOLEAN         zeroInitialize
     )
 {
     PHYSICAL_ADDRESS    LowAddress;
@@ -180,26 +203,23 @@ __AllocatePages(
     SIZE_T              TotalBytes;
     PMDL                Mdl;
     PUCHAR              MdlMappedSystemVa;
-    NTSTATUS            status;
 
     LowAddress.QuadPart = 0ull;
     HighAddress.QuadPart = ~0ull;
     SkipBytes.QuadPart = 0ull;
     TotalBytes = (SIZE_T)PAGE_SIZE * Count;
 
+    ULONG allocFlags = zeroInitialize ? MM_ALLOCATE_FULLY_REQUIRED : MM_DONT_ZERO_ALLOCATION;
+
     Mdl = MmAllocatePagesForMdlEx(LowAddress,
                                   HighAddress,
                                   SkipBytes,
                                   TotalBytes,
                                   MmCached,
-                                  MM_ALLOCATE_FULLY_REQUIRED);
+                                  allocFlags);
 
-    status = STATUS_NO_MEMORY;
-    if (Mdl == NULL)
-        goto fail1;
-
-    if (Mdl->ByteCount < TotalBytes)
-        goto fail2;
+    if (Mdl == NULL || Mdl->ByteCount < TotalBytes)
+        FAIL_WITH_ERROR(Mdl, STATUS_NO_MEMORY);
 
     ASSERT((Mdl->MdlFlags & (MDL_MAPPED_TO_SYSTEM_VA |
                              MDL_PARTIAL_HAS_BEEN_MAPPED |
@@ -215,9 +235,8 @@ __AllocatePages(
                                                      FALSE,
                                                      NormalPagePriority);
 
-    status = STATUS_UNSUCCESSFUL;
     if (MdlMappedSystemVa == NULL)
-        goto fail3;
+        FAIL_WITH_ERROR(Mdl, STATUS_UNSUCCESSFUL);
 
     Mdl->StartVa = PAGE_ALIGN(MdlMappedSystemVa);
 
@@ -225,18 +244,19 @@ __AllocatePages(
     ASSERT3P(Mdl->StartVa, ==, MdlMappedSystemVa);
     ASSERT3P(Mdl->MappedSystemVa, ==, MdlMappedSystemVa);
 
+    if (zeroInitialize) {
+        RtlZeroMemory(MdlMappedSystemVa, Mdl->ByteCount);
+    }
+
     return Mdl;
-
-fail3:
-fail2:
-    MmFreePagesFromMdl(Mdl);
-    ExFreePool(Mdl);
-
-fail1:
-    return NULL;
 }
 
-#define __AllocatePage()    __AllocatePages(1)
+/*	__AllocatePage was implemented with MmAllocatePagesForMdlEx using flag MM_DONT_ZERO_ALLOCATION in xeniface
+	This inline function has been refatored and centralized with additional parameter zeroInitialize to account for this special usage
+	But xeniface doesn't call this function at all.
+	If it needs to be modified to use it, it would probably require using __AllocatePages(1, FALSE)	*/
+
+#define __AllocatePage()    __AllocatePages(1, TRUE)
 
 static FORCEINLINE VOID
 __FreePages(

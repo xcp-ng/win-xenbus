@@ -33,6 +33,7 @@
 
 #include <ntddk.h>
 #include <xen.h>
+#include <intrin.h>
 
 #include "process.h"
 #include "dbg_print.h"

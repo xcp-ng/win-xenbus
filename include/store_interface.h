@@ -52,11 +52,13 @@ typedef struct _XENBUS_STORE_WATCH          XENBUS_STORE_WATCH, *PXENBUS_STORE_W
 
 /*! \typedef XENBUS_STORE_PERMISSION_MASK
     \brief Bitmask of XenStore key permissions
+	This enum type is used in a Mask property of parameter Permission in StorePermissionToString ! So the value XENBUS_STORE_PERM_READ | XENBUS_STORE_PERM_READ_WRITE needs to be added too!
 */
 typedef enum _XENBUS_STORE_PERMISSION_MASK {
     XENBUS_STORE_PERM_NONE = 0,
     XENBUS_STORE_PERM_READ = 1,
     XENBUS_STORE_PERM_WRITE = 2,
+	XENBUS_STORE_PERM_READ_WRITE = XENBUS_STORE_PERM_READ | XENBUS_STORE_PERM_WRITE
 } XENBUS_STORE_PERMISSION_MASK;
 
 /*! \typedef XENBUS_STORE_PERMISSION
