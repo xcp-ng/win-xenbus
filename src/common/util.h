@@ -244,7 +244,7 @@ __AllocatePages(
     ASSERT3P(Mdl->StartVa, ==, MdlMappedSystemVa);
     ASSERT3P(Mdl->MappedSystemVa, ==, MdlMappedSystemVa);
 
-    if (zeroInitialize) {
+    if (!zeroInitialize) {
         RtlZeroMemory(MdlMappedSystemVa, Mdl->ByteCount);
     }
 
