@@ -35,11 +35,11 @@
 #include <ntddk.h>
 #include <stdarg.h>
 
+#pragma warning(disable:4127)   // conditional expression is constant
+
 #define stringify_literal(_text) #_text
 #define stringify(_text) stringify_literal(_text)
 #define __MODULE__ stringify(PROJECT)
-
-#pragma warning(disable:4127)   // conditional expression is constant
 
 static __inline VOID
 __Error(
@@ -107,12 +107,21 @@ __Trace(
                           Arguments);
     va_end(Arguments);
 }
+#else   // DBG
+static __inline VOID
+__Trace(
+    IN  const CHAR  *Prefix,
+    IN  const CHAR  *Format,
+    ...
+    )
+{
+    UNREFERENCED_PARAMETER(Prefix);
+    UNREFERENCED_PARAMETER(Format);
+}
+#endif  // DBG
 
 #define Trace(...)  \
         __Trace(__MODULE__ "|" __FUNCTION__ ": ", __VA_ARGS__)
-#else   // DBG
-#define Trace(...)  (VOID)(__VA_ARGS__)
-#endif  // DBG
 
 static __inline VOID
 __Info(
