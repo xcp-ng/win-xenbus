@@ -345,6 +345,23 @@ fail1:
 }
 
 XEN_API
+BOOLEAN
+UnplugGetRequest(
+    IN  UNPLUG_TYPE Type
+    )
+{
+    PUNPLUG_CONTEXT Context = &UnplugContext;
+    KIRQL           Irql;
+    BOOLEAN         Request;
+
+    AcquireHighLock(&Context->Lock, &Irql);
+    Request = Context->Request[Type];
+    ReleaseHighLock(&Context->Lock, Irql);
+
+    return Request;
+}
+
+XEN_API
 VOID
 UnplugDevices(
     VOID

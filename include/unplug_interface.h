@@ -85,6 +85,20 @@ typedef VOID
     IN  BOOLEAN                     Make
     );
 
+/*! \typedef XENBUS_UNPLUG_IS_REQUESTED
+    \brief Has a type of emulated device been unplugged
+
+    \param Interface The interface header
+    \param Type The type of device
+
+    \return TRUE The type of device has been unplugged this boot.
+*/
+typedef BOOLEAN
+(*XENBUS_UNPLUG_IS_REQUESTED)(
+    IN  PINTERFACE                  Interface,
+    IN  XENBUS_UNPLUG_DEVICE_TYPE   Type
+    );
+
 // {73db6517-3d06-4937-989f-199b7501e229}
 DEFINE_GUID(GUID_XENBUS_UNPLUG_INTERFACE,
 0x73db6517, 0x3d06, 0x4937, 0x98, 0x9f, 0x19, 0x9b, 0x75, 0x01, 0xe2, 0x29);
@@ -100,7 +114,19 @@ struct _XENBUS_UNPLUG_INTERFACE_V1 {
     XENBUS_UNPLUG_REQUEST   UnplugRequest;
 };
 
-typedef struct _XENBUS_UNPLUG_INTERFACE_V1 XENBUS_UNPLUG_INTERFACE, *PXENBUS_UNPLUG_INTERFACE;
+/*! \struct _XENBUS_UNPLUG_INTERFACE_V2
+    \brief UNPLUG interface version 2
+    \ingroup interfaces
+*/
+struct _XENBUS_UNPLUG_INTERFACE_V2 {
+    INTERFACE                   Interface;
+    XENBUS_UNPLUG_ACQUIRE       UnplugAcquire;
+    XENBUS_UNPLUG_RELEASE       UnplugRelease;
+    XENBUS_UNPLUG_REQUEST       UnplugRequest;
+    XENBUS_UNPLUG_IS_REQUESTED  UnplugIsRequested;
+};
+
+typedef struct _XENBUS_UNPLUG_INTERFACE_V2 XENBUS_UNPLUG_INTERFACE, *PXENBUS_UNPLUG_INTERFACE;
 
 /*! \def XENBUS_UNPLUG
     \brief Macro at assist in method invocation
@@ -111,6 +137,6 @@ typedef struct _XENBUS_UNPLUG_INTERFACE_V1 XENBUS_UNPLUG_INTERFACE, *PXENBUS_UNP
 #endif  // _WINDLL
 
 #define XENBUS_UNPLUG_INTERFACE_VERSION_MIN  1
-#define XENBUS_UNPLUG_INTERFACE_VERSION_MAX  1
+#define XENBUS_UNPLUG_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENBUS_UNPLUG_INTERFACE_H

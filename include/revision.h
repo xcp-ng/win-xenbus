@@ -57,6 +57,7 @@
     DEFINE_REVISION(0x09000006,  1,  3,  8,  1,  2,  1,  2,  4,  1,  1,  1), \
     DEFINE_REVISION(0x09000007,  1,  3,  8,  1,  2,  1,  2,  4,  1,  1,  2), \
     DEFINE_REVISION(0x09000008,  1,  3,  9,  1,  2,  1,  2,  4,  1,  1,  2), \
-    DEFINE_REVISION(0x09000009,  1,  4,  9,  1,  2,  1,  2,  4,  1,  1,  2)
+    DEFINE_REVISION(0x09000009,  1,  4,  9,  1,  2,  1,  2,  4,  1,  1,  2), \
+    DEFINE_REVISION(0x0900000A,  1,  4,  9,  1,  2,  1,  2,  4,  2,  1,  2)
 
 #endif  // _REVISION_H
