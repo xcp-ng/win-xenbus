@@ -37,10 +37,10 @@ Provider=%Vendor%
 CatalogFile=xenbus.cat
 DriverVer=@INF_DATE@,@MAJOR_VERSION@.@MINOR_VERSION@.@MICRO_VERSION@.@BUILD_NUMBER@
 DriverPackageDisplayName=%DiskDesc%
+PnpLockdown=1
 
 [DestinationDirs] 
 DefaultDestDir=12 
-CoInst_CopyFiles=11
 Monitor_CopyFiles=11
 
 [SourceDisksNames]
@@ -50,7 +50,6 @@ Monitor_CopyFiles=11
 xen.sys=0,,
 xenbus.sys=0,,
 xenfilt.sys=0,,
-xenbus_coinst.dll=0,,
 xenbus_monitor.exe=0,,
 xenbus_monitor.dll=0,,
 
@@ -58,9 +57,6 @@ xenbus_monitor.dll=0,,
 xen.sys
 xenbus.sys
 xenfilt.sys
-
-[CoInst_CopyFiles]
-xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll,xenbus_coinst.dll
 
 [Monitor_CopyFiles]
 xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.exe,xenbus_monitor.exe
@@ -107,6 +103,10 @@ HKR,"Interrupt Management\MessageSignaledInterruptProperties",,0x00000010
 HKR,"Interrupt Management\MessageSignaledInterruptProperties","MSISupported",0x00010001,1
 HKR,"Interrupt Management\GroupPolicy",,0x00010001,1
 
+[XenBus_Unplug]
+HKLM,%UnplugKey%,"NICS",0x00010001,0
+HKLM,%UnplugKey%,"DISKS",0x00010001,0
+
 [XenFilt_Service] 
 DisplayName=%XenFiltName%
 ServiceType=%SERVICE_KERNEL_DRIVER% 
@@ -144,13 +144,6 @@ AddReg=Monitor_EventLog_AddReg
 HKR,,EventMessageFile,0x00020000,"%%SystemRoot%%\System32\xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll"
 HKR,,TypesSupported,0x00010001,7
 
-[XenBus_Inst.CoInstallers]
-CopyFiles=CoInst_CopyFiles
-AddReg=CoInst_AddReg
-
-[CoInst_AddReg]
-HKR,,CoInstallers32,0x00010000,"xenbus_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll,Entry"
-
 [Strings] 
 
 Vendor="@VENDOR_NAME@" 
@@ -160,6 +153,7 @@ XenFiltName="@PRODUCT_NAME@ Generic Bus Filter"
 MonitorName="@PRODUCT_NAME@ PV Driver Monitor"
 MonitorDesc="Provides support for @PRODUCT_NAME@ PV drivers"
 RequestKey="SYSTEM\CurrentControlSet\Services\xenbus_monitor\Request"
+UnplugKey="SYSTEM\CurrentControlSet\Services\XEN\Unplug"
 DialogTitle="@PRODUCT_NAME@"
 DialogText="needs to restart the system to complete installation."
 DialogQuestion="Press 'Yes' to restart the system now or 'No' if you plan to restart the system later."
