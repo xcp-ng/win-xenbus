@@ -377,6 +377,12 @@ UnplugDecrementValue(
     IN  UNPLUG_TYPE Type
     );
 
+XEN_API
+BOOLEAN
+UnplugGetRequest(
+    IN  UNPLUG_TYPE Type
+    );
+
 // LOG
 
 typedef enum _LOG_LEVEL {

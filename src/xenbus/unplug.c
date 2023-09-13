@@ -110,6 +110,40 @@ UnplugRequest(
     ReleaseMutex(&Context->Mutex);
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
+static BOOLEAN
+UnplugIsRequested(
+    IN  PINTERFACE                  Interface,
+    IN  XENBUS_UNPLUG_DEVICE_TYPE   Type
+    )
+{
+    PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
+    BOOLEAN                         Requested;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    AcquireMutex(&Context->Mutex);
+
+    Requested = FALSE;
+    switch (Type) {
+    case XENBUS_UNPLUG_DEVICE_TYPE_NICS:
+        Requested = UnplugGetRequest(UNPLUG_NICS);
+        break;
+
+    case XENBUS_UNPLUG_DEVICE_TYPE_DISKS:
+        Requested = UnplugGetRequest(UNPLUG_DISKS);
+        break;
+
+    default:
+        ASSERT(FALSE);
+        break;
+    }
+
+    ReleaseMutex(&Context->Mutex);
+
+    return Requested;
+}
+
 static NTSTATUS
 UnplugAcquire(
     IN  PINTERFACE          Interface
@@ -155,6 +189,14 @@ static struct _XENBUS_UNPLUG_INTERFACE_V1 UnplugInterfaceVersion1 = {
     UnplugAcquire,
     UnplugRelease,
     UnplugRequest
+};
+
+static struct _XENBUS_UNPLUG_INTERFACE_V2 UnplugInterfaceVersion2 = {
+    { sizeof (struct _XENBUS_UNPLUG_INTERFACE_V2), 2, NULL, NULL, NULL },
+    UnplugAcquire,
+    UnplugRelease,
+    UnplugRequest,
+    UnplugIsRequested
 };
 
 NTSTATUS
@@ -211,6 +253,23 @@ UnplugGetInterface(
             break;
 
         *UnplugInterface = UnplugInterfaceVersion1;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 2: {
+        struct _XENBUS_UNPLUG_INTERFACE_V2   *UnplugInterface;
+
+        UnplugInterface = (struct _XENBUS_UNPLUG_INTERFACE_V2 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_UNPLUG_INTERFACE_V2))
+            break;
+
+        *UnplugInterface = UnplugInterfaceVersion2;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
