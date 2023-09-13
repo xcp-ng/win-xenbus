@@ -1456,11 +1456,11 @@ PdoQueryId(
                                         Revision->Number);
             ASSERT(NT_SUCCESS(status));
 
-            Buffer += wcslen(Buffer);
             Length -= (ULONG)(wcslen(Buffer) * sizeof (WCHAR));
+            Buffer += wcslen(Buffer);
 
-            Buffer++;
             Length -= sizeof (WCHAR);
+            Buffer++;
 
             --Index;
         }
