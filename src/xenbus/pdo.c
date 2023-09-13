@@ -1416,19 +1416,13 @@ PdoQueryId(
         break;
 
     case BusQueryDeviceID: {
-        ULONG                   Index;
-        PXENBUS_PDO_REVISION    Revision;
-
         Type = REG_SZ;
-        Index = ARRAYSIZE(PdoRevision) - 1;
-        Revision = &PdoRevision[Index];
 
         status = RtlStringCbPrintfW(Buffer,
                                     Id.MaximumLength,
-                                    L"XENBUS\\VEN_%hs&DEV_%hs&REV_%08X",
+                                    L"XENBUS\\VEN_%hs&DEV_%hs",
                                     __PdoGetVendorName(Pdo),
-                                    __PdoGetName(Pdo),
-                                    Revision->Number);
+                                    __PdoGetName(Pdo));
         ASSERT(NT_SUCCESS(status));
 
         Buffer += wcslen(Buffer);
