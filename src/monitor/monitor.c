@@ -1173,6 +1173,66 @@ fail1:
     return FALSE;
 }
 
+static BOOL
+RemoveStartOverride(
+    IN PTCHAR           DriverName
+    )
+{
+    TCHAR               KeyName[MAX_PATH];
+    HKEY                Key;
+    DWORD               Value;
+    HRESULT             Error;
+
+    Error = StringCbPrintf(KeyName,
+                           MAX_PATH,
+                           SERVICES_KEY "\\%s\\StartOverride",
+                           DriverName);
+    assert(SUCCEEDED(Error));
+
+    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         KeyName,
+                         0,
+                         KEY_READ | KEY_WRITE,
+                         &Key);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    Value = 0;
+    Error = RegSetValueEx(Key,
+                          "0",
+                          0,
+                          REG_DWORD,
+                          (const BYTE*)&Value,
+                          (DWORD) sizeof(Value));
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail2;
+    }
+
+    RegCloseKey(Key);
+
+    return TRUE;
+
+fail2:
+    Log("fail2");
+
+    RegCloseKey(Key);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
 VOID WINAPI
 MonitorMain(
     _In_    DWORD       argc,
@@ -1188,6 +1248,8 @@ MonitorMain(
     UNREFERENCED_PARAMETER(argv);
 
     Log("====>");
+
+    (VOID) RemoveStartOverride("stornvme");
 
     Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
                          PARAMETERS_KEY(__MODULE__),
@@ -1301,6 +1363,7 @@ done:
     (VOID) DeregisterEventSource(Context->EventLog);
 
     CloseHandle(Context->ParametersKey);
+    (VOID) RemoveStartOverride("stornvme");
 
     Log("<====");
 
