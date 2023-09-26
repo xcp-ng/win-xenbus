@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -56,4 +57,3 @@ EvtchnFifoTeardown(
     );
 
 #endif  // _XENBUS_EVTCHN_FIFO_H
-

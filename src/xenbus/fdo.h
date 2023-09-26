@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -131,19 +132,16 @@ FdoGetName(
     IN  PXENBUS_FDO Fdo
     );
 
-extern NTSTATUS
-FdoAllocateHole(
-    IN  PXENBUS_FDO         Fdo,
-    IN  ULONG               Count,
-    OUT PVOID               *VirtualAddress OPTIONAL,
-    OUT PPHYSICAL_ADDRESS   PhysicalAddress
+extern PMDL
+FdoHoleAllocate(
+    IN  PXENBUS_FDO Fdo,
+    IN  ULONG       Count
     );
 
 extern VOID
-FdoFreeHole(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PHYSICAL_ADDRESS    PhysicalAddress,
-    IN  ULONG               Count
+FdoHoleFree(
+    IN  PXENBUS_FDO Fdo,
+    IN  PMDL        Mdl
     );
 
 // Disable erroneous SAL warnings around use of interrupt locks

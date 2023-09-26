@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -695,6 +696,8 @@ __LogDbgPrintCallbackEnable(
 
     if (strcmp(Value, "OFF") == 0)
         Enable = FALSE;
+    else if (strcmp(Value, "ON") != 0)
+        Warning("UNRECOGNIZED VALUE OF %s: %s\n", Key, Value);
 
     RegistryFreeSzValue(Option);
 

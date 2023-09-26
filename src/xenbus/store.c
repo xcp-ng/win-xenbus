@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -115,6 +116,7 @@ typedef struct _XENBUS_STORE_REQUEST {
 typedef struct _XENBUS_STORE_BUFFER {
     LIST_ENTRY  ListEntry;
     ULONG       Magic;
+    ULONG       Length;
     PVOID       Caller;
     CHAR        Data[1];
 } XENBUS_STORE_BUFFER, *PXENBUS_STORE_BUFFER;
@@ -179,7 +181,6 @@ StorePrepareRequest(
     )
 {
     ULONG                           Id;
-    KIRQL                           Irql;
     PXENBUS_STORE_SEGMENT           Segment;
     va_list                         Arguments;
     NTSTATUS                        status;
@@ -199,10 +200,7 @@ StorePrepareRequest(
     Request->Header.type = Type;
     Request->Header.tx_id = Id;
     Request->Header.len = 0;
-
-    KeAcquireSpinLock(&Context->Lock, &Irql);
     Request->Header.req_id = Context->RequestId++;
-    KeReleaseSpinLock(&Context->Lock, Irql);
 
     Request->Count = 0;
     Segment = &Request->Segment[Request->Count++];
@@ -738,21 +736,15 @@ StoreResetResponse(
     Segment->Length = sizeof (struct xsd_sockmsg);
 }
 
-static PXENBUS_STORE_RESPONSE
+static VOID
 StoreCopyResponse(
-    IN  PXENBUS_STORE_CONTEXT   Context
+    IN  PXENBUS_STORE_CONTEXT   Context,
+    OUT PXENBUS_STORE_RESPONSE  Response
     )
 {
-    PXENBUS_STORE_RESPONSE      Response;
     PXENBUS_STORE_SEGMENT       Segment;
-    NTSTATUS                    status;
 
-    Response = __StoreAllocate(sizeof (XENBUS_STORE_RESPONSE));
-
-    status = STATUS_NO_MEMORY;
-    if (Response == NULL)
-        goto fail1;
-
+    ASSERT(Response != NULL);
     *Response = Context->Response;
 
     Segment = &Response->Segment[XENBUS_STORE_RESPONSE_HEADER_SEGMENT];
@@ -766,13 +758,6 @@ StoreCopyResponse(
     } else {
         ASSERT3P(Segment->Data, ==, NULL);
     }
-
-    return Response;
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return NULL;
 }
 
 static VOID
@@ -816,7 +801,7 @@ StoreProcessResponse(
 
     RemoveEntryList(&Request->ListEntry);
 
-    Request->Response = StoreCopyResponse(Context);
+    StoreCopyResponse(Context, Request->Response);
     StoreResetResponse(Context);
 
     Request->State = XENBUS_STORE_REQUEST_COMPLETED;
@@ -920,8 +905,15 @@ StoreSubmitRequest(
     ULONG                       Count;
     XENBUS_STORE_REQUEST_STATE  State;
     LARGE_INTEGER               Timeout;
+    NTSTATUS                    status;
 
     ASSERT3U(Request->State, ==, XENBUS_STORE_REQUEST_PREPARED);
+
+    Request->Response = __StoreAllocate(sizeof (XENBUS_STORE_RESPONSE));
+
+    status = STATUS_NO_MEMORY;
+    if (Request->Response == NULL)
+        goto fail1;
 
     // Make sure we don't suspend
     ASSERT3U(KeGetCurrentIrql(), <=, DISPATCH_LEVEL);
@@ -941,8 +933,6 @@ StoreSubmitRequest(
     Timeout.QuadPart = TIME_RELATIVE(TIME_S(XENBUS_STORE_POLL_PERIOD));
 
     while (State != XENBUS_STORE_REQUEST_COMPLETED) {
-        NTSTATUS    status;
-
         status = XENBUS_EVTCHN(Wait,
                                &Context->EvtchnInterface,
                                Context->Channel,
@@ -969,6 +959,11 @@ StoreSubmitRequest(
     KeLowerIrql(Irql);
 
     return Response;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return NULL;
 }
 
 static NTSTATUS
@@ -1036,6 +1031,7 @@ StoreCopyPayload(
         goto fail1;
 
     Buffer->Magic = XENBUS_STORE_BUFFER_MAGIC;
+    Buffer->Length = Length;
     Buffer->Caller = Caller;
 
     RtlCopyMemory(Buffer->Data, Data, Length);
@@ -1044,7 +1040,7 @@ StoreCopyPayload(
     InsertTailList(&Context->BufferList, &Buffer->ListEntry);
     KeReleaseSpinLock(&Context->Lock, Irql);
 
-    return Buffer;        
+    return Buffer;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1103,6 +1099,7 @@ StoreRead(
     PXENBUS_STORE_CONTEXT           Context = Interface->Context;
     PVOID                           Caller;
     XENBUS_STORE_REQUEST            Request;
+    KIRQL                           Irql;
     PXENBUS_STORE_RESPONSE          Response;
     PXENBUS_STORE_BUFFER            Buffer;
     NTSTATUS                        status;
@@ -1110,6 +1107,8 @@ StoreRead(
     (VOID) RtlCaptureStackBackTrace(1, 1, &Caller, NULL);    
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1130,6 +1129,8 @@ StoreRead(
                                      "", 1,
                                      NULL, 0);
     }
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
 
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -1178,10 +1179,13 @@ StoreWrite(
     )
 {
     XENBUS_STORE_REQUEST            Request;
+    KIRQL                           Irql;
     PXENBUS_STORE_RESPONSE          Response;
     NTSTATUS                        status;
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1204,6 +1208,8 @@ StoreWrite(
                                      Value, strlen(Value),
                                      NULL, 0);
     }
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
 
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -1327,10 +1333,13 @@ StoreRemove(
 {
     PXENBUS_STORE_CONTEXT           Context = Interface->Context;
     XENBUS_STORE_REQUEST            Request;
+    KIRQL                           Irql;
     PXENBUS_STORE_RESPONSE          Response;
     NTSTATUS                        status;
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1351,6 +1360,8 @@ StoreRemove(
                                      "", 1,
                                      NULL, 0);
     }
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
 
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -1392,6 +1403,7 @@ StoreDirectory(
     PXENBUS_STORE_CONTEXT           Context = Interface->Context;
     PVOID                           Caller;
     XENBUS_STORE_REQUEST            Request;
+    KIRQL                           Irql;
     PXENBUS_STORE_RESPONSE          Response;
     PXENBUS_STORE_BUFFER            Buffer;
     NTSTATUS                        status;
@@ -1399,6 +1411,8 @@ StoreDirectory(
     (VOID) RtlCaptureStackBackTrace(1, 1, &Caller, NULL);    
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
+
+    KeAcquireSpinLock(&Context->Lock, &Irql);
 
     if (Prefix == NULL) {
         status = StorePrepareRequest(Context,
@@ -1420,6 +1434,8 @@ StoreDirectory(
                                      NULL, 0);
     }
 
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -1439,12 +1455,19 @@ StoreDirectory(
     if (Buffer == NULL)
         goto fail4;
 
+    status = STATUS_OBJECT_PATH_NOT_FOUND;
+    if (Buffer->Length == 0)
+        goto fail5;
+
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     *Value = Buffer->Data;
 
     return STATUS_SUCCESS;
+
+fail5:
+    StoreFreePayload(Context, Buffer);
 
 fail4:
 fail3:
@@ -1480,12 +1503,17 @@ StoreTransactionStart(
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
     status = StorePrepareRequest(Context,
                                  &Request,
                                  NULL,
                                  XS_TRANSACTION_START,
                                  "", 1,
                                  NULL, 0);
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     ASSERT(NT_SUCCESS(status));
 
     Response = StoreSubmitRequest(Context, &Request);
@@ -1549,15 +1577,13 @@ StoreTransactionEnd(
 
     ASSERT3U(Transaction->Magic, ==, STORE_TRANSACTION_MAGIC);
 
+    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
+
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
     status = STATUS_RETRY;
     if (!Transaction->Active)
         goto done;
-
-    KeReleaseSpinLock(&Context->Lock, Irql);
-
-    RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
     status = StorePrepareRequest(Context,
                                  &Request,
@@ -1565,6 +1591,9 @@ StoreTransactionEnd(
                                  XS_TRANSACTION_END,
                                  (Commit) ? "T" : "F", 2,
                                  NULL, 0);
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     ASSERT(NT_SUCCESS(status));
 
     Response = StoreSubmitRequest(Context, &Request);
@@ -1672,6 +1701,8 @@ StoreWatchAdd(
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
     status = StorePrepareRequest(Context,
                                  &Request,
                                  NULL,
@@ -1681,6 +1712,9 @@ StoreWatchAdd(
                                  Token, strlen(Token), 
                                  "", 1,
                                  NULL, 0);
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     ASSERT(NT_SUCCESS(status));
 
     Response = StoreSubmitRequest(Context, &Request);
@@ -1754,13 +1788,6 @@ StoreWatchRemove(
 
     Path = Watch->Path;
 
-    KeAcquireSpinLock(&Context->Lock, &Irql);
-
-    if (!Watch->Active)
-        goto done;
-
-    KeReleaseSpinLock(&Context->Lock, Irql);
-
     status = RtlStringCbPrintfA(Token,
                                 sizeof (Token),
                                 "TOK|%p|%04X",
@@ -1771,6 +1798,11 @@ StoreWatchRemove(
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
+    if (!Watch->Active)
+        goto done;
+
     status = StorePrepareRequest(Context,
                                  &Request,
                                  NULL,
@@ -1780,6 +1812,9 @@ StoreWatchRemove(
                                  Token, strlen(Token), 
                                  "", 1,
                                  NULL, 0);
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     ASSERT(NT_SUCCESS(status));
 
     Response = StoreSubmitRequest(Context, &Request);
@@ -1939,7 +1974,7 @@ StorePermissionToString(
 
     ASSERT(BufferSize > 1);
 
-    switch (Permission->Mask) {
+    switch ((ULONG)Permission->Mask) {
     case XENBUS_STORE_PERM_NONE:
         *Buffer = 'n';
         break;
@@ -1952,7 +1987,7 @@ StorePermissionToString(
         *Buffer = 'w';
         break;
 
-    case XENBUS_STORE_PERM_READ_WRITE:
+    case XENBUS_STORE_PERM_READ | XENBUS_STORE_PERM_WRITE:
         *Buffer = 'b';
         break;
 
@@ -1996,6 +2031,7 @@ StorePermissionsSet(
 {
     PXENBUS_STORE_CONTEXT           Context = Interface->Context;
     XENBUS_STORE_REQUEST            Request;
+    KIRQL                           Irql;
     PXENBUS_STORE_RESPONSE          Response;
     NTSTATUS                        status;
     ULONG                           Index;
@@ -2042,6 +2078,8 @@ StorePermissionsSet(
         Length -= Used;
     }
 
+    KeAcquireSpinLock(&Context->Lock, &Irql);
+
     status = StorePrepareRequest(Context,
                                  &Request,
                                  Transaction,
@@ -2050,6 +2088,9 @@ StorePermissionsSet(
                                  "", 1,
                                  PermissionString, XENSTORE_PAYLOAD_MAX - Length,
                                  NULL, 0);
+
+    KeReleaseSpinLock(&Context->Lock, Irql);
+
     if (!NT_SUCCESS(status))
         goto fail4;
 
@@ -2630,22 +2671,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_STORE_INTERFACE_V1 StoreInterfaceVersion1 = {
-    { sizeof (struct _XENBUS_STORE_INTERFACE_V1), 1, NULL, NULL, NULL },
-    StoreAcquire,
-    StoreRelease,
-    StoreFree,
-    StoreRead,
-    StorePrintf,
-    StoreRemove,
-    StoreDirectory,
-    StoreTransactionStart,
-    StoreTransactionEnd,
-    StoreWatchAdd,
-    StoreWatchRemove,
-    StorePoll
-};
-                     
 static struct _XENBUS_STORE_INTERFACE_V2 StoreInterfaceVersion2 = {
     { sizeof (struct _XENBUS_STORE_INTERFACE_V2), 2, NULL, NULL, NULL },
     StoreAcquire,
@@ -2791,23 +2816,6 @@ StoreGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 1: {
-        struct _XENBUS_STORE_INTERFACE_V1  *StoreInterface;
-
-        StoreInterface = (struct _XENBUS_STORE_INTERFACE_V1 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_STORE_INTERFACE_V1))
-            break;
-
-        *StoreInterface = StoreInterfaceVersion1;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 2: {
         struct _XENBUS_STORE_INTERFACE_V2  *StoreInterface;
 

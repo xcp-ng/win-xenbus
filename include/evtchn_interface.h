@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -100,6 +101,8 @@ typedef VOID
 
     \b VIRQ:
     \param Index The index number of the VIRQ
+    \param Group The group number of the CPU that should handle the VIRQ
+    \param Number The relative number of the CPU that should handle the VIRQ
 
     \return Event channel handle
 */  
@@ -249,23 +252,6 @@ typedef VOID
 DEFINE_GUID(GUID_XENBUS_EVTCHN_INTERFACE, 
 0xbe2440ac, 0x1098, 0x4150, 0xaf, 0x4d, 0x45, 0x2f, 0xad, 0xce, 0xf9, 0x23);
 
-/*! \struct _XENBUS_EVTCHN_INTERFACE_V4
-    \brief EVTCHN interface version 4
-    \ingroup interfaces
-*/
-struct _XENBUS_EVTCHN_INTERFACE_V4 {
-    INTERFACE               Interface;
-    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
-    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
-    XENBUS_EVTCHN_OPEN      EvtchnOpen;
-    XENBUS_EVTCHN_BIND      EvtchnBind;
-    XENBUS_EVTCHN_UNMASK_V4 EvtchnUnmaskVersion4;
-    XENBUS_EVTCHN_SEND_V1   EvtchnSendVersion1;
-    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
-    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
-    XENBUS_EVTCHN_CLOSE     EvtchnClose;
-};
-
 /*! \struct _XENBUS_EVTCHN_INTERFACE_V5
     \brief EVTCHN interface version 5
     \ingroup interfaces
@@ -340,7 +326,26 @@ struct _XENBUS_EVTCHN_INTERFACE_V8 {
     XENBUS_EVTCHN_CLOSE     EvtchnClose;
 };
 
-typedef struct _XENBUS_EVTCHN_INTERFACE_V8 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
+/*! \struct _XENBUS_EVTCHN_INTERFACE_V9
+    \brief EVTCHN interface version 9
+    \ingroup interfaces
+*/
+struct _XENBUS_EVTCHN_INTERFACE_V9 {
+    INTERFACE               Interface;
+    XENBUS_EVTCHN_ACQUIRE   EvtchnAcquire;
+    XENBUS_EVTCHN_RELEASE   EvtchnRelease;
+    XENBUS_EVTCHN_OPEN      EvtchnOpen;
+    XENBUS_EVTCHN_BIND      EvtchnBind;
+    XENBUS_EVTCHN_UNMASK    EvtchnUnmask;
+    XENBUS_EVTCHN_SEND      EvtchnSend;
+    XENBUS_EVTCHN_TRIGGER   EvtchnTrigger;
+    XENBUS_EVTCHN_GET_COUNT EvtchnGetCount;
+    XENBUS_EVTCHN_WAIT      EvtchnWait;
+    XENBUS_EVTCHN_GET_PORT  EvtchnGetPort;
+    XENBUS_EVTCHN_CLOSE     EvtchnClose;
+};
+
+typedef struct _XENBUS_EVTCHN_INTERFACE_V9 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVTCHN_INTERFACE;
 
 /*! \def XENBUS_EVTCHN
     \brief Macro at assist in method invocation
@@ -350,8 +355,7 @@ typedef struct _XENBUS_EVTCHN_INTERFACE_V8 XENBUS_EVTCHN_INTERFACE, *PXENBUS_EVT
 
 #endif  // _WINDLL
 
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 4
-#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 8
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MIN 5
+#define XENBUS_EVTCHN_INTERFACE_VERSION_MAX 9
 
 #endif  // _XENBUS_EVTCHN_INTERFACE_H
-

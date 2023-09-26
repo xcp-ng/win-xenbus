@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -58,10 +59,7 @@ typedef struct _XENBUS_DRIVER {
 static XENBUS_DRIVER    Driver;
 
 #define XENBUS_DRIVER_TAG   'VIRD'
-#define DEFAULT_CONSOLE_LOG_LEVEL   (LOG_LEVEL_INFO |       \
-                                     LOG_LEVEL_WARNING |    \
-                                     LOG_LEVEL_ERROR |      \
-                                     LOG_LEVEL_CRITICAL)
+#define DEFAULT_CONSOLE_LOG_LEVEL   0
 
 static FORCEINLINE PVOID
 __DriverAllocate(
@@ -296,6 +294,9 @@ DriverRemoveFunctionDeviceObject(
     RemoveEntryList(&Dx->ListEntry);
     ASSERT3U(Driver.References, !=, 0);
     References = --Driver.References;
+
+    if (References == 1)
+        FiltersUninstall();
 }
 
 //
@@ -760,7 +761,19 @@ DriverDispatch(
     ASSERT3P(Dx->DeviceObject, ==, DeviceObject);
 
     if (Dx->DevicePnpState == Deleted) {
+        PIO_STACK_LOCATION  StackLocation = IoGetCurrentIrpStackLocation(Irp);
+        UCHAR               MajorFunction = StackLocation->MajorFunction;
+        UCHAR               MinorFunction = StackLocation->MinorFunction;
+
         status = STATUS_NO_SUCH_DEVICE;
+
+        if (MajorFunction == IRP_MJ_PNP) {
+            /* FDO and PDO deletions can block after being marked deleted, but before IoDeleteDevice */
+            if (MinorFunction == IRP_MN_SURPRISE_REMOVAL || MinorFunction == IRP_MN_REMOVE_DEVICE)
+                status = STATUS_SUCCESS;
+
+            ASSERT((MinorFunction != IRP_MN_CANCEL_REMOVE_DEVICE) && (MinorFunction != IRP_MN_CANCEL_STOP_DEVICE));
+        }
 
         Irp->IoStatus.Status = status;
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -859,15 +872,16 @@ DriverEntry(
                       MICRO_VERSION,
                       BUILD_NUMBER);
     if (!NT_SUCCESS(status)) {
-        if (status == STATUS_INCOMPATIBLE_DRIVER_BLOCKED)
+        if (status == STATUS_INCOMPATIBLE_DRIVER_BLOCKED) {
+            // XenBus.sys is not the same version as Xen.sys
+            // Insert XenFilt to avoid a 2nd reboot in upgrade cases, as AddDevice
+            // will not be called to insert XenFilt.
+            FiltersInstall();
             __DriverRequestReboot();
+        }
 
         goto done;
     }
-
-    // Remove the filters from the registry. They will be re-instated by
-    // the first successful AddDevice.
-    FiltersUninstall();
 
     DriverObject->DriverExtension->AddDevice = DriverAddDevice;
 

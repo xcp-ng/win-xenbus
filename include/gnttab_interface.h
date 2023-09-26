@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -233,21 +234,6 @@ typedef NTSTATUS
 DEFINE_GUID(GUID_XENBUS_GNTTAB_INTERFACE, 
 0x763679c5, 0xe5c2, 0x4a6d, 0x8b, 0x88, 0x6b, 0xb0, 0x2e, 0xc4, 0x2d, 0x8e);
 
-/*! \struct _XENBUS_GNTTAB_INTERFACE_V1
-    \brief GNTTAB interface version 1
-    \ingroup interfaces
-*/
-struct _XENBUS_GNTTAB_INTERFACE_V1 {
-    INTERFACE                           Interface;
-    XENBUS_GNTTAB_ACQUIRE               GnttabAcquire;
-    XENBUS_GNTTAB_RELEASE               GnttabRelease;
-    XENBUS_GNTTAB_CREATE_CACHE_V1       GnttabCreateCacheVersion1;
-    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS GnttabPermitForeignAccess;
-    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS GnttabRevokeForeignAccess;
-    XENBUS_GNTTAB_GET_REFERENCE         GnttabGetReference;
-    XENBUS_GNTTAB_DESTROY_CACHE         GnttabDestroyCache;
-};
-
 /*! \struct _XENBUS_GNTTAB_INTERFACE_V2
     \brief GNTTAB interface version 2
     \ingroup interfaces
@@ -311,8 +297,7 @@ typedef struct _XENBUS_GNTTAB_INTERFACE_V4 XENBUS_GNTTAB_INTERFACE, *PXENBUS_GNT
 
 #endif  // _WINDLL
 
-#define XENBUS_GNTTAB_INTERFACE_VERSION_MIN 1
+#define XENBUS_GNTTAB_INTERFACE_VERSION_MIN 2
 #define XENBUS_GNTTAB_INTERFACE_VERSION_MAX 4
 
 #endif  // _XENBUS_GNTTAB_INTERFACE_H
-

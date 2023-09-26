@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -142,4 +143,3 @@ typedef struct _XENFILT_EMULATED_INTERFACE_V2 XENFILT_EMULATED_INTERFACE, *PXENF
 #define XENFILT_EMULATED_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENFILT_EMULATED_INTERFACE_H
-

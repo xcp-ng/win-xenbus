@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -58,6 +59,15 @@ typedef NTSTATUS
 typedef VOID
 (*XENBUS_SHARED_INFO_RELEASE)(
     IN  PINTERFACE  Interface
+    );
+
+/*! \typedef XENBUS_SHARED_INFO_UPCALL_SUPPORTED
+    \brief Private method for EVTCHN inerface
+*/
+typedef BOOLEAN
+(*XENBUS_SHARED_INFO_UPCALL_SUPPORTED)(
+    IN  PINTERFACE  Interface,
+    IN  ULONG       Index
     );
 
 /*! \typedef XENBUS_SHARED_INFO_UPCALL_PENDING
@@ -168,7 +178,24 @@ struct _XENBUS_SHARED_INFO_INTERFACE_V3 {
     XENBUS_SHARED_INFO_GET_TIME         SharedInfoGetTime;
 };
 
-typedef struct _XENBUS_SHARED_INFO_INTERFACE_V3 XENBUS_SHARED_INFO_INTERFACE, *PXENBUS_SHARED_INFO_INTERFACE;
+/*! \struct _XENBUS_SHARED_INFO_INTERFACE_V4
+    \brief SHARED_INFO interface version 4
+    \ingroup interfaces
+*/
+struct _XENBUS_SHARED_INFO_INTERFACE_V4 {
+    INTERFACE                           Interface;
+    XENBUS_SHARED_INFO_ACQUIRE          SharedInfoAcquire;
+    XENBUS_SHARED_INFO_RELEASE          SharedInfoRelease;
+    XENBUS_SHARED_INFO_UPCALL_SUPPORTED SharedInfoUpcallSupported;
+    XENBUS_SHARED_INFO_UPCALL_PENDING   SharedInfoUpcallPending;
+    XENBUS_SHARED_INFO_EVTCHN_POLL      SharedInfoEvtchnPoll;
+    XENBUS_SHARED_INFO_EVTCHN_ACK       SharedInfoEvtchnAck;
+    XENBUS_SHARED_INFO_EVTCHN_MASK      SharedInfoEvtchnMask;
+    XENBUS_SHARED_INFO_EVTCHN_UNMASK    SharedInfoEvtchnUnmask;
+    XENBUS_SHARED_INFO_GET_TIME         SharedInfoGetTime;
+};
+
+typedef struct _XENBUS_SHARED_INFO_INTERFACE_V4 XENBUS_SHARED_INFO_INTERFACE, *PXENBUS_SHARED_INFO_INTERFACE;
 
 /*! \def XENBUS_SHARED_INFO
     \brief Macro at assist in method invocation
@@ -179,6 +206,6 @@ typedef struct _XENBUS_SHARED_INFO_INTERFACE_V3 XENBUS_SHARED_INFO_INTERFACE, *P
 #endif  // _WINDLL
 
 #define XENBUS_SHARED_INFO_INTERFACE_VERSION_MIN    2
-#define XENBUS_SHARED_INFO_INTERFACE_VERSION_MAX    3
+#define XENBUS_SHARED_INFO_INTERFACE_VERSION_MAX    4
 
 #endif  // _XENBUS_SHARED_INFO_H

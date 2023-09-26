@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -289,7 +290,7 @@ EvtchnFifoIsProcessorEnabled(
     unsigned int                    vcpu_id;
     NTSTATUS                        status;
     
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    status = SystemProcessorVcpuId(Index, &vcpu_id);
     if (!NT_SUCCESS(status))
         return FALSE;
 
@@ -364,7 +365,7 @@ EvtchnFifoPoll(
 
     DoneSomething = FALSE;
 
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
+    status = SystemProcessorVcpuId(Index, &vcpu_id);
     if (!NT_SUCCESS(status))
         goto done;
 
@@ -487,6 +488,7 @@ EvtchnFifoAcquire(
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
     KIRQL                           Irql;
+    LONG                            ProcessorCount;
     LONG                            Index;
     PMDL                            Mdl;
     NTSTATUS                        status;
@@ -498,26 +500,35 @@ EvtchnFifoAcquire(
 
     Trace("====>\n");
 
+    ProcessorCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
+
     Index = 0;
-    while (Index < (LONG)SystemProcessorCount()) {
+    while (Index < ProcessorCount) {
         unsigned int        vcpu_id;
         PFN_NUMBER          Pfn;
         PHYSICAL_ADDRESS    Address;
+
+        status = SystemProcessorVcpuId(Index, &vcpu_id);
+
+        Index++;
+
+        if (status == STATUS_NOT_SUPPORTED)
+            continue;
+
+        if (!NT_SUCCESS(status))
+            goto fail1;
 
         Mdl = __AllocatePage();
 
         status = STATUS_NO_MEMORY;
         if (Mdl == NULL)
-            goto fail1;
-
-        status = SystemVirtualCpuIndex(Index, &vcpu_id);
-        ASSERT(NT_SUCCESS(status));
+            goto fail2;
 
         Pfn = MmGetMdlPfnArray(Mdl)[0];
 
         status = EventChannelInitControl(Pfn, vcpu_id);
         if (!NT_SUCCESS(status))
-            goto fail2;
+            goto fail3;
 
         Address.QuadPart = (ULONGLONG)Pfn << PAGE_SHIFT;
 
@@ -528,8 +539,6 @@ EvtchnFifoAcquire(
                   Address.LowPart);
 
         Context->ControlBlockMdl[vcpu_id] = Mdl;
-
-        Index++;
     }
 
     Trace("<====\n");
@@ -539,10 +548,13 @@ done:
 
     return STATUS_SUCCESS;
 
-fail2:
-    Error("fail2\n");
+fail3:
+    Error("fail3\n");
 
     __FreePage(Mdl);
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -552,7 +564,11 @@ fail1:
     while (--Index >= 0) {
         unsigned int    vcpu_id;
 
-        (VOID) SystemVirtualCpuIndex(Index, &vcpu_id);
+        status = SystemProcessorVcpuId(Index, &vcpu_id);
+        if (status == STATUS_NOT_SUPPORTED)
+            continue;
+
+        BUG_ON(!NT_SUCCESS(status));
 
         Mdl = Context->ControlBlockMdl[vcpu_id];
         Context->ControlBlockMdl[vcpu_id] = NULL;

@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -443,4 +444,3 @@ HashTableDestroy(
     ASSERT(IsZeroMemory(Table, sizeof (XENBUS_HASH_TABLE)));
     __HashTableFree(Table);
 }
-

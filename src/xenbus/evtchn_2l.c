@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -75,15 +76,11 @@ EvtchnTwoLevelIsProcessorEnabled(
     NTSTATUS                        status;
 
     UNREFERENCED_PARAMETER(_Context);
+    UNREFERENCED_PARAMETER(Index);
 
-    status = SystemVirtualCpuIndex(Index, &vcpu_id);
-    if (!NT_SUCCESS(status))
-        return FALSE;
+    status = SystemProcessorVcpuId(Index, &vcpu_id);
 
-    if (vcpu_id != 0)
-        return FALSE;
-
-    return TRUE;
+    return NT_SUCCESS(status) ? TRUE : FALSE;
 }
 
 static BOOLEAN

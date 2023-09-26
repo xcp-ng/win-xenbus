@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -34,12 +35,20 @@
 
 #include <ntddk.h>
 
+typedef VOID
+(*SYNC_CALLBACK)(
+    IN  PVOID   Arguement,
+    IN  ULONG   Cpu
+    );
+
 extern
 __drv_maxIRQL(DISPATCH_LEVEL)
 __drv_raisesIRQL(DISPATCH_LEVEL)
 VOID
 SyncCapture(
-    VOID
+    IN  PVOID           Argument OPTIONAL,
+    IN  SYNC_CALLBACK   Early OPTIONAL,
+    IN  SYNC_CALLBACK   Late OPTIONAL
     );
 
 extern
@@ -47,6 +56,13 @@ __drv_requiresIRQL(DISPATCH_LEVEL)
 __drv_setsIRQL(HIGH_LEVEL)
 VOID
 SyncDisableInterrupts(
+    VOID
+    );
+
+extern
+__drv_requiresIRQL(HIGH_LEVEL)
+VOID
+SyncRunEarly(
     VOID
     );
 
@@ -61,9 +77,15 @@ SyncEnableInterrupts(
 extern
 __drv_requiresIRQL(DISPATCH_LEVEL)
 VOID
+SyncRunLate(
+    VOID
+    );
+
+extern
+__drv_requiresIRQL(DISPATCH_LEVEL)
+VOID
 SyncRelease(
     VOID
     );
 
 #endif  // _XENBUS_SYNC_H
-

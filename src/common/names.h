@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -33,8 +34,7 @@
 #define _COMMON_NAMES_H_
 
 #include <ntddk.h>
-
-#pragma warning(disable: 4061)
+#include <xen.h>
 
 static FORCEINLINE const CHAR *
 PowerStateTypeName(
@@ -472,6 +472,27 @@ ProcessorChangeName(
     return "UNKNOWN";
 
 #undef _PROCESSOR_CHANGE_NAME
+}
+
+static FORCEINLINE const CHAR *
+VirqName(
+    IN  ULONG   Type
+    )
+{
+#define _VIRQ_NAME(_Type) \
+    case VIRQ_ ## _Type:  \
+        return #_Type;
+
+    switch (Type) {
+    _VIRQ_NAME(DEBUG);
+    _VIRQ_NAME(TIMER);
+    default:
+        break;
+    }
+
+    return "UNKNOWN";
+
+#undef _VIRQ_NAME
 }
 
 #endif // _COMMON_NAMES_H_

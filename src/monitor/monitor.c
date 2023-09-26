@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source 1and binary forms,
@@ -59,6 +60,7 @@ typedef struct _MONITOR_CONTEXT {
     HKEY                    RequestKey;
     PTCHAR                  Title;
     PTCHAR                  Text;
+    PTCHAR                  Question;
     BOOL                    RebootPending;
 } MONITOR_CONTEXT, *PMONITOR_CONTEXT;
 
@@ -300,7 +302,8 @@ WTSStateName(
 
 static VOID
 DoReboot(
-    VOID
+    IN PTCHAR   Message,
+    IN DWORD    Timeout
     )
 {
     Log("waiting for pending install events...");
@@ -311,8 +314,8 @@ DoReboot(
 
 #pragma prefast(suppress:28159)
     (VOID) InitiateSystemShutdownEx(NULL,
-                                    NULL,
-                                    0,
+                                    Message,
+                                    Timeout,
                                     TRUE,
                                     TRUE,
                                     SHTDN_REASON_MAJOR_OPERATINGSYSTEM |
@@ -348,35 +351,19 @@ GetPromptTimeout(
     return Value;
 }
 
-static VOID
-PromptForReboot(
+static PTCHAR
+GetDisplayName(
     IN PTCHAR           DriverName
     )
 {
-    PMONITOR_CONTEXT    Context = &MonitorContext;
-    PTCHAR              Title;
-    DWORD               TitleLength;
     HRESULT             Result;
     TCHAR               ServiceKeyName[MAX_PATH];
     HKEY                ServiceKey;
     DWORD               MaxValueLength;
+    DWORD               Type;
     DWORD               DisplayNameLength;
     PTCHAR              DisplayName;
-    DWORD               Type;
-    PTCHAR              Description;
-    PTCHAR              Text;
-    DWORD               TextLength;
-    PWTS_SESSION_INFO   SessionInfo;
-    DWORD               Count;
-    DWORD               Index;
-    BOOL                Success;
     HRESULT             Error;
-
-    Log("====> (%s)", DriverName);
-
-    Title = Context->Title;
-    TitleLength = (DWORD)((_tcslen(Context->Title) +
-                           1) * sizeof (TCHAR));
 
     Result = StringCbPrintf(ServiceKeyName,
                             MAX_PATH,
@@ -433,6 +420,118 @@ PromptForReboot(
         goto fail5;
     }
 
+    RegCloseKey(ServiceKey);
+
+    return DisplayName;
+
+fail5:
+    Log("fail5");
+
+fail4:
+    Log("fail4");
+
+    free(DisplayName);
+
+fail3:
+    Log("fail3");
+
+fail2:
+    Log("fail2");
+
+    RegCloseKey(ServiceKey);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return NULL;
+}
+
+static BOOL
+TryAutoReboot(
+    IN PTCHAR           DriverName
+    )
+{
+    PMONITOR_CONTEXT    Context = &MonitorContext;
+    HRESULT             Result;
+    DWORD               Type;
+    DWORD               AutoReboot;
+    DWORD               RebootCount;
+    DWORD               Length;
+    DWORD               Timeout;
+    PTCHAR              DisplayName;
+    PTCHAR              Description;
+    PTCHAR              Text;
+    DWORD               TextLength;
+    HRESULT             Error;
+
+    Length = sizeof (DWORD);
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "AutoReboot",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&AutoReboot,
+                            &Length);
+    if (Error != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+        AutoReboot = 0;
+
+    if (AutoReboot == 0)
+        goto done;
+
+    Length = sizeof (DWORD);
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "RebootCount",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&RebootCount,
+                            &Length);
+    if (Error != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+        RebootCount = 0;
+
+    if (RebootCount >= AutoReboot)
+        goto done;
+
+    Log("AutoRebooting (reboot %u of %u)\n",
+        RebootCount,
+        AutoReboot);
+
+    ++RebootCount;
+
+    (VOID) RegSetValueEx(Context->ParametersKey,
+                         "RebootCount",
+                         0,
+                         REG_DWORD,
+                         (const BYTE*)&RebootCount,
+                         (DWORD) sizeof(DWORD));
+
+    (VOID) RegFlushKey(Context->ParametersKey);
+
+    Context->RebootPending = TRUE;
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "AutoRebootTimeout",
+                            NULL,
+                            &Type,
+                            (LPBYTE)&Timeout,
+                            &Length);
+    if (Error != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+        Timeout = 60;
+
+    DisplayName = GetDisplayName(DriverName);
+    if (DisplayName == NULL)
+        goto fail1;
+
     Description = _tcsrchr(DisplayName, ';');
     if (Description == NULL)
         Description = DisplayName;
@@ -446,7 +545,7 @@ PromptForReboot(
 
     Text = calloc(1, TextLength);
     if (Text == NULL)
-        goto fail6;
+        goto fail2;
 
     Result = StringCbPrintf(Text,
                             TextLength,
@@ -455,13 +554,100 @@ PromptForReboot(
                             Context->Text);
     assert(SUCCEEDED(Result));
 
+    free(DisplayName);
+
+    DoReboot(Text, Timeout);
+
+    free(Text);
+
+    return TRUE;
+
+done:
+    return FALSE;
+
+fail2:
+    Log("fail2");
+
+    free(DisplayName);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static VOID
+PromptForReboot(
+    IN PTCHAR           DriverName
+    )
+{
+    PMONITOR_CONTEXT    Context = &MonitorContext;
+    HRESULT             Result;
+    PTCHAR              Title;
+    DWORD               TitleLength;
+    PTCHAR              DisplayName;
+    PTCHAR              Description;
+    PTCHAR              Text;
+    DWORD               TextLength;
+    PWTS_SESSION_INFO   SessionInfo;
+    DWORD               Count;
+    DWORD               Index;
+    BOOL                Success;
+    HRESULT             Error;
+
+    Log("====> (%s)", DriverName);
+
+    Title = Context->Title;
+    TitleLength = (DWORD)((_tcslen(Context->Title) +
+                           1) * sizeof (TCHAR));
+
+    // AutoReboot is set, DoReboot has been called
+    if (TryAutoReboot(DriverName))
+        goto done;
+
+    DisplayName = GetDisplayName(DriverName);
+    if (DisplayName == NULL)
+        goto fail1;
+
+    Description = _tcsrchr(DisplayName, ';');
+    if (Description == NULL)
+        Description = DisplayName;
+    else
+        Description++;
+
+    TextLength = (DWORD)((_tcslen(Description) +
+                          1 + // ' '
+                          _tcslen(Context->Text) +
+                          1 + // ' '
+                          _tcslen(Context->Question) +
+                          1) * sizeof (TCHAR));
+
+    Text = calloc(1, TextLength);
+    if (Text == NULL)
+        goto fail2;
+
+    Result = StringCbPrintf(Text,
+                            TextLength,
+                            TEXT("%s %s %s"),
+                            Description,
+                            Context->Text,
+                            Context->Question);
+    assert(SUCCEEDED(Result));
+
     Success = WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE,
                                    0,
                                    1,
                                    &SessionInfo,
                                    &Count);
     if (!Success)
-        goto fail7;
+        goto fail3;
 
     for (Index = 0; Index < Count; Index++) {
         DWORD                   SessionId = SessionInfo[Index].SessionId;
@@ -492,12 +678,12 @@ PromptForReboot(
                                  TRUE);
 
         if (!Success)
-            goto fail8;
+            goto fail4;
 
         Context->RebootPending = TRUE;
 
         if (Response == IDYES || Response == IDTIMEOUT)
-            DoReboot();
+            DoReboot(NULL, 0);
 
         break;
     }
@@ -506,30 +692,15 @@ PromptForReboot(
 
     free(DisplayName);
 
-    RegCloseKey(ServiceKey);
-
+done:
     Log("<====");
 
     return;
 
-fail8:
-    Log("fail8");
-
-    WTSFreeMemory(SessionInfo);
-
-fail7:
-    Log("fail7");
-
-fail6:
-    Log("fail6");
-
-fail5:
-    Log("fail5");
-
 fail4:
     Log("fail4");
 
-    free(DisplayName);
+    WTSFreeMemory(SessionInfo);
 
 fail3:
     Log("fail3");
@@ -537,7 +708,7 @@ fail3:
 fail2:
     Log("fail2");
 
-    RegCloseKey(ServiceKey);
+    free(DisplayName);
 
 fail1:
     Error = GetLastError();
@@ -637,6 +808,11 @@ CheckRequestSubKeys(
 loop:
         RegCloseKey(SubKey);
     }
+
+    Error = RegDeleteValue(Context->ParametersKey,
+                           "RebootCount");
+    if (Error == ERROR_SUCCESS)
+        (VOID) RegFlushKey(Context->ParametersKey);
 
     goto done;
 
@@ -862,6 +1038,7 @@ GetDialogParameters(
     DWORD               MaxValueLength;
     DWORD               TitleLength;
     DWORD               TextLength;
+    DWORD               QuestionLength;
     DWORD               Type;
     HRESULT             Error;
 
@@ -926,7 +1103,40 @@ GetDialogParameters(
         goto fail7;
     }
 
+    QuestionLength = MaxValueLength + sizeof (TCHAR);
+
+    Context->Question = calloc(1, QuestionLength);
+    if (Context == NULL)
+        goto fail8;
+
+    Error = RegQueryValueEx(Context->ParametersKey,
+                            "DialogQuestion",
+                            NULL,
+                            &Type,
+                            (LPBYTE)Context->Question,
+                            &QuestionLength);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail9;
+    }
+
+    if (Type != REG_SZ) {
+        SetLastError(ERROR_BAD_FORMAT);
+        goto fail10;
+    }
+
     return TRUE;
+
+fail10:
+    Log("fail10");
+
+fail9:
+    Log("fail9");
+
+    free(Context->Question);
+
+fail8:
+    Log("fail8");
 
 fail7:
     Log("fail7");
@@ -963,8 +1173,8 @@ fail1:
     return FALSE;
 }
 
-
-
+#pragma warning(push)
+#pragma warning(disable: 28735) 
 VOID WINAPI
 MonitorMain(
     _In_    DWORD       argc,
@@ -1080,6 +1290,7 @@ MonitorMain(
 done:
     (VOID) RegDeleteTree(Context->RequestKey, NULL);
 
+    free(Context->Question);
     free(Context->Text);
     free(Context->Title);
     CloseHandle(Context->RequestKey);
@@ -1145,6 +1356,7 @@ fail1:
         LocalFree(Message);
     }
 }
+#pragma warning(pop)
 
 static BOOL
 MonitorCreate(

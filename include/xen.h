@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -45,6 +46,7 @@
 #include <public/event_channel.h>
 #include <public/grant_table.h>
 #include <public/sched.h>
+#include <public/vcpu.h>
 #include <public/hvm/params.h>
 #include <public/hvm/hvm_info_table.h>
 
@@ -62,8 +64,6 @@
 #ifndef XEN_API
 #define XEN_API __declspec(dllimport)
 #endif  // XEN_API
-
-#pragma warning(disable: 4061)
 
 // Dummy function to cause XEN.SYS to be loaded and initialized
 XEN_API
@@ -128,6 +128,13 @@ MemoryAddToPhysmap(
     IN  ULONG_PTR   Offset
     );
 
+__checkReturn
+XEN_API
+NTSTATUS
+MemoryRemoveFromPhysmap(
+    IN  PFN_NUMBER  Pfn
+    );
+
 #define PAGE_ORDER_4K   0
 #define PAGE_ORDER_2M   9
 
@@ -155,63 +162,64 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelSend(
-    IN  evtchn_port_t   Port
+    IN  ULONG   Port
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelAllocateUnbound(
-    IN  domid_t         Domain,
-    OUT evtchn_port_t   *Port
+    IN  USHORT  Domain,
+    OUT ULONG   *Port
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindInterDomain(
-    IN  domid_t         RemoteDomain,
-    IN  evtchn_port_t   RemotePort,
-    OUT evtchn_port_t   *LocalPort
+    IN  USHORT  RemoteDomain,
+    IN  ULONG   RemotePort,
+    OUT ULONG   *LocalPort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindVirq(
-    IN  uint32_t        Virq,
-    OUT evtchn_port_t   *LocalPort
+    IN  ULONG           Virq,
+    IN  unsigned int    vcpu_id,
+    OUT ULONG           *LocalPort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelQueryInterDomain(
-    IN  evtchn_port_t   LocalPort,
-    OUT domid_t         *RemoteDomain,
-    OUT evtchn_port_t   *RemotePort
+    IN  ULONG   LocalPort,
+    OUT USHORT  *RemoteDomain,
+    OUT ULONG   *RemotePort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelClose(
-    IN  evtchn_port_t   LocalPort
+    IN  ULONG   LocalPort
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelExpandArray(
-    IN  PFN_NUMBER              Pfn
+    IN  PFN_NUMBER  Pfn
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 EventChannelInitControl(
-    IN  PFN_NUMBER              Pfn,
-    IN  unsigned int            vcpu_id
+    IN  PFN_NUMBER      Pfn,
+    IN  unsigned int    vcpu_id
     );
 
 __checkReturn
@@ -225,8 +233,8 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindVirtualCpu(
-    IN  ULONG               LocalPort,
-    IN  unsigned int        vcpu_id
+    IN  ULONG           LocalPort,
+    IN  unsigned int    vcpu_id
     );
 
 __checkReturn
@@ -264,27 +272,27 @@ __checkReturn
 XEN_API
 NTSTATUS
 GrantTableMapForeignPage(
-    IN  USHORT                  Domain,
-    IN  ULONG                   GrantRef,
-    IN  PHYSICAL_ADDRESS        Address,
-    IN  BOOLEAN                 ReadOnly,
-    OUT ULONG                   *Handle
+    IN  USHORT              Domain,
+    IN  ULONG               GrantRef,
+    IN  PHYSICAL_ADDRESS    Address,
+    IN  BOOLEAN             ReadOnly,
+    OUT ULONG               *Handle
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 GrantTableUnmapForeignPage(
-    IN  ULONG                   Handle,
-    IN  PHYSICAL_ADDRESS        Address
+    IN  ULONG               Handle,
+    IN  PHYSICAL_ADDRESS    Address
     );
 
 __checkReturn
 XEN_API
 NTSTATUS
 GrantTableQuerySize(
-    OUT uint32_t                *Current OPTIONAL,
-    OUT uint32_t                *Maximum OPTIONAL
+    OUT uint32_t    *Current OPTIONAL,
+    OUT uint32_t    *Maximum OPTIONAL
     );
 
 // SCHED
@@ -307,6 +315,13 @@ XEN_API
 VOID
 SchedYield(
     VOID
+    );
+
+XEN_API
+NTSTATUS
+SchedWatchdog(
+    IN OUT  PULONG  Id,
+    IN      ULONG   Seconds
     );
 
 // XEN VERSION
@@ -442,16 +457,24 @@ LogRemoveDisposition(
 // SYSTEM
 
 XEN_API
-ULONG
-SystemProcessorCount(
-    VOID
+NTSTATUS
+SystemProcessorVcpuId(
+    IN  ULONG           Cpu,
+    OUT unsigned int    *vcpu_id
     );
 
 XEN_API
 NTSTATUS
-SystemVirtualCpuIndex(
-    IN  ULONG           Index,
-    OUT unsigned int    *vcpu_id
+SystemProcessorVcpuInfo(
+    IN  ULONG       Cpu,
+    OUT vcpu_info_t **Vcpu
+    );
+
+XEN_API
+NTSTATUS
+SystemProcessorRegisterVcpuInfo(
+    IN  ULONG   Cpu,
+    IN  BOOLEAN Force
     );
 
 XEN_API
@@ -464,6 +487,37 @@ XEN_API
 BOOLEAN
 SystemRealTimeIsUniversal(
     VOID
+    );
+
+XEN_API
+NTSTATUS
+SystemSetWatchdog(
+    IN  ULONG       Seconds
+    );
+
+XEN_API
+VOID
+SystemStopWatchdog(
+    VOID
+    );
+
+// VCPU
+
+__checkReturn
+XEN_API
+NTSTATUS
+VcpuSetPeriodicTimer(
+    IN  unsigned int    vcpu_id,
+    IN  PLARGE_INTEGER  Period
+    );
+
+__checkReturn
+XEN_API
+NTSTATUS
+VcpuRegisterVcpuInfo(
+    IN  unsigned int                vcpu_id,
+    IN  PFN_NUMBER                  Pfn,
+    IN  ULONG                       Offset
     );
 
 #endif  // _XEN_H

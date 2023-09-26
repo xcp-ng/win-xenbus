@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -228,7 +229,7 @@ AllowUpdate(
                          KEY_READ,
                          &ServiceKey);
     if (Error != ERROR_SUCCESS) {
-        if (Error == ERROR_FILE_NOT_FOUND) {
+        if (Error == (HRESULT)ERROR_FILE_NOT_FOUND) {
             Value = 1;
             goto done;
         }
@@ -246,7 +247,7 @@ AllowUpdate(
                             (LPBYTE)&Value,
                             &ValueLength);
     if (Error != ERROR_SUCCESS) {
-        if (Error == ERROR_FILE_NOT_FOUND) {
+        if (Error == (HRESULT)ERROR_FILE_NOT_FOUND) {
             Type = REG_DWORD;
             Value = 1;
         } else {
@@ -575,7 +576,8 @@ fail1:
 static BOOLEAN
 GetDriverKeyName(
     IN  HKEY    DeviceKey,
-    OUT PTCHAR  *Name
+    OUT PTCHAR  *Name,
+    OUT DWORD   *ConfigFlags
     )
 {
     HRESULT     Error;
@@ -586,6 +588,7 @@ GetDriverKeyName(
     DWORD       Index;
     HKEY        SubKey;
     PTCHAR      DriverKeyName;
+    DWORD       Flags;
 
     Error = RegQueryInfoKey(DeviceKey,
                             NULL,
@@ -612,9 +615,11 @@ GetDriverKeyName(
 
     SubKey = NULL;
     DriverKeyName = NULL;
+    Flags = 0;
 
     for (Index = 0; Index < SubKeys; Index++) {
         DWORD       MaxValueLength;
+        DWORD       ConfigFlagsLength;
         DWORD       DriverKeyNameLength;
         DWORD       Type;
 
@@ -661,6 +666,18 @@ GetDriverKeyName(
             goto fail4;
         }
 
+        ConfigFlagsLength = (DWORD)sizeof(DWORD);
+
+        Error = RegQueryValueEx(SubKey,
+                                "ConfigFlags",
+                                NULL,
+                                &Type,
+                                (LPBYTE)&Flags,
+                                &ConfigFlagsLength);
+        if (Error != ERROR_SUCCESS ||
+            Type != REG_DWORD)
+            Flags = 0;
+
         DriverKeyNameLength = MaxValueLength + sizeof (TCHAR);
 
         DriverKeyName = calloc(1, DriverKeyNameLength);
@@ -679,6 +696,7 @@ GetDriverKeyName(
 
         free(DriverKeyName);
         DriverKeyName = NULL;
+        Flags = 0;
 
         RegCloseKey(SubKey);
         SubKey = NULL;
@@ -692,6 +710,8 @@ GetDriverKeyName(
     free(SubKeyName);
 
     *Name = DriverKeyName;
+    if (ConfigFlags)
+        *ConfigFlags = Flags;
     return TRUE;
 
 fail5:
@@ -851,7 +871,7 @@ found:
         goto fail3;
 
     // Check for a bound driver
-    Success = GetDriverKeyName(DeviceKey, &DriverKeyName);
+    Success = GetDriverKeyName(DeviceKey, &DriverKeyName, NULL);
     if (!Success)
         goto fail4;
 
@@ -892,7 +912,7 @@ found:
                             (LPBYTE)DriverDesc,
                             &DriverDescLength);
     if (Error != ERROR_SUCCESS) {
-        if (Error == ERROR_FILE_NOT_FOUND)
+        if (Error == (HRESULT)ERROR_FILE_NOT_FOUND)
             goto done;
 
         SetLastError(Error);
@@ -1361,7 +1381,8 @@ static BOOLEAN
 IsActiveDevice(
     IN  HDEVINFO            DeviceInfoSet,
     IN  PSP_DEVINFO_DATA    DeviceInfoData,
-    OUT PBOOLEAN            ActiveDevice
+    OUT PBOOLEAN            ActiveDevice,
+    OUT PBOOLEAN            VendorIsActive
     )
 {
     PTCHAR                  ActiveDeviceID;
@@ -1391,6 +1412,20 @@ IsActiveDevice(
                      _stricmp(ActiveInstanceID, InstanceID) == 0) ?
         TRUE :
         FALSE;
+
+#ifdef VENDOR_DEVICE_ID_STR
+
+#define DRIVER_VENDOR_DEVICE_ID "PCI\\VEN_5853&DEV_" ## VENDOR_DEVICE_ID_STR ## "&SUBSYS_C0005853&REV_01"
+
+    *VendorIsActive = (_stricmp(ActiveDeviceID, DRIVER_VENDOR_DEVICE_ID) == 0) ?
+        TRUE :
+        FALSE;
+
+#undef DRIVER_VENDOR_DEVICE_ID
+
+#else
+    *VendorIsActive = FALSE;
+#endif
 
     free(DeviceID);
     free(InstanceID);
@@ -1437,6 +1472,7 @@ SupportChildDrivers(
     PTCHAR          SubKeyName;
     HKEY            DeviceKey;
     PTCHAR          DriverKeyName;
+    DWORD           ConfigFlags;
     HKEY            DriverKey;
     PTCHAR          MatchingDeviceID;
     DWORD           Index;
@@ -1496,20 +1532,23 @@ SupportChildDrivers(
         if (!Success)
             goto fail5;
 
-        Success = GetDriverKeyName(DeviceKey, &DriverKeyName);
+        Success = GetDriverKeyName(DeviceKey, &DriverKeyName, &ConfigFlags);
         if (!Success)
             goto fail6;
 
         if (DriverKeyName == NULL)
             goto loop1;
 
+        if (ConfigFlags & 0x20)
+            goto loop2;
+
         Success = OpenDriverKey(DriverKeyName, &DriverKey);
         if (!Success)
-            goto loop2;
+            goto loop3;
 
         Success = GetMatchingDeviceID(DriverKey, &MatchingDeviceID);
         if (!Success)
-            goto loop3;
+            goto loop4;
 
         Success = SupportDeviceID(MatchingDeviceID, NewBinding);
         if (!Success)
@@ -1517,8 +1556,10 @@ SupportChildDrivers(
 
         free(MatchingDeviceID);
 
-    loop3:
+    loop4:
         RegCloseKey(DriverKey);
+
+    loop3:
 
     loop2:
         free(DriverKeyName);
@@ -1778,6 +1819,7 @@ DifInstallPostProcess(
 {
     BOOLEAN                         NewBinding;
     BOOLEAN                         Active;
+    BOOLEAN                         VendorIsActive;
 
     Log("====>");
 
@@ -1787,12 +1829,13 @@ DifInstallPostProcess(
 
     (VOID) IsActiveDevice(DeviceInfoSet,
                           DeviceInfoData,
-                          &Active);
+                          &Active,
+                          &VendorIsActive);
 
     Log("Active = %s", Active ? "TRUE" : "FALSE");
     Log("NewBinding = %s", NewBinding ? "TRUE" : "FALSE");
 
-    if (Active && NewBinding) {
+    if ((Active && NewBinding) || !VendorIsActive) {
         (VOID) ClearUnplugRequest("DISKS");
         (VOID) ClearUnplugRequest("NICS");
     }
@@ -1959,6 +2002,9 @@ Entry(
     )
 {
     HRESULT                         Error;
+    SP_DRVINFO_DATA                 DriverInfoData;
+    BOOLEAN                         DriverInfoAvailable;
+    BOOLEAN                         IsNullDriver;
 
     Log("%s (%s) ===>",
         MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR,
@@ -1973,23 +2019,39 @@ Entry(
             Context->InstallResult);
     }
 
+    DriverInfoData.cbSize = sizeof(DriverInfoData);
+    DriverInfoAvailable = SetupDiGetSelectedDriver(DeviceInfoSet,
+                                                   DeviceInfoData,
+                                                   &DriverInfoData) ?
+                          TRUE :
+                          FALSE;
+    IsNullDriver = !(DriverInfoAvailable &&
+                    (DriverInfoData.DriverType == SPDIT_CLASSDRIVER ||
+                     DriverInfoData.DriverType == SPDIT_COMPATDRIVER));
+
     switch (Function) {
+	case DIF_SELECTBESTCOMPATDRV: {
+        //
+        // If the NULL driver will be installed, treat this as we would a
+        // DIF_REMOVE to work around the fact that Windows 10 2004 doesn't
+        // call DIF_INSTALLDEVICE on uninstall.
+        // An InstallResult value of ERROR_NO_COMPAT_DRIVERS simply means
+        // that the NULL driver was selected, and so should not be treated
+        // as an error.
+        //
+        if (Context->PostProcessing &&
+            Context->InstallResult == ERROR_NO_COMPAT_DRIVERS)
+            Context->InstallResult = NO_ERROR;
+
+        Error = (IsNullDriver) ?
+                DifRemove(DeviceInfoSet, DeviceInfoData, Context) :
+                NO_ERROR;
+        break;
+    }
     case DIF_INSTALLDEVICE: {
-        SP_DRVINFO_DATA         DriverInfoData;
-        BOOLEAN                 DriverInfoAvailable;
-
-        DriverInfoData.cbSize = sizeof (DriverInfoData);
-        DriverInfoAvailable = SetupDiGetSelectedDriver(DeviceInfoSet,
-                                                       DeviceInfoData,
-                                                       &DriverInfoData) ?
-                              TRUE :
-                              FALSE;
-
-        // If there is no driver information then the NULL driver is being
-        // installed. Treat this as we would a DIF_REMOVE.
-        Error = (DriverInfoAvailable) ?
-                DifInstall(DeviceInfoSet, DeviceInfoData, Context) :
-                DifRemove(DeviceInfoSet, DeviceInfoData, Context);
+        Error = (IsNullDriver) ?
+                NO_ERROR :
+                DifInstall(DeviceInfoSet, DeviceInfoData, Context);
         break;
     }
     case DIF_REMOVE:

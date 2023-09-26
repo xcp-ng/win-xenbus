@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms,
@@ -331,7 +332,7 @@ ConsoleDisable(
     Context->Channel = NULL;
 }
 
-static VOID
+static NTSTATUS
 ConsoleEnable(
     IN PXENBUS_CONSOLE_CONTEXT  Context
     )
@@ -340,8 +341,10 @@ ConsoleEnable(
     ULONG                       Port;
     NTSTATUS                    status;
 
+    /* In some Xen deployments the tool-stack may not set up the console */
     status = HvmGetParam(HVM_PARAM_CONSOLE_EVTCHN, &Value);
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     Port = (ULONG)Value;
 
@@ -369,6 +372,13 @@ ConsoleEnable(
     // Trigger an initial poll
     if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
         Context->Dpcs++;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }
 
 static
@@ -702,11 +712,13 @@ ConsoleAcquire(
     if (!NT_SUCCESS(status))
         goto fail4;
 
-    ConsoleEnable(Context);
+    status = ConsoleEnable(Context);
+    if (!NT_SUCCESS(status))
+        goto fail5;
 
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -715,11 +727,11 @@ ConsoleAcquire(
                             Context,
                             &Context->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail7;
 
     status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail8;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -728,7 +740,7 @@ ConsoleAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail9;
 
     Trace("<====\n");
 
@@ -737,28 +749,31 @@ done:
 
     return STATUS_SUCCESS;
 
-fail8:
-    Error("fail8\n");
+fail9:
+    Error("fail9\n");
 
     XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-fail7:
-    Error("fail7\n");
+fail8:
+    Error("fail8\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackLate);
     Context->SuspendCallbackLate = NULL;
 
-fail6:
-    Error("fail6\n");
+fail7:
+    Error("fail7\n");
 
     XENBUS_SUSPEND(Release, &Context->SuspendInterface);
 
-fail5:
-    Error("fail5\n");
+fail6:
+    Error("fail6\n");
 
     ConsoleDisable(Context);
+
+fail5:
+    Error("fail5\n");
 
     XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
 

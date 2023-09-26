@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -51,7 +52,7 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelSend(
-    IN  evtchn_port_t   LocalPort
+    IN  ULONG           LocalPort
     )
 {
     struct evtchn_send  op;
@@ -79,8 +80,8 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelAllocateUnbound(
-    IN  domid_t                 Domain,
-    OUT evtchn_port_t           *LocalPort
+    IN  USHORT                  Domain,
+    OUT ULONG                   *LocalPort
     )
 {
     struct evtchn_alloc_unbound op;
@@ -111,9 +112,9 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindInterDomain(
-    IN  domid_t                     RemoteDomain,
-    IN  evtchn_port_t               RemotePort,
-    OUT evtchn_port_t               *LocalPort
+    IN  USHORT                      RemoteDomain,
+    IN  ULONG                       RemotePort,
+    OUT ULONG                       *LocalPort
     )
 {
     struct evtchn_bind_interdomain  op;
@@ -144,8 +145,9 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelBindVirq(
-    IN  uint32_t            Virq,
-    OUT evtchn_port_t       *LocalPort
+    IN  ULONG               Virq,
+    IN  unsigned int        vcpu_id,
+    OUT ULONG               *LocalPort
     )
 {
     struct evtchn_bind_virq op;
@@ -153,7 +155,7 @@ EventChannelBindVirq(
     NTSTATUS                status;
 
     op.virq = Virq;
-    op.vcpu = 0;
+    op.vcpu = vcpu_id;
 
     rc = EventChannelOp(EVTCHNOP_bind_virq, &op);
 
@@ -176,14 +178,14 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelQueryInterDomain(
-    IN  evtchn_port_t               LocalPort,
-    OUT domid_t                     *RemoteDomain,
-    OUT evtchn_port_t               *RemotePort
+    IN  ULONG               LocalPort,
+    OUT USHORT              *RemoteDomain,
+    OUT ULONG               *RemotePort
     )
 {
-    struct evtchn_status            op;
-    LONG_PTR                        rc;
-    NTSTATUS                        status;
+    struct evtchn_status    op;
+    LONG_PTR                rc;
+    NTSTATUS                status;
 
     op.dom = DOMID_SELF;
     op.port = LocalPort;
@@ -217,7 +219,7 @@ __checkReturn
 XEN_API
 NTSTATUS
 EventChannelClose(
-    IN  evtchn_port_t   LocalPort
+    IN  ULONG           LocalPort
     )
 {
     struct evtchn_close op;

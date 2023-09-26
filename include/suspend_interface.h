@@ -1,4 +1,5 @@
-/* Copyright (c) Citrix Systems Inc.
+/* Copyright (c) Xen Project.
+ * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, 
@@ -174,4 +175,3 @@ typedef struct _XENBUS_SUSPEND_INTERFACE_V1 XENBUS_SUSPEND_INTERFACE, *PXENBUS_S
 #define XENBUS_SUSPEND_INTERFACE_VERSION_MAX    1
 
 #endif  // _XENBUS_SUSPEND_INTERFACE_H
-

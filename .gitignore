@@ -5,20 +5,23 @@
 
 # Output
 /xenbus
-*.log
-*.opendb
-*.db-shm
-*.db
-*.db-wal
-*.vsidx
+.build_number
 *.obj
 *.tlog
+*.log
 *.pdb
-vs2019/version/.revision
-vs2019/.vs/xenbus/v17/.suo
-vs2019/xenbus.inf
+*.rawcfgf
+*.err
 include/version.h
-vs2019/Windows10Release/
-vs2019/*/Windows10Release/
-vs2019/*/x64/
-vs2019/.vs/xenbus/v16/.suo
+vs20??/.vs/
+vs20??/*/Windows10Debug/
+vs20??/*/Windows10Release/
+vs20??/*/x64/
+vs20??/*/x86/
+vs20??/Windows10Debug/
+vs20??/Windows10Release/
+vs20??/version/.revision
+vs20??/version/version.log
+vs20??/*.inf
+vs20??/xen/sdv/
+vs20??/xen/smvstats.txt
