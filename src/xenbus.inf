@@ -89,7 +89,7 @@ StartType=%SERVICE_BOOT_START%
 ErrorControl=%SERVICE_ERROR_NORMAL% 
 ServiceBinary=%12%\xenbus.sys 
 LoadOrderGroup="Boot Bus Extender"
-AddReg = XenBus_Parameters, XenBus_Interrupts
+AddReg = XenBus_Parameters, XenBus_Interrupts, XenBus_Unplug
 
 [XenBus_Parameters]
 HKR,"Parameters",,0x00000010
