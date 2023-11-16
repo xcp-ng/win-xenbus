@@ -44,16 +44,6 @@
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
     </DriverSign>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
-    <ClCompile>
-      <PreprocessorDefinitions>__i386__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
-    <CustomBuildStep>
-      <Outputs>$(TargetDir)$(TargetName).dll</Outputs>
-      <Inputs>$(IntDir)$(TargetName).res</Inputs>
-      <Command>link -machine:x86 -dll -noentry -out:%(Outputs) %(Inputs)</Command>
-    </CustomBuildStep>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
     <ClCompile>
       <PreprocessorDefinitions>__x86_64__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
