@@ -265,7 +265,7 @@ SyncWorker(
 {
     PSYNC_CONTEXT       Context = &SyncContext;
     ULONG               Index;
-    PROCESSOR_NUMBER    ProcNumber;
+    PROCESSOR_NUMBER    ProcNumber = { 0 };
     SYNC_REQUEST        Request;
 
     UNREFERENCED_PARAMETER(Dpc);
