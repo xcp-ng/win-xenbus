@@ -51,7 +51,7 @@
       <PreprocessorDefinitions>__x86_64__;%(PreprocessorDefinitions);_AMD64_</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Windows 8 Release'">
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Windows 10 Release'">
     <ClCompile>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <WholeProgramOptimization>true</WholeProgramOptimization>

@@ -16,20 +16,4 @@
 		<TargetVersion>Windows10</TargetVersion>
 		<UseDebugLibraries>false</UseDebugLibraries>
 	</PropertyGroup>
-	<PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Debug|Win32'">
-		<TargetVersion>Windows8</TargetVersion>
-		<UseDebugLibraries>true</UseDebugLibraries>
-	</PropertyGroup>
-	<PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Release|Win32'">
-		<TargetVersion>Windows8</TargetVersion>
-		<UseDebugLibraries>false</UseDebugLibraries>
-	</PropertyGroup>
-	<PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Debug|x64'">
-		<TargetVersion>Windows8</TargetVersion>
-		<UseDebugLibraries>true</UseDebugLibraries>
-	</PropertyGroup>
-	<PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Windows 8 Release|x64'">
-		<TargetVersion>Windows8</TargetVersion>
-		<UseDebugLibraries>false</UseDebugLibraries>
-	</PropertyGroup>
 </Project>

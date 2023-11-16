@@ -21,25 +21,5 @@
 			<Platform>x64</Platform>
 			<WindowsTargetPlatformVersion>10</WindowsTargetPlatformVersion>
 		</ProjectConfiguration>
-		<ProjectConfiguration Include="Windows 8 Debug|Win32">
-			<Configuration>Windows 8 Debug</Configuration>
-			<Platform>Win32</Platform>
-			<WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="Windows 8 Release|Win32">
-			<Configuration>Windows 8 Release</Configuration>
-			<Platform>Win32</Platform>
-			<WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="Windows 8 Debug|x64">
-			<Configuration>Windows 8 Debug</Configuration>
-			<Platform>x64</Platform>
-			<WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-		</ProjectConfiguration>
-		<ProjectConfiguration Include="Windows 8 Release|x64">
-			<Configuration>Windows 8 Release</Configuration>
-			<Platform>x64</Platform>
-			<WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-		</ProjectConfiguration>
 	</ItemGroup>
 </Project>

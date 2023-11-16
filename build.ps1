@@ -23,7 +23,7 @@ Function Build {
 
 	$visualstudioversion = $Env:VisualStudioVersion
 	$solutiondir = @{ "16.0" = "vs2019"; "17.0" = "vs2022"; }
-	$configurationbase = @{ "16.0" = "Windows 8"; "17.0" = "Windows 10"; }
+	$configurationbase = @{ "16.0" = "Windows 10"; "17.0" = "Windows 10"; }
 
 	$params = @{
 		SolutionDir = $solutiondir[$visualstudioversion];
