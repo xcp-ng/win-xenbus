@@ -1233,6 +1233,9 @@ fail1:
     return FALSE;
 }
 
+#pragma warning(push)
+#pragma warning(disable: 28735) 
+
 VOID WINAPI
 MonitorMain(
     _In_    DWORD       argc,
@@ -1417,6 +1420,7 @@ fail1:
         LocalFree(Message);
     }
 }
+
 #pragma warning(pop)
 
 static BOOL
