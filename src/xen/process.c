@@ -40,8 +40,11 @@
 #include "dbg_print.h"
 #include "assert.h"
 
+typedef PCHAR (*GET_PROCESS_IMAGE_NAME)(PEPROCESS Process);
+
 typedef struct _PROCESS_CONTEXT {
-    LONG            References;
+    LONG                    References;
+    GET_PROCESS_IMAGE_NAME  PsGetProcFileName;
 } PROCESS_CONTEXT, *PPROCESS_CONTEXT;
 
 static PROCESS_CONTEXT  ProcessContext;
@@ -74,12 +77,32 @@ ProcessNotify(
     KeLowerIrql(Irql);
 }
 
+PCHAR
+ProcessGetImageFileName(
+    IN  PEPROCESS   Process
+    )
+{
+    PPROCESS_CONTEXT    Context = &ProcessContext;
+
+    if (Context->PsGetProcFileName == NULL)
+        goto fail1;
+
+    return Context->PsGetProcFileName(Process);
+
+fail1:
+    Error("Fail1 (process=%p)\n", Process);
+
+    return NULL;
+}
+
 VOID
 ProcessTeardown(
     VOID
     )
 {
     PPROCESS_CONTEXT    Context = &ProcessContext;
+
+    Context->PsGetProcFileName = NULL;
 
     (VOID) PsSetCreateProcessNotifyRoutine(ProcessNotify, TRUE);
 
@@ -90,11 +113,12 @@ ProcessTeardown(
 
 NTSTATUS
 ProcessInitialize(
-    VOID              
+    VOID
     )
 {
     PPROCESS_CONTEXT    Context = &ProcessContext;
     ULONG               References;
+    UNICODE_STRING      Unicode;
     NTSTATUS            status;
 
     References = InterlockedIncrement(&Context->References);
@@ -106,6 +130,12 @@ ProcessInitialize(
     status = PsSetCreateProcessNotifyRoutine(ProcessNotify, FALSE);
     if (!NT_SUCCESS(status))
         goto fail2;
+
+    RtlInitUnicodeString(&Unicode, L"PsGetProcessImageFileName");
+
+    Context->PsGetProcFileName = (GET_PROCESS_IMAGE_NAME)MmGetSystemRoutineAddress(&Unicode);
+    if (Context->PsGetProcFileName == NULL)
+        Warning("Unable to get PsGetProcessImageFileName Address\n");
 
     return STATUS_SUCCESS;
 

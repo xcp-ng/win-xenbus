@@ -43,6 +43,7 @@
 #include "bug_check.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "process.h"
 
 static KBUGCHECK_CALLBACK_RECORD BugCheckBugCheckCallbackRecord;
 
@@ -1014,6 +1015,68 @@ BugCheckAssertionFailure(
     }
 }
 
+/// <summary>
+/// Bug check handler for critocal process died.
+/// https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died
+/// </summary>
+/// <param name="Parameter1">process object.</param>
+/// <param name="Parameter2">If 0, a process terminated. If 1, a thread terminated.</param>
+/// <param name="Parameter3">reserved.</param>
+/// <param name="Parameter4">reserved.</param>
+static VOID
+BugCheckBugEFCriticalProcessDied(
+    IN  ULONG_PTR   Parameter1,
+    IN  ULONG_PTR   Parameter2,
+    IN  ULONG_PTR   Parameter3,
+    IN  ULONG_PTR   Parameter4
+    )
+{
+    __try {
+        ULONG_PTR       Code = Parameter2;
+        CONTEXT         Context;
+
+        UNREFERENCED_PARAMETER(Parameter3);
+        UNREFERENCED_PARAMETER(Parameter4);
+
+        switch (Code) {
+        case 0x0: {
+            PEPROCESS   EProcess = (PEPROCESS)Parameter1;
+            PCHAR       Name = ProcessGetImageFileName(EProcess);
+
+            if (Name == NULL)
+                Name = "(unknown)";
+
+            LogPrintf(LOG_LEVEL_CRITICAL,
+                      "%s|BUGCHECK: CRITICAL PROCESS: %p Name:%s DIED IRQL:%d \n",
+                      __MODULE__,
+                      EProcess,
+                      Name,
+                      KeGetCurrentIrql());
+            break;
+        }
+
+        case 0x1: {
+            PETHREAD    EThread = (PETHREAD)Parameter1;
+
+            LogPrintf(LOG_LEVEL_CRITICAL,
+                      "%s|BUGCHECK: CRITICAL THREAD: %p DIED IRQL:%d \n",
+                      __MODULE__,
+                      EThread,
+                      KeGetCurrentIrql());
+            break;
+        }
+
+        default:
+            break;
+        }
+
+        RtlCaptureContext(&Context);
+        BugCheckStackDump(&Context);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        // Error of some kind
+    }
+}
+
 struct _BUG_CODE_ENTRY {
     ULONG       Code;
     const CHAR  *Name;
@@ -1035,6 +1098,7 @@ struct _BUG_CODE_ENTRY   BugCodeTable[] = {
     DEFINE_HANDLER(INACCESSIBLE_BOOT_DEVICE, BugCheckInaccessibleBootDevice),
     DEFINE_HANDLER(DRIVER_POWER_STATE_FAILURE, BugCheckDriverPowerStateFailure),
     DEFINE_HANDLER(ASSERTION_FAILURE, BugCheckAssertionFailure),
+    DEFINE_HANDLER(CRITICAL_PROCESS_DIED, BugCheckBugEFCriticalProcessDied),
     { 0, NULL, NULL }
 };
 

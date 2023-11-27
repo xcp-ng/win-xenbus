@@ -44,4 +44,9 @@ ProcessTeardown(
     VOID
     );
 
+extern PCHAR
+ProcessGetImageFileName(
+    IN  PEPROCESS   Process
+    );
+
 #endif  // _XEN_PROCESS_H
