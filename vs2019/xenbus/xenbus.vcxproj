@@ -36,6 +36,7 @@
       <CETCompat>true</CETCompat>
       <GenerateMapFile>true</GenerateMapFile>
       <MapExports>true</MapExports>
+      <AdditionalOptions>/INTEGRITYCHECK %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
