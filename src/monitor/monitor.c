@@ -1233,6 +1233,11 @@ fail1:
     return FALSE;
 }
 
+#pragma warning(push)
+#pragma warning(disable: 28735) 
+//	Temporary ignore warning C28735: Banned Crimson API Usage:  RegisterEventSourceA is a Banned Crimson API.
+//	TODO: Replace with a safer API alternative and ensure compliance with security best practices.
+
 VOID WINAPI
 MonitorMain(
     _In_    DWORD       argc,
@@ -1417,6 +1422,8 @@ fail1:
         LocalFree(Message);
     }
 }
+
+#pragma warning(pop)
 
 static BOOL
 MonitorCreate(
