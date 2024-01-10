@@ -274,6 +274,7 @@ GnttabContract(
 
         Info("removed refrences [%08llx - %08llx]\n", Start, End);
 
+        ASSERT(Frame->Mdl != NULL);
         Pfn = MmGetMdlPfnArray(Frame->Mdl)[0];
 
         (VOID) MemoryRemoveFromPhysmap(Pfn);
