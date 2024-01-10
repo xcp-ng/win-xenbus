@@ -58,9 +58,9 @@
 struct _XENBUS_PDO {
     PXENBUS_DX                  Dx;
 
-    PXENBUS_THREAD              SystemPowerThread;
+    PIO_WORKITEM                SystemPowerWorkItem;
     PIRP                        SystemPowerIrp;
-    PXENBUS_THREAD              DevicePowerThread;
+    PIO_WORKITEM                DevicePowerWorkItem;
     PIRP                        DevicePowerIrp;
 
     PXENBUS_FDO                 Fdo;
@@ -1695,6 +1695,66 @@ PdoDispatchPnp(
     return status;
 }
 
+__drv_functionClass(IO_WORKITEM_ROUTINE)
+__drv_sameIRQL
+static VOID
+PdoSetDevicePowerWorker(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PVOID           Context
+    )
+{
+    PXENBUS_PDO         Pdo = (PXENBUS_PDO) Context;
+    PIRP                Irp;
+    NTSTATUS            status;
+    PIO_STACK_LOCATION  StackLocation;
+    DEVICE_POWER_STATE  DeviceState;
+    POWER_ACTION        PowerAction;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    Irp = InterlockedExchangePointer(&Pdo->DevicePowerIrp, NULL);
+    ASSERT(Irp != NULL);
+
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    DeviceState = StackLocation->Parameters.Power.State.DeviceState;
+    PowerAction = StackLocation->Parameters.Power.ShutdownType;
+
+    status = STATUS_SUCCESS;
+    if (__PdoGetDevicePowerState(Pdo) > DeviceState) {
+        Trace("%s: POWERING UP: %s -> %s\n",
+              __PdoGetName(Pdo),
+              DevicePowerStateName(__PdoGetDevicePowerState(Pdo)),
+              DevicePowerStateName(DeviceState));
+
+        ASSERT3U(DeviceState, ==, PowerDeviceD0);
+        status = PdoD3ToD0(Pdo);
+    } else if (__PdoGetDevicePowerState(Pdo) < DeviceState) {
+        Trace("%s: POWERING DOWN: %s -> %s\n",
+              __PdoGetName(Pdo),
+              DevicePowerStateName(__PdoGetDevicePowerState(Pdo)),
+              DevicePowerStateName(DeviceState));
+
+        ASSERT3U(DeviceState, ==, PowerDeviceD3);
+        PdoD0ToD3(Pdo);
+    }
+
+    if(NT_SUCCESS(status))
+        goto done;
+
+    Error("fail1 (%08x)\n", status);
+    /* TODO - Consider cycling device power at some later point?
+       Need PPO to retry SIRP -> DIRP */
+
+done:
+    /* Cannot fail the IRP at this point, keep going. */
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    Trace("<==== (%s:%s)\n",
+          DevicePowerStateName(DeviceState), 
+          PowerActionName(PowerAction));
+}
+
 static NTSTATUS
 PdoSetDevicePower(
     IN  PXENBUS_PDO     Pdo,
@@ -1710,98 +1770,43 @@ PdoSetDevicePower(
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
     Trace("====> (%s:%s)\n",
-          DevicePowerStateName(DeviceState), 
+          DevicePowerStateName(DeviceState),
           PowerActionName(PowerAction));
 
-    ASSERT3U(PowerAction, <, PowerActionShutdown);
+    IoMarkIrpPending(Irp);
 
-    if (__PdoGetDevicePowerState(Pdo) > DeviceState) {
-        Trace("%s: POWERING UP: %s -> %s\n",
-              __PdoGetName(Pdo),
-              DevicePowerStateName(__PdoGetDevicePowerState(Pdo)),
-              DevicePowerStateName(DeviceState));
+    (VOID) InterlockedExchangePointer(&Pdo->DevicePowerIrp, Irp);
 
-        ASSERT3U(DeviceState, ==, PowerDeviceD0);
-        PdoD3ToD0(Pdo);
-    } else if (__PdoGetDevicePowerState(Pdo) < DeviceState) {
-        Trace("%s: POWERING DOWN: %s -> %s\n",
-              __PdoGetName(Pdo),
-              DevicePowerStateName(__PdoGetDevicePowerState(Pdo)),
-              DevicePowerStateName(DeviceState));
+    IoQueueWorkItem(Pdo->DevicePowerWorkItem,
+                    PdoSetDevicePowerWorker,
+                    DelayedWorkQueue,
+                    Pdo);
 
-        ASSERT3U(DeviceState, ==, PowerDeviceD3);
-        PdoD0ToD3(Pdo);
-    }
-
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    Trace("<==== (%s:%s)\n",
-          DevicePowerStateName(DeviceState), 
-          PowerActionName(PowerAction));
-
-    return STATUS_SUCCESS;
+    return STATUS_PENDING;
 }
 
-static NTSTATUS
-PdoDevicePower(
-    IN  PXENBUS_THREAD  Self,
+__drv_functionClass(IO_WORKITEM_ROUTINE)
+__drv_sameIRQL
+static VOID
+PdoSetSystemPowerWorker(
+    IN  PDEVICE_OBJECT  DeviceObject,
     IN  PVOID           Context
     )
 {
-    PXENBUS_PDO         Pdo = Context;
-    PKEVENT             Event;
-
-    Event = ThreadGetEvent(Self);
-
-    for (;;) {
-        PIRP    Irp;
-
-        if (Pdo->DevicePowerIrp == NULL) {
-            (VOID) KeWaitForSingleObject(Event,
-                                         Executive,
-                                         KernelMode,
-                                         FALSE,
-                                         NULL);
-            KeClearEvent(Event);
-        }
-
-        if (ThreadIsAlerted(Self))
-            break;
-
-        Irp = Pdo->DevicePowerIrp;
-
-        if (Irp == NULL)
-            continue;
-
-        Pdo->DevicePowerIrp = NULL;
-        KeMemoryBarrier();
-
-        (VOID) PdoSetDevicePower(Pdo, Irp);
-    }
-
-    return STATUS_SUCCESS;
-}
-
-static NTSTATUS
-PdoSetSystemPower(
-    IN  PXENBUS_PDO     Pdo,
-    IN  PIRP            Irp
-    )
-{
+    PXENBUS_PDO         Pdo = (PXENBUS_PDO) Context;
+    PIRP                Irp;
     PIO_STACK_LOCATION  StackLocation;
     SYSTEM_POWER_STATE  SystemState;
     POWER_ACTION        PowerAction;
 
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    Irp = InterlockedExchangePointer(&Pdo->SystemPowerIrp, NULL);
+    ASSERT(Irp != NULL);
+
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
     SystemState = StackLocation->Parameters.Power.State.SystemState;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
-
-    Trace("====> (%s:%s)\n",
-          SystemPowerStateName(SystemState), 
-          PowerActionName(PowerAction));
-
-    ASSERT3U(PowerAction, <, PowerActionShutdown);
 
     if (__PdoGetSystemPowerState(Pdo) > SystemState) {
         if (SystemState < PowerSystemHibernate &&
@@ -1836,52 +1841,40 @@ PdoSetSystemPower(
     Trace("<==== (%s:%s)\n",
           SystemPowerStateName(SystemState), 
           PowerActionName(PowerAction));
-
-    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
-PdoSystemPower(
-    IN  PXENBUS_THREAD  Self,
-    IN  PVOID           Context
+PdoSetSystemPower(
+    IN  PXENBUS_PDO     Pdo,
+    IN  PIRP            Irp
     )
 {
-    PXENBUS_PDO         Pdo = Context;
-    PKEVENT             Event;
+    PIO_STACK_LOCATION  StackLocation;
+    SYSTEM_POWER_STATE  SystemState;
+    POWER_ACTION        PowerAction;
 
-    Event = ThreadGetEvent(Self);
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    SystemState = StackLocation->Parameters.Power.State.SystemState;
+    PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
-    for (;;) {
-        PIRP    Irp;
+    Trace("====> (%s:%s)\n",
+          SystemPowerStateName(SystemState),
+          PowerActionName(PowerAction));
 
-        if (Pdo->SystemPowerIrp == NULL) {
-            (VOID) KeWaitForSingleObject(Event,
-                                         Executive,
-                                         KernelMode,
-                                         FALSE,
-                                         NULL);
-            KeClearEvent(Event);
-        }
+    IoMarkIrpPending(Irp);
 
-        if (ThreadIsAlerted(Self))
-            break;
+    (VOID) InterlockedExchangePointer(&Pdo->SystemPowerIrp, Irp);
 
-        Irp = Pdo->SystemPowerIrp;
+    IoQueueWorkItem(Pdo->SystemPowerWorkItem,
+                    PdoSetSystemPowerWorker,
+                    DelayedWorkQueue,
+                    Pdo);
 
-        if (Irp == NULL)
-            continue;
-
-        Pdo->SystemPowerIrp = NULL;
-        KeMemoryBarrier();
-
-        (VOID) PdoSetSystemPower(Pdo, Irp);
-    }
-
-    return STATUS_SUCCESS;
+    return STATUS_PENDING;
 }
 
 static NTSTATUS
-PdoSetPower(
+PdoDispatchSetPower(
     IN  PXENBUS_PDO     Pdo,
     IN  PIRP            Irp
     )
@@ -1895,38 +1888,13 @@ PdoSetPower(
     PowerType = StackLocation->Parameters.Power.Type;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
-    if (PowerAction >= PowerActionShutdown) {
-        Irp->IoStatus.Status = STATUS_SUCCESS;
-        
-        status = Irp->IoStatus.Status;
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-        goto done;
-    }
-
     switch (PowerType) {
     case DevicePowerState:
-        IoMarkIrpPending(Irp);
-
-        ASSERT3P(Pdo->DevicePowerIrp, ==, NULL);
-        Pdo->DevicePowerIrp = Irp;
-        KeMemoryBarrier();
-
-        ThreadWake(Pdo->DevicePowerThread);
-
-        status = STATUS_PENDING;
+        status = PdoSetDevicePower(Pdo, Irp);
         break;
 
     case SystemPowerState:
-        IoMarkIrpPending(Irp);
-
-        ASSERT3P(Pdo->SystemPowerIrp, ==, NULL);
-        Pdo->SystemPowerIrp = Irp;
-        KeMemoryBarrier();
-
-        ThreadWake(Pdo->SystemPowerThread);
-
-        status = STATUS_PENDING;
+        status = PdoSetSystemPower(Pdo, Irp);
         break;
 
     default:
@@ -1934,25 +1902,6 @@ PdoSetPower(
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
         break;
     }
-
-done:
-    return status;
-}
-
-static NTSTATUS
-PdoQueryPower(
-    IN  PXENBUS_PDO Pdo,
-    IN  PIRP        Irp
-    )
-{
-    NTSTATUS        status;
-
-    UNREFERENCED_PARAMETER(Pdo);
-
-    status = STATUS_SUCCESS;
-
-    Irp->IoStatus.Status = status;
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
 }
@@ -1972,14 +1921,11 @@ PdoDispatchPower(
 
     switch (StackLocation->MinorFunction) {
     case IRP_MN_SET_POWER:
-        status = PdoSetPower(Pdo, Irp);
-        break;
-
-    case IRP_MN_QUERY_POWER:
-        status = PdoQueryPower(Pdo, Irp);
+        status = PdoDispatchSetPower(Pdo, Irp);
         break;
 
     default:
+        /* TODO - Always complete with status success?? */
         status = Irp->IoStatus.Status;
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
         break;
@@ -2093,12 +2039,12 @@ PdoCreate(
     Pdo->Dx = Dx;
     Pdo->Fdo = Fdo;
 
-    status = ThreadCreate(PdoSystemPower, Pdo, &Pdo->SystemPowerThread);
-    if (!NT_SUCCESS(status))
+    Pdo->SystemPowerWorkItem = IoAllocateWorkItem(PhysicalDeviceObject);
+    if (Pdo->SystemPowerWorkItem == NULL)
         goto fail3;
 
-    status = ThreadCreate(PdoDevicePower, Pdo, &Pdo->DevicePowerThread);
-    if (!NT_SUCCESS(status))
+    Pdo->DevicePowerWorkItem = IoAllocateWorkItem(PhysicalDeviceObject);
+    if (Pdo->DevicePowerWorkItem == NULL)
         goto fail4;
 
     __PdoSetName(Pdo, Name);
@@ -2135,16 +2081,14 @@ fail5:
     Pdo->Ejectable = FALSE;
     Pdo->Removable = FALSE;
 
-    ThreadAlert(Pdo->DevicePowerThread);
-    ThreadJoin(Pdo->DevicePowerThread);
-    Pdo->DevicePowerThread = NULL;
+    IoFreeWorkItem(Pdo->DevicePowerWorkItem);
+    Pdo->DevicePowerWorkItem = NULL;
 
 fail4:
     Error("fail4\n");
 
-    ThreadAlert(Pdo->SystemPowerThread);
-    ThreadJoin(Pdo->SystemPowerThread);
-    Pdo->SystemPowerThread = NULL;
+    IoFreeWorkItem(Pdo->SystemPowerWorkItem);
+    Pdo->SystemPowerWorkItem = NULL;
 
 fail3:
     Error("fail3\n");
@@ -2198,13 +2142,11 @@ PdoDestroy(
     Pdo->Ejectable = FALSE;
     Pdo->Removable = FALSE;
 
-    ThreadAlert(Pdo->DevicePowerThread);
-    ThreadJoin(Pdo->DevicePowerThread);
-    Pdo->DevicePowerThread = NULL;
-    
-    ThreadAlert(Pdo->SystemPowerThread);
-    ThreadJoin(Pdo->SystemPowerThread);
-    Pdo->SystemPowerThread = NULL;
+    IoFreeWorkItem(Pdo->DevicePowerWorkItem);
+    Pdo->DevicePowerWorkItem = NULL;
+
+    IoFreeWorkItem(Pdo->SystemPowerWorkItem);
+    Pdo->SystemPowerWorkItem = NULL;
 
     Pdo->Fdo = NULL;
     Pdo->Dx = NULL;

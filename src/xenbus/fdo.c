@@ -107,9 +107,9 @@ struct _XENBUS_FDO {
     ULONG                           Usage[DeviceUsageTypeDumpFile + 1];
     BOOLEAN                         NotDisableable;
 
-    PXENBUS_THREAD                  SystemPowerThread;
+    PIO_WORKITEM                    SystemPowerWorkItem;
     PIRP                            SystemPowerIrp;
-    PXENBUS_THREAD                  DevicePowerThread;
+    PIO_WORKITEM                    DevicePowerWorkItem;
     PIRP                            DevicePowerIrp;
 
     CHAR                            VendorName[MAXNAMELEN];
@@ -4800,38 +4800,100 @@ FdoDispatchPnp(
     return status;
 }
 
+__drv_functionClass(IO_WORKITEM_ROUTINE)
+__drv_sameIRQL
+static VOID
+FdoSetDevcePowerUpWorker(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PVOID           Context
+    )
+{
+    PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
+    PIRP                Irp;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    Irp = InterlockedExchangePointer(&Fdo->DevicePowerIrp, NULL);
+    ASSERT(Irp != NULL);
+
+    (VOID) FdoD3ToD0(Fdo);
+
+    // Cannot change Irp->IoStatus. Continue completion chain.
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+__drv_functionClass(IO_COMPLETION_ROUTINE)
+__drv_sameIRQL
+static NTSTATUS
+FdoSetDevicePowerUpComplete(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PIRP            Irp,
+    IN  PVOID           Context
+    )
+{
+    PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
+    PIO_STACK_LOCATION  StackLocation;
+    DEVICE_POWER_STATE  DeviceState;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    DeviceState = StackLocation->Parameters.Power.State.DeviceState;
+
+    Info("%s -> %s\n",
+         DevicePowerStateName(__FdoGetDevicePowerState(Fdo)),
+         DevicePowerStateName(DeviceState));
+
+    ASSERT3U(DeviceState, ==, PowerDeviceD0);
+
+    (VOID) InterlockedExchangePointer(&Fdo->DevicePowerIrp, Irp);
+
+    IoQueueWorkItem(Fdo->DevicePowerWorkItem,
+                    FdoSetDevcePowerUpWorker,
+                    DelayedWorkQueue,
+                    Fdo);
+
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
 static NTSTATUS
 FdoSetDevicePowerUp(
     IN  PXENBUS_FDO     Fdo,
     IN  PIRP            Irp
     )
 {
-    PIO_STACK_LOCATION  StackLocation;
-    DEVICE_POWER_STATE  DeviceState;
-    NTSTATUS            status;
+    IoMarkIrpPending(Irp);
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoSetCompletionRoutine(Irp,
+                           FdoSetDevicePowerUpComplete,
+                           Fdo,
+                           TRUE,
+                           TRUE,
+                           TRUE);
+    IoCallDriver(Fdo->LowerDeviceObject, Irp);
+    return STATUS_PENDING;
+}
 
-    StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    DeviceState = StackLocation->Parameters.Power.State.DeviceState;
+__drv_functionClass(IO_WORKITEM_ROUTINE)
+__drv_sameIRQL
+static VOID
+FdoSetDevicePowerDownWorker(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PVOID           Context
+    )
+{
+    PXENBUS_FDO         Fdo = (PXENBUS_FDO)Context;
+    PIRP                Irp;
 
-    ASSERT3U(DeviceState, <,  __FdoGetDevicePowerState(Fdo));
+    UNREFERENCED_PARAMETER(DeviceObject);
 
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
-    if (!NT_SUCCESS(status))
-        goto done;
+    Irp = InterlockedExchangePointer(&Fdo->DevicePowerIrp, NULL);
+    ASSERT(Irp != NULL);
 
-    Info("%s: %s -> %s\n",
-         __FdoGetName(Fdo),
-         DevicePowerStateName(__FdoGetDevicePowerState(Fdo)),
-         DevicePowerStateName(DeviceState));
+    FdoD0ToD3(Fdo);
 
-    ASSERT3U(DeviceState, ==, PowerDeviceD0);
-    status = FdoD3ToD0(Fdo);
-    ASSERT(NT_SUCCESS(status));
-
-done:
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return status;
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoCallDriver(Fdo->LowerDeviceObject, Irp);
 }
 
 static NTSTATUS
@@ -4856,12 +4918,24 @@ FdoSetDevicePowerDown(
 
     ASSERT3U(DeviceState, ==, PowerDeviceD3);
 
-    if (__FdoGetDevicePowerState(Fdo) == PowerDeviceD0)
-        FdoD0ToD3(Fdo);
+    if (__FdoGetDevicePowerState(Fdo) != PowerDeviceD0) {
+        IoSkipCurrentIrpStackLocation(Irp);
+        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
 
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        goto done;
+    }
 
+    IoMarkIrpPending(Irp);
+    status = STATUS_PENDING;
+
+    (VOID) InterlockedExchangePointer(&Fdo->DevicePowerIrp, Irp);
+
+    IoQueueWorkItem(Fdo->DevicePowerWorkItem,
+                    FdoSetDevicePowerDownWorker,
+                    DelayedWorkQueue,
+                    Fdo);
+
+done:
     return status;
 }
 
@@ -4884,11 +4958,9 @@ FdoSetDevicePower(
           DevicePowerStateName(DeviceState), 
           PowerActionName(PowerAction));
 
-    ASSERT3U(PowerAction, <,  PowerActionShutdown);
-
     if (DeviceState == __FdoGetDevicePowerState(Fdo)) {
-        status = FdoForwardIrpSynchronously(Fdo, Irp);
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoSkipCurrentIrpStackLocation(Irp);
+        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
 
         goto done;
     }
@@ -4907,8 +4979,8 @@ done:
 
 __drv_functionClass(REQUEST_POWER_COMPLETE)
 __drv_sameIRQL
-VOID
-FdoRequestSetDevicePowerCompletion(
+static VOID
+FdoRequestDevicePowerUpComplete(
     IN  PDEVICE_OBJECT      DeviceObject,
     IN  UCHAR               MinorFunction,
     IN  POWER_STATE         PowerState,
@@ -4916,48 +4988,123 @@ FdoRequestSetDevicePowerCompletion(
     IN  PIO_STATUS_BLOCK    IoStatus
     )
 {
-    PKEVENT                 Event = Context;
+    PIRP                    Irp = (PIRP) Context;
 
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(MinorFunction);
     UNREFERENCED_PARAMETER(PowerState);
+    UNREFERENCED_PARAMETER(IoStatus);
 
-    ASSERT(NT_SUCCESS(IoStatus->Status));
-
-    KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+__drv_functionClass(IO_WORKITEM_ROUTINE)
+__drv_sameIRQL
 static VOID
-FdoRequestSetDevicePower(
-    IN  PXENBUS_FDO         Fdo,
-    IN  DEVICE_POWER_STATE  DeviceState
+FdoSetSystemPowerUpWorker(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PVOID           Context
     )
 {
-    POWER_STATE             PowerState;
-    KEVENT                  Event;
-    NTSTATUS                status;
+    PXENBUS_FDO         Fdo = (PXENBUS_FDO)Context;
+    PIRP                Irp;
+    PIO_STACK_LOCATION  StackLocation;
+    SYSTEM_POWER_STATE  SystemState;
+    POWER_STATE         PowerState;
+    NTSTATUS            status;
 
-    Trace("%s\n", DevicePowerStateName(DeviceState));
+    UNREFERENCED_PARAMETER(DeviceObject);
 
-    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+    Irp = InterlockedExchangePointer(&Fdo->SystemPowerIrp, NULL);
+    ASSERT(Irp != NULL);
 
-    PowerState.DeviceState = DeviceState;
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    __FdoSetSystemPowerState(Fdo, PowerSystemHibernate);
+    FdoS4ToS3(Fdo);
+
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    SystemState = StackLocation->Parameters.Power.State.SystemState;
+
+    Info("%s -> %s\n",
+         SystemPowerStateName(__FdoGetSystemPowerState(Fdo)),
+         SystemPowerStateName(SystemState));
+
+    __FdoSetSystemPowerState(Fdo, SystemState);
+
+    PowerState.DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
 
     status = PoRequestPowerIrp(Fdo->LowerDeviceObject,
                                IRP_MN_SET_POWER,
                                PowerState,
-                               FdoRequestSetDevicePowerCompletion,
-                               &Event,
+                               FdoRequestDevicePowerUpComplete,
+                               Irp,
                                NULL);
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
-    (VOID) KeWaitForSingleObject(&Event,
-                                 Executive,
-                                 KernelMode,
-                                 FALSE,
-                                 NULL);
+    return;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+__drv_functionClass(IO_COMPLETION_ROUTINE)
+__drv_sameIRQL
+static NTSTATUS
+FdoSetSystemPowerUpComplete(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PIRP            Irp,
+    IN  PVOID           Context
+    )
+{
+    PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
+    PIO_STACK_LOCATION  StackLocation;
+    SYSTEM_POWER_STATE  SystemState;
+    POWER_STATE         PowerState;
+    NTSTATUS            status;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    SystemState = StackLocation->Parameters.Power.State.SystemState;
+
+    if (SystemState < PowerSystemHibernate &&
+        __FdoGetSystemPowerState(Fdo) >= PowerSystemHibernate) {
+
+        (VOID) InterlockedExchangePointer(&Fdo->SystemPowerIrp, Irp);
+
+        IoQueueWorkItem(Fdo->SystemPowerWorkItem,
+                        FdoSetSystemPowerUpWorker,
+                        DelayedWorkQueue,
+                        Fdo);
+
+        goto done;
+    }
+
+    Info("%s -> %s\n",
+         SystemPowerStateName(__FdoGetSystemPowerState(Fdo)),
+         SystemPowerStateName(SystemState));
+
+    __FdoSetSystemPowerState(Fdo, SystemState);
+
+    PowerState.DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
+
+    status = PoRequestPowerIrp(Fdo->LowerDeviceObject,
+                               IRP_MN_SET_POWER,
+                               PowerState,
+                               FdoRequestDevicePowerUpComplete,
+                               Irp,
+                               NULL);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+done:
+    return STATUS_MORE_PROCESSING_REQUIRED;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+    return STATUS_CONTINUE_COMPLETION;
 }
 
 static NTSTATUS
@@ -4966,41 +5113,98 @@ FdoSetSystemPowerUp(
     IN  PIRP            Irp
     )
 {
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoSetCompletionRoutine(Irp,
+                           FdoSetSystemPowerUpComplete,
+                           Fdo,
+                           TRUE,
+                           TRUE,
+                           TRUE);
+    return IoCallDriver(Fdo->LowerDeviceObject, Irp);
+}
 
+__drv_functionClass(IO_WORKITEM_ROUTINE)
+__drv_sameIRQL
+static VOID
+FdoSetSystemPowerDownWorker(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PVOID           Context
+    )
+{
+    PXENBUS_FDO         Fdo = (PXENBUS_FDO)Context;
     PIO_STACK_LOCATION  StackLocation;
     SYSTEM_POWER_STATE  SystemState;
-    DEVICE_POWER_STATE  DeviceState;
-    NTSTATUS            status;
+    PIRP                Irp;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    Irp = InterlockedExchangePointer(&Fdo->SystemPowerIrp, NULL);
+    ASSERT(Irp != NULL);
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
     SystemState = StackLocation->Parameters.Power.State.SystemState;
 
-    ASSERT3U(SystemState, <,  __FdoGetSystemPowerState(Fdo));
+    __FdoSetSystemPowerState(Fdo, PowerSystemSleeping3);
+    FdoS3ToS4(Fdo);
+    __FdoSetSystemPowerState(Fdo, SystemState);
 
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoCallDriver(Fdo->LowerDeviceObject, Irp);
+}
+
+__drv_functionClass(REQUEST_POWER_COMPLETE)
+__drv_sameIRQL
+static VOID
+FdoRequestDevicePowerDownComplete(
+    IN  PDEVICE_OBJECT      DeviceObject,
+    IN  UCHAR               MinorFunction,
+    IN  POWER_STATE         PowerState,
+    IN  PVOID               Context,
+    IN  PIO_STATUS_BLOCK    IoStatus
+    )
+{
+    PIRP                    Irp = (PIRP) Context;
+    PIO_STACK_LOCATION      StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    PDEVICE_OBJECT          UpperDeviceObject = StackLocation->DeviceObject;
+    PXENBUS_DX              Dx = (PXENBUS_DX)UpperDeviceObject->DeviceExtension;
+    PXENBUS_FDO             Fdo = Dx->Fdo;
+    SYSTEM_POWER_STATE      SystemState = StackLocation->Parameters.Power.State.SystemState;
+    NTSTATUS                status = IoStatus->Status;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(MinorFunction);
+    UNREFERENCED_PARAMETER(PowerState);
+
     if (!NT_SUCCESS(status))
-        goto done;
+        goto fail1;
 
     Info("%s: %s -> %s\n",
          __FdoGetName(Fdo),
          SystemPowerStateName(__FdoGetSystemPowerState(Fdo)),
          SystemPowerStateName(SystemState));
 
-    if (SystemState < PowerSystemHibernate &&
-        __FdoGetSystemPowerState(Fdo) >= PowerSystemHibernate) {
-        __FdoSetSystemPowerState(Fdo, PowerSystemHibernate);
-        FdoS4ToS3(Fdo);
+    if (SystemState >= PowerSystemHibernate &&
+        __FdoGetSystemPowerState(Fdo) < PowerSystemHibernate) {
+
+        (VOID) InterlockedExchangePointer(&Fdo->SystemPowerIrp, Irp);
+
+        IoQueueWorkItem(Fdo->SystemPowerWorkItem,
+                        FdoSetSystemPowerDownWorker,
+                        DelayedWorkQueue,
+                        Fdo);
+        goto done;
     }
 
     __FdoSetSystemPowerState(Fdo, SystemState);
 
-    DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
-    FdoRequestSetDevicePower(Fdo, DeviceState);
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoCallDriver(Fdo->LowerDeviceObject, Irp);
 
 done:
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return;
 
-    return status;
+fail1:
+    Error("fail1 (%08x)\n", status);
 }
 
 static NTSTATUS
@@ -5011,7 +5215,7 @@ FdoSetSystemPowerDown(
 {
     PIO_STACK_LOCATION  StackLocation;
     SYSTEM_POWER_STATE  SystemState;
-    DEVICE_POWER_STATE  DeviceState;
+    POWER_STATE         PowerState;
     NTSTATUS            status;
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
@@ -5019,26 +5223,29 @@ FdoSetSystemPowerDown(
 
     ASSERT3U(SystemState, >,  __FdoGetSystemPowerState(Fdo));
 
-    DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
+    PowerState.DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
 
-    FdoRequestSetDevicePower(Fdo, DeviceState);
+    if (SystemState >= PowerSystemShutdown) {
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
 
-    Info("%s: %s -> %s\n",
-         __FdoGetName(Fdo),
-         SystemPowerStateName(__FdoGetSystemPowerState(Fdo)),
-         SystemPowerStateName(SystemState));
-
-    if (SystemState >= PowerSystemHibernate &&
-        __FdoGetSystemPowerState(Fdo) < PowerSystemHibernate) {
-        __FdoSetSystemPowerState(Fdo, PowerSystemSleeping3);
-        FdoS3ToS4(Fdo);
+        goto done;
     }
 
-    __FdoSetSystemPowerState(Fdo, SystemState);
+    status = PoRequestPowerIrp(Fdo->LowerDeviceObject,
+                               IRP_MN_SET_POWER,
+                               PowerState,
+                               FdoRequestDevicePowerDownComplete,
+                               Irp,
+                               NULL);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+done:
+    return status;
 
+fail1:
+    Error("fail1 (%08x)\n", status);
     return status;
 }
 
@@ -5057,15 +5264,15 @@ FdoSetSystemPower(
     SystemState = StackLocation->Parameters.Power.State.SystemState;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
+    IoMarkIrpPending(Irp);
+
     Trace("====> (%s:%s)\n",
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction));
 
-    ASSERT3U(PowerAction, <,  PowerActionShutdown);
-
     if (SystemState == __FdoGetSystemPowerState(Fdo)) {
-        status = FdoForwardIrpSynchronously(Fdo, Irp);
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
 
         goto done;
     }
@@ -5076,99 +5283,17 @@ FdoSetSystemPower(
 
 done:
     Trace("<==== (%s:%s)(%08x)\n",
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction),
           status);
-    return status;
-}
 
-static NTSTATUS
-FdoQueryDevicePowerUp(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
-    )
-{
-    PIO_STACK_LOCATION  StackLocation;
-    DEVICE_POWER_STATE  DeviceState;
-    NTSTATUS            status;
-
-    StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    DeviceState = StackLocation->Parameters.Power.State.DeviceState;
-
-    ASSERT3U(DeviceState, <,  __FdoGetDevicePowerState(Fdo));
-
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
-
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return status;
-}
-
-static NTSTATUS
-FdoQueryDevicePowerDown(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
-    )
-{
-    PIO_STACK_LOCATION  StackLocation;
-    DEVICE_POWER_STATE  DeviceState;
-    NTSTATUS            status;
-
-    StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    DeviceState = StackLocation->Parameters.Power.State.DeviceState;
-
-    ASSERT3U(DeviceState, >,  __FdoGetDevicePowerState(Fdo));
-
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return status;
-}
-
-static NTSTATUS
-FdoQueryDevicePower(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
-    )
-{
-    PIO_STACK_LOCATION  StackLocation;
-    DEVICE_POWER_STATE  DeviceState;
-    POWER_ACTION        PowerAction;
-    NTSTATUS            status;
-
-    StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    DeviceState = StackLocation->Parameters.Power.State.DeviceState;
-    PowerAction = StackLocation->Parameters.Power.ShutdownType;
-
-    Trace("====> (%s:%s)\n",
-          DevicePowerStateName(DeviceState), 
-          PowerActionName(PowerAction));
-
-    ASSERT3U(PowerAction, <,  PowerActionShutdown);
-
-    if (DeviceState == __FdoGetDevicePowerState(Fdo)) {
-        status = FdoForwardIrpSynchronously(Fdo, Irp);
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-        goto done;
-    }
-
-    status = (DeviceState < __FdoGetDevicePowerState(Fdo)) ?
-             FdoQueryDevicePowerUp(Fdo, Irp) :
-             FdoQueryDevicePowerDown(Fdo, Irp);
-
-done:
-    Trace("<==== (%s:%s)(%08x)\n",
-          DevicePowerStateName(DeviceState), 
-          PowerActionName(PowerAction),
-          status);
     return status;
 }
 
 __drv_functionClass(REQUEST_POWER_COMPLETE)
 __drv_sameIRQL
-VOID
-FdoRequestQueryDevicePowerCompletion(
+static VOID
+FdoRequestQuerySystemPowerUpComplete(
     IN  PDEVICE_OBJECT      DeviceObject,
     IN  UCHAR               MinorFunction,
     IN  POWER_STATE         PowerState,
@@ -5176,48 +5301,54 @@ FdoRequestQueryDevicePowerCompletion(
     IN  PIO_STATUS_BLOCK    IoStatus
     )
 {
-    PKEVENT                 Event = Context;
+    PIRP                    Irp = (PIRP) Context;
 
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(MinorFunction);
     UNREFERENCED_PARAMETER(PowerState);
 
-    ASSERT(NT_SUCCESS(IoStatus->Status));
-
-    KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
+    if (!NT_SUCCESS(IoStatus->Status))
+        Irp->IoStatus.Status = IoStatus->Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
-static VOID
-FdoRequestQueryDevicePower(
-    IN  PXENBUS_FDO         Fdo,
-    IN  DEVICE_POWER_STATE  DeviceState
+__drv_functionClass(IO_COMPLETION_ROUTINE)
+__drv_sameIRQL
+static NTSTATUS
+FdoQuerySystemPowerUpComplete(
+    IN  PDEVICE_OBJECT  DeviceObject,
+    IN  PIRP            Irp,
+    IN  PVOID           Context
     )
 {
-    POWER_STATE             PowerState;
-    KEVENT                  Event;
-    NTSTATUS                status;
+    PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
+    PIO_STACK_LOCATION  StackLocation;
+    SYSTEM_POWER_STATE  SystemState;
+    POWER_STATE         PowerState;
+    NTSTATUS            status;
 
-    Trace("%s\n", DevicePowerStateName(DeviceState));
+    UNREFERENCED_PARAMETER(DeviceObject);
 
-    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
-
-    PowerState.DeviceState = DeviceState;
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    SystemState = StackLocation->Parameters.Power.State.SystemState;
+    PowerState.DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
 
     status = PoRequestPowerIrp(Fdo->LowerDeviceObject,
                                IRP_MN_QUERY_POWER,
                                PowerState,
-                               FdoRequestQueryDevicePowerCompletion,
-                               &Event,
+                               FdoRequestQuerySystemPowerUpComplete,
+                               Irp,
                                NULL);
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
-    (VOID) KeWaitForSingleObject(&Event,
-                                 Executive,
-                                 KernelMode,
-                                 FALSE,
-                                 NULL);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+    Irp->IoStatus.Status = status;
+
+    return STATUS_CONTINUE_COMPLETION;
 }
 
 static NTSTATUS
@@ -5226,29 +5357,50 @@ FdoQuerySystemPowerUp(
     IN  PIRP            Irp
     )
 {
+    IoMarkIrpPending(Irp);
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoSetCompletionRoutine(Irp,
+                           FdoQuerySystemPowerUpComplete,
+                           Fdo,
+                           TRUE,
+                           TRUE,
+                           TRUE);
+    return IoCallDriver(Fdo->LowerDeviceObject, Irp);
+}
 
-    PIO_STACK_LOCATION  StackLocation;
-    SYSTEM_POWER_STATE  SystemState;
-    DEVICE_POWER_STATE  DeviceState;
-    NTSTATUS            status;
+__drv_functionClass(REQUEST_POWER_COMPLETE)
+__drv_sameIRQL
+static VOID
+FdoRequestQuerySystemPowerDownComplete(
+    IN  PDEVICE_OBJECT      DeviceObject,
+    IN  UCHAR               MinorFunction,
+    IN  POWER_STATE         PowerState,
+    IN  PVOID               Context,
+    IN  PIO_STATUS_BLOCK    IoStatus
+    )
+{
+    PIRP                    Irp = (PIRP) Context;
+    PIO_STACK_LOCATION      StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    PDEVICE_OBJECT          UpperDeviceObject = StackLocation->DeviceObject;
+    PXENBUS_DX              Dx = (PXENBUS_DX)UpperDeviceObject->DeviceExtension;
+    PXENBUS_FDO             Fdo = Dx->Fdo;
 
-    StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    SystemState = StackLocation->Parameters.Power.State.SystemState;
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(MinorFunction);
+    UNREFERENCED_PARAMETER(PowerState);
 
-    ASSERT3U(SystemState, <,  __FdoGetSystemPowerState(Fdo));
+    if (!NT_SUCCESS(IoStatus->Status))
+        goto fail1;
 
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
-    if (!NT_SUCCESS(status))
-        goto done;
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoCallDriver(Fdo->LowerDeviceObject, Irp);
 
-    DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
+    return;
 
-    FdoRequestQueryDevicePower(Fdo, DeviceState);
-
-done:
+fail1:
+    Error("fail1 (%08x)\n", IoStatus->Status);
+    Irp->IoStatus.Status = IoStatus->Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return status;
 }
 
 static NTSTATUS
@@ -5259,7 +5411,7 @@ FdoQuerySystemPowerDown(
 {
     PIO_STACK_LOCATION  StackLocation;
     SYSTEM_POWER_STATE  SystemState;
-    DEVICE_POWER_STATE  DeviceState;
+    POWER_STATE         PowerState;
     NTSTATUS            status;
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
@@ -5267,11 +5419,24 @@ FdoQuerySystemPowerDown(
 
     ASSERT3U(SystemState, >,  __FdoGetSystemPowerState(Fdo));
 
-    DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
+    PowerState.DeviceState = Fdo->LowerDeviceCapabilities.DeviceState[SystemState];
 
-    FdoRequestQueryDevicePower(Fdo, DeviceState);
+    status = PoRequestPowerIrp(Fdo->LowerDeviceObject,
+                               IRP_MN_QUERY_POWER,
+                               PowerState,
+                               FdoRequestQuerySystemPowerDownComplete,
+                               Irp,
+                               NULL);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
-    status = FdoForwardIrpSynchronously(Fdo, Irp);
+    IoMarkIrpPending(Irp);
+    return STATUS_PENDING;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    Irp->IoStatus.Status = status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return status;
@@ -5296,11 +5461,9 @@ FdoQuerySystemPower(
           SystemPowerStateName(SystemState), 
           PowerActionName(PowerAction));
 
-    ASSERT3U(PowerAction, <,  PowerActionShutdown);
-
     if (SystemState == __FdoGetSystemPowerState(Fdo)) {
-        status = FdoForwardIrpSynchronously(Fdo, Irp);
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoSkipCurrentIrpStackLocation(Irp);
+        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
 
         goto done;
     }
@@ -5319,117 +5482,57 @@ done:
 }
 
 static NTSTATUS
-FdoDevicePower(
-    IN  PXENBUS_THREAD  Self,
-    IN  PVOID           Context
+FdoDispatchDevicePower(
+    IN  PXENBUS_FDO     Fdo,
+    IN  PIRP            Irp
     )
 {
-    PXENBUS_FDO         Fdo = Context;
-    PKEVENT             Event;
+    PIO_STACK_LOCATION  StackLocation;
+    NTSTATUS            status;
 
-    Event = ThreadGetEvent(Self);
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
 
-    for (;;) {
-        PIRP                Irp;
-        PIO_STACK_LOCATION  StackLocation;
-        UCHAR               MinorFunction;
+    switch (StackLocation->MinorFunction) {
+    case IRP_MN_SET_POWER:
+        status = FdoSetDevicePower(Fdo, Irp);
+        break;
 
-        if (Fdo->DevicePowerIrp == NULL) {
-            (VOID) KeWaitForSingleObject(Event,
-                                         Executive,
-                                         KernelMode,
-                                         FALSE,
-                                         NULL);
-            KeClearEvent(Event);
-        }
-
-        if (ThreadIsAlerted(Self))
-            break;
-
-        Irp = Fdo->DevicePowerIrp;
-
-        if (Irp == NULL)
-            continue;
-
-        Fdo->DevicePowerIrp = NULL;
-        KeMemoryBarrier();
-
-        StackLocation = IoGetCurrentIrpStackLocation(Irp);
-        MinorFunction = StackLocation->MinorFunction;
-
-        switch (StackLocation->MinorFunction) {
-        case IRP_MN_SET_POWER:
-            (VOID) FdoSetDevicePower(Fdo, Irp);
-            break;
-
-        case IRP_MN_QUERY_POWER:
-            (VOID) FdoQueryDevicePower(Fdo, Irp);
-            break;
-
-        default:
-            ASSERT(FALSE);
-            break;
-        }
+    default:
+        IoSkipCurrentIrpStackLocation(Irp);
+        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+        break;
     }
 
-    return STATUS_SUCCESS;
+    return status;
 }
 
 static NTSTATUS
-FdoSystemPower(
-    IN  PXENBUS_THREAD  Self,
-    IN  PVOID           Context
+FdoDispatchSystemPower(
+    IN  PXENBUS_FDO     Fdo,
+    IN  PIRP            Irp
     )
 {
-    PXENBUS_FDO         Fdo = Context;
-    PKEVENT             Event;
+    PIO_STACK_LOCATION  StackLocation;
+    NTSTATUS            status;
 
-    Event = ThreadGetEvent(Self);
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
 
-    for (;;) {
-        PIRP                Irp;
-        PIO_STACK_LOCATION  StackLocation;
-        UCHAR               MinorFunction;
+    switch (StackLocation->MinorFunction) {
+    case IRP_MN_SET_POWER:
+        status = FdoSetSystemPower(Fdo, Irp);
+        break;
 
-        if (Fdo->SystemPowerIrp == NULL) {
-            (VOID) KeWaitForSingleObject(Event,
-                                         Executive,
-                                         KernelMode,
-                                         FALSE,
-                                         NULL);
-            KeClearEvent(Event);
-        }
+    case IRP_MN_QUERY_POWER:
+        status = FdoQuerySystemPower(Fdo, Irp);
+        break;
 
-        if (ThreadIsAlerted(Self))
-            break;
-
-        Irp = Fdo->SystemPowerIrp;
-
-        if (Irp == NULL)
-            continue;
-
-        Fdo->SystemPowerIrp = NULL;
-        KeMemoryBarrier();
-
-        StackLocation = IoGetCurrentIrpStackLocation(Irp);
-        MinorFunction = StackLocation->MinorFunction;
-
-        switch (StackLocation->MinorFunction) {
-        case IRP_MN_SET_POWER:
-            (VOID) FdoSetSystemPower(Fdo, Irp);
-            break;
-
-        case IRP_MN_QUERY_POWER:
-            (VOID) FdoQuerySystemPower(Fdo, Irp);
-            break;
-
-        default:
-            ASSERT(FALSE);
-            break;
-        }
+    default:
+        IoSkipCurrentIrpStackLocation(Irp);
+        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
+        break;
     }
 
-    return STATUS_SUCCESS;
+    return status;
 }
 
 static NTSTATUS
@@ -5439,55 +5542,21 @@ FdoDispatchPower(
     )
 {
     PIO_STACK_LOCATION  StackLocation;
-    UCHAR               MinorFunction;
     POWER_STATE_TYPE    PowerType;
     POWER_ACTION        PowerAction;
     NTSTATUS            status;
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    MinorFunction = StackLocation->MinorFunction;
-
-    if (MinorFunction != IRP_MN_QUERY_POWER &&
-        MinorFunction != IRP_MN_SET_POWER) {
-        IoSkipCurrentIrpStackLocation(Irp);
-        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
-
-        goto done;
-    }
-
     PowerType = StackLocation->Parameters.Power.Type;
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
-    if (PowerAction >= PowerActionShutdown) {
-        IoSkipCurrentIrpStackLocation(Irp);
-        status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
-
-        goto done;
-    }
-
     switch (PowerType) {
     case DevicePowerState:
-        IoMarkIrpPending(Irp);
-
-        ASSERT3P(Fdo->DevicePowerIrp, ==, NULL);
-        Fdo->DevicePowerIrp = Irp;
-        KeMemoryBarrier();
-
-        ThreadWake(Fdo->DevicePowerThread);
-
-        status = STATUS_PENDING;
+        status = FdoDispatchDevicePower(Fdo, Irp);
         break;
 
     case SystemPowerState:
-        IoMarkIrpPending(Irp);
-
-        ASSERT3P(Fdo->SystemPowerIrp, ==, NULL);
-        Fdo->SystemPowerIrp = Irp;
-        KeMemoryBarrier();
-
-        ThreadWake(Fdo->SystemPowerThread);
-
-        status = STATUS_PENDING;
+        status = FdoDispatchSystemPower(Fdo, Irp);
         break;
 
     default:
@@ -5496,9 +5565,9 @@ FdoDispatchPower(
         break;
     }
 
-done:
     return status;
 }
+
 
 static NTSTATUS
 FdoDispatchDefault(
@@ -5748,12 +5817,12 @@ FdoCreate(
     Fdo->LowerDeviceObject = IoAttachDeviceToDeviceStack(FunctionDeviceObject,
                                                          PhysicalDeviceObject);
 
-    status = ThreadCreate(FdoSystemPower, Fdo, &Fdo->SystemPowerThread);
-    if (!NT_SUCCESS(status))
+    Fdo->SystemPowerWorkItem = IoAllocateWorkItem(FunctionDeviceObject);
+    if (Fdo->SystemPowerWorkItem == NULL)
         goto fail3;
 
-    status = ThreadCreate(FdoDevicePower, Fdo, &Fdo->DevicePowerThread);
-    if (!NT_SUCCESS(status))
+    Fdo->DevicePowerWorkItem = IoAllocateWorkItem(FunctionDeviceObject);
+    if (Fdo->DevicePowerWorkItem == NULL)
         goto fail4;
 
     status = FdoAcquireLowerBusInterface(Fdo);
@@ -5992,17 +6061,15 @@ fail6:
 fail5:
     Error("fail5\n");
 
-    ThreadAlert(Fdo->DevicePowerThread);
-    ThreadJoin(Fdo->DevicePowerThread);
-    Fdo->DevicePowerThread = NULL;
-    
+    IoFreeWorkItem(Fdo->DevicePowerWorkItem);
+    Fdo->DevicePowerWorkItem = NULL;
+
 fail4:
     Error("fail4\n");
 
-    ThreadAlert(Fdo->SystemPowerThread);
-    ThreadJoin(Fdo->SystemPowerThread);
-    Fdo->SystemPowerThread = NULL;
-    
+    IoFreeWorkItem(Fdo->SystemPowerWorkItem);
+    Fdo->SystemPowerWorkItem = NULL;
+
 fail3:
     Error("fail3\n");
 
@@ -6117,13 +6184,11 @@ FdoDestroy(
 
     FdoReleaseLowerBusInterface(Fdo);
 
-    ThreadAlert(Fdo->DevicePowerThread);
-    ThreadJoin(Fdo->DevicePowerThread);
-    Fdo->DevicePowerThread = NULL;
+    IoFreeWorkItem(Fdo->DevicePowerWorkItem);
+    Fdo->DevicePowerWorkItem = NULL;
 
-    ThreadAlert(Fdo->SystemPowerThread);
-    ThreadJoin(Fdo->SystemPowerThread);
-    Fdo->SystemPowerThread = NULL;
+    IoFreeWorkItem(Fdo->SystemPowerWorkItem);
+    Fdo->SystemPowerWorkItem = NULL;
 
     IoDetachDevice(Fdo->LowerDeviceObject);
 
