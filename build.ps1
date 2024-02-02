@@ -14,7 +14,6 @@ param(
 #
 # Script Body
 #
-$TargetPath = "xenbus"
 
 Function Build {
 	param(
@@ -37,13 +36,6 @@ Function Build {
 	if ($LASTEXITCODE -ne 0) {
 		Write-Host -ForegroundColor Red "ERROR: Build failed, code:" $LASTEXITCODE
 		Exit $LASTEXITCODE
-	}
-	 # Find and Move map files
-	foreach ($item in Get-ChildItem -Path $solutiondir[$visualstudioversion] -Include *.map -Recurse)
-	{
-		$filename = Split-Path -Path $item -Leaf -Resolve
-		$newpath = "$TargetPath\$Arch\$filename"
-		Move-Item $item -Destination $newpath -Force
 	}
 }
 

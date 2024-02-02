@@ -60,6 +60,7 @@
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />
     <FilesToPackage Include="$(OutDir)$(TargetName).pdb" />
+    <FilesToPackage Include="$(OutDir)$(TargetName).map" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="../../src/common/registry.c" />
