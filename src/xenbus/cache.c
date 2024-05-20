@@ -360,7 +360,7 @@ CacheAudit(
     PLIST_ENTRY         ListEntry;
 
     //
-    // The cursror should point at the first slab that is not fully
+    // The cursor should point at the first slab that is not fully
     // occupied.
     //
     for (ListEntry = Cache->SlabList.Flink;
@@ -478,21 +478,19 @@ CacheDestroySlab(
     Cache->Count -= CacheMaskSize(Slab->Allocated);
 
     //
-    // The only reason the cursor should be pointing at this slab is
-    // if it is the only one in the list.
+    // The cursor slab should always be the first slab in the list that is not
+    // fully occupied. If we are destroying it then clearly it is empty, but
+    // it may be one of several empty slabs. Set the cursor to the current
+    // cursor's Flink so that it will either point at the next empty slab, or
+    // the list anchor if there are no more empty slabs.
     //
-    if (Cache->Cursor == &Slab->ListEntry) {
-        ASSERT3P(Slab->ListEntry.Flink, ==, &Cache->SlabList);
-        ASSERT3P(Slab->ListEntry.Blink, ==, &Cache->SlabList);
-        Cache->Cursor = &Cache->SlabList;
-    }
+    if (Cache->Cursor == &Slab->ListEntry)
+        Cache->Cursor = Slab->ListEntry.Flink;
 
     RemoveEntryList(&Slab->ListEntry);
+    CacheAudit(Cache);
 
-    ASSERT(IMPLY(Cache->Cursor == &Cache->SlabList,
-                 IsListEmpty(&Cache->SlabList)));
-
-    Index = CacheMaskSize(Slab->Allocated);
+    Index = CacheMaskSize(Slab->Constructed);
     while (--Index >= 0) {
         PVOID Object = (PVOID)&Slab->Buffer[Index * Cache->Size];
 
