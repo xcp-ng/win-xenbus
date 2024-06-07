@@ -540,4 +540,49 @@ FiltersUninstall(
      VOID
      );
 
+// CONFIG
+
+XEN_API
+NTSTATUS
+ConfigGetActive(
+    IN  const CHAR  *Key,
+    OUT PCHAR       *Value
+    );
+
+XEN_API
+NTSTATUS
+ConfigSetActive(
+    IN  PCHAR   DeviceID,
+    IN  PCHAR   InstanceID,
+    IN  PCHAR   LocationInformation
+    );
+
+XEN_API
+NTSTATUS
+ConfigUpdateActive(
+    IN  PCHAR   DeviceID,
+    IN  PCHAR   InstanceID,
+    IN  PCHAR   LocationInformation
+    );
+
+XEN_API
+NTSTATUS
+ConfigClearActive(
+    VOID
+    );
+
+XEN_API
+NTSTATUS
+ConfigRequestReboot(
+    IN  HANDLE      ParametersKey,
+    IN  PCHAR       Module
+    );
+
+XEN_API
+NTSTATUS
+ConfigQuerySystemStartOption(
+    IN  PCHAR           Key,
+    OUT PANSI_STRING    *Option
+    );
+
 #endif  // _XEN_H

@@ -765,16 +765,16 @@ FdoSetActive(
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    status = DriverGetActive("DeviceID", &ActiveDeviceID);
+    status = ConfigGetActive("DeviceID", &ActiveDeviceID);
     if (NT_SUCCESS(status)) {
         Fdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ? TRUE : FALSE;
 
         if (Fdo->Active)
-            (VOID) DriverUpdateActive(DeviceID, InstanceID, LocationInformation);
+            (VOID) ConfigUpdateActive(DeviceID, InstanceID, LocationInformation);
 
         ExFreePool(ActiveDeviceID);
     } else {
-        status = DriverSetActive(DeviceID, InstanceID, LocationInformation);
+        status = ConfigSetActive(DeviceID, InstanceID, LocationInformation);
         if (NT_SUCCESS(status))
             Fdo->Active = TRUE;
     }
@@ -806,7 +806,7 @@ FdoClearActive(
     IN  PXENBUS_FDO Fdo
     )
 {
-    (VOID) DriverClearActive();
+    (VOID) ConfigClearActive();
 
     Fdo->Active = FALSE;
 }
@@ -5626,7 +5626,7 @@ FdoBalloonInitialize(
 
     Enabled = TRUE;
 
-    status = RegistryQuerySystemStartOption(Key, &Option);
+    status = ConfigQuerySystemStartOption(Key, &Option);
     if (!NT_SUCCESS(status))
         goto done;
 
@@ -5667,7 +5667,7 @@ FdoSetWatchdog(
     ULONG           Value;
     NTSTATUS        status;
 
-    status = RegistryQuerySystemStartOption(Key, &Option);
+    status = ConfigQuerySystemStartOption(Key, &Option);
     if (!NT_SUCCESS(status))
         return;
 

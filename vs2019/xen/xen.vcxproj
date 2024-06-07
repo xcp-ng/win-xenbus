@@ -68,6 +68,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\common\registry.c" />
+    <ClCompile Include="..\..\src\xen\config.c" />
     <ClCompile Include="..\..\src\xen\driver.c" />
     <ClCompile Include="..\..\src\xen\event_channel.c" />
     <ClCompile Include="..\..\src\xen\filters.c" />

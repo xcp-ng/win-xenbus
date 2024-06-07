@@ -51,11 +51,6 @@ DriverGetConsoleLogLevel(
     );
 
 extern VOID
-DriverRequestReboot(
-    VOID
-    );
-
-extern VOID
 DriverAcquireMutex(
     VOID
      );
@@ -64,31 +59,6 @@ extern VOID
 DriverReleaseMutex(
     VOID
      );
-
-extern NTSTATUS
-DriverGetActive(
-    IN  const CHAR  *Key,
-    OUT PCHAR       *Value
-    );
-
-NTSTATUS
-DriverSetActive(
-    IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID,
-    IN  PCHAR   LocationInformation
-    );
-
-NTSTATUS
-DriverUpdateActive(
-    IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID,
-    IN  PCHAR   LocationInformation
-    );
-
-NTSTATUS
-DriverClearActive(
-    VOID
-    );
 
 typedef struct _XENBUS_FDO      XENBUS_FDO, *PXENBUS_FDO;
 typedef struct _XENBUS_PDO      XENBUS_PDO, *PXENBUS_PDO;
