@@ -819,91 +819,6 @@ __FdoIsActive(
     return Fdo->Active;
 }
 
-static NTSTATUS
-FdoSetFriendlyName(
-    IN  PXENBUS_FDO Fdo,
-    IN  USHORT      DeviceID
-    )
-{
-    HANDLE          SoftwareKey;
-    HANDLE          HardwareKey;
-    PANSI_STRING    DriverDesc;
-    CHAR            Buffer[MAXNAMELEN];
-    ANSI_STRING     FriendlyName[2];
-    NTSTATUS        status;
-
-    status = RegistryOpenSoftwareKey(__FdoGetPhysicalDeviceObject(Fdo),
-                                     KEY_READ,
-                                     &SoftwareKey);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = RegistryOpenHardwareKey(__FdoGetPhysicalDeviceObject(Fdo),
-                                     KEY_ALL_ACCESS,
-                                     &HardwareKey);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    status = RegistryQuerySzValue(SoftwareKey,
-                                  "DriverDesc",
-                                  NULL,
-                                  &DriverDesc);
-    if (!NT_SUCCESS(status))
-        goto fail3;
-
-    status = RtlStringCbPrintfA(Buffer,
-                                MAXNAMELEN,
-                                "%Z (%04X)",
-                                &DriverDesc[0],
-                                DeviceID
-                                );
-    if (!NT_SUCCESS(status))
-        goto fail4;
-
-    RtlZeroMemory(FriendlyName, sizeof (ANSI_STRING) * 2);
-    RtlInitAnsiString(&FriendlyName[0], Buffer);
-
-    status = RegistryUpdateSzValue(HardwareKey,
-                                   "FriendlyName",
-                                   REG_SZ,
-                                   FriendlyName);
-    if (!NT_SUCCESS(status))
-        goto fail5;
-
-    Info("%Z\n", &FriendlyName[0]);
-
-    RegistryFreeSzValue(DriverDesc);
-
-    RegistryCloseKey(HardwareKey);
-
-    RegistryCloseKey(SoftwareKey);
-
-    return STATUS_SUCCESS;
-
-fail5:
-    Error("fail5\n");
-
-fail4:
-    Error("fail4\n");
-
-    RegistryFreeSzValue(DriverDesc);
-
-fail3:
-    Error("fail3\n");
-
-    RegistryCloseKey(HardwareKey);
-
-fail2:
-    Error("fail2\n");
-
-    RegistryCloseKey(SoftwareKey);
-
-fail1:
-    Error("fail1 (%08x)\n", status);
-
-    return status;
-}
-
 #define DEFINE_FDO_GET_CONTEXT(_Interface, _Type)               \
 static FORCEINLINE _Type                                        \
 __FdoGet ## _Interface ## Context(                              \
@@ -5957,8 +5872,6 @@ done:
     InitializeMutex(&Fdo->Mutex);
     InitializeListHead(&Fdo->List);
     Fdo->References = 1;
-
-    (VOID) FdoSetFriendlyName(Fdo, Header.DeviceID);
 
     FdoSetWatchdog(Fdo);
 
