@@ -33,6 +33,7 @@
 #include <ntddk.h>
 #include <procgrp.h>
 #include <ntstrsafe.h>
+#include <xen.h>
 
 #include "registry.h"
 #include "fdo.h"
@@ -40,7 +41,6 @@
 #include "driver.h"
 #include "names.h"
 #include "mutex.h"
-#include "filters.h"
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"

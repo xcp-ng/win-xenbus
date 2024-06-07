@@ -65,6 +65,7 @@
     <ClCompile Include="..\..\src\common\registry.c" />
     <ClCompile Include="..\..\src\xen\driver.c" />
     <ClCompile Include="..\..\src\xen\event_channel.c" />
+    <ClCompile Include="..\..\src\xen\filters.c" />
     <ClCompile Include="..\..\src\xen\grant_table.c" />
     <ClCompile Include="..\..\src\xen\hvm.c" />
     <ClCompile Include="..\..\src\xen\xen_version.c" />

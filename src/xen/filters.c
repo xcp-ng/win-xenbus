@@ -30,6 +30,8 @@
  * SUCH DAMAGE.
  */
 
+#define XEN_API __declspec(dllexport)
+
 #define INITGUID 1
 
 #include <ntddk.h>
@@ -323,6 +325,7 @@ fail1:
 #define FILTERS_UNINSTALL_CLASS(_ClassGuid, _DriverName) \
         FiltersUninstallClass(#_ClassGuid, &GUID_ ## _ClassGuid, (_DriverName))
 
+XEN_API
 VOID
 FiltersInstall(
     VOID
@@ -332,6 +335,7 @@ FiltersInstall(
     (VOID) FILTERS_INSTALL_CLASS(DEVCLASS_HDC, "XENFILT");
 }
 
+XEN_API
 VOID
 FiltersUninstall(
     VOID

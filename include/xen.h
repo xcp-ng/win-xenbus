@@ -526,4 +526,18 @@ VcpuRegisterVcpuInfo(
     IN  ULONG                       Offset
     );
 
+// FILTERS
+
+XEN_API
+VOID
+FiltersInstall(
+     VOID
+     );
+
+XEN_API
+VOID
+FiltersUninstall(
+     VOID
+     );
+
 #endif  // _XEN_H
