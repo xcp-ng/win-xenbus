@@ -42,6 +42,7 @@
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"
+#include "registry.h"
 
 struct _XENBUS_UNPLUG_CONTEXT {
     KSPIN_LOCK  Lock;
@@ -144,6 +145,64 @@ UnplugIsRequested(
     return Requested;
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
+static BOOLEAN
+UnplugBootEmulated(
+    IN  PINTERFACE                  Interface
+    )
+{
+    PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
+    CHAR                            KeyName[] = "XEN:BOOT_EMULATED=";
+    PANSI_STRING                    Option;
+    PCHAR                           Value;
+    NTSTATUS                        status;
+    BOOLEAN                         BootEmulated;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    AcquireMutex(&Context->Mutex);
+
+    BootEmulated = FALSE;
+
+    status = ConfigQuerySystemStartOption(KeyName, &Option);
+    if (!NT_SUCCESS(status))
+        goto done;
+
+    Value = Option->Buffer + sizeof (KeyName) - 1;
+
+    if (strcmp(Value, "TRUE") == 0)
+        BootEmulated = TRUE;
+    else if (strcmp(Value, "FALSE") != 0)
+        Warning("UNRECOGNIZED VALUE OF %s: %s\n", KeyName, Value);
+
+    RegistryFreeSzValue(Option);
+
+done:
+    ReleaseMutex(&Context->Mutex);
+
+    return BootEmulated;
+}
+
+__drv_requiresIRQL(PASSIVE_LEVEL)
+static VOID
+UnplugReboot(
+    IN  PINTERFACE                  Interface,
+    IN  PCHAR                       Module
+    )
+{
+    PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    AcquireMutex(&Context->Mutex);
+
+    ConfigRequestReboot(DriverGetParametersKey(), Module);
+
+    ReleaseMutex(&Context->Mutex);
+
+    return;
+}
+
 static NTSTATUS
 UnplugAcquire(
     IN  PINTERFACE          Interface
@@ -197,6 +256,16 @@ static struct _XENBUS_UNPLUG_INTERFACE_V2 UnplugInterfaceVersion2 = {
     UnplugRelease,
     UnplugRequest,
     UnplugIsRequested
+};
+
+static struct _XENBUS_UNPLUG_INTERFACE_V3 UnplugInterfaceVersion3 = {
+    { sizeof (struct _XENBUS_UNPLUG_INTERFACE_V3), 3, NULL, NULL, NULL },
+    UnplugAcquire,
+    UnplugRelease,
+    UnplugRequest,
+    UnplugIsRequested,
+    UnplugBootEmulated,
+    UnplugReboot
 };
 
 NTSTATUS
@@ -270,6 +339,23 @@ UnplugGetInterface(
             break;
 
         *UnplugInterface = UnplugInterfaceVersion2;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 3: {
+        struct _XENBUS_UNPLUG_INTERFACE_V3   *UnplugInterface;
+
+        UnplugInterface = (struct _XENBUS_UNPLUG_INTERFACE_V3 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_UNPLUG_INTERFACE_V3))
+            break;
+
+        *UnplugInterface = UnplugInterfaceVersion3;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;

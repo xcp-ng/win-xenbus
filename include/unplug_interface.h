@@ -99,6 +99,28 @@ typedef BOOLEAN
     IN  XENBUS_UNPLUG_DEVICE_TYPE   Type
     );
 
+/*! \typedef XENBUS_UNPLUG_BOOT_EMULATED
+    \brief Should the boot disk be emulated
+
+    \param Interface The interface header
+*/
+typedef BOOLEAN
+(*XENBUS_UNPLUG_BOOT_EMULATED)(
+    IN  PINTERFACE                  Interface
+    );
+
+/*! \typedef XENBUS_UNPLUG_REBOOT
+    \brief Request a reboot to complete setup
+
+    \param Interface The interface header
+    \param Module The module name requesting a reboot
+*/
+typedef VOID
+(*XENBUS_UNPLUG_REBOOT)(
+    IN  PINTERFACE                  Interface,
+    IN  PCHAR                       Module
+    );
+
 // {73db6517-3d06-4937-989f-199b7501e229}
 DEFINE_GUID(GUID_XENBUS_UNPLUG_INTERFACE,
 0x73db6517, 0x3d06, 0x4937, 0x98, 0x9f, 0x19, 0x9b, 0x75, 0x01, 0xe2, 0x29);
@@ -126,7 +148,21 @@ struct _XENBUS_UNPLUG_INTERFACE_V2 {
     XENBUS_UNPLUG_IS_REQUESTED  UnplugIsRequested;
 };
 
-typedef struct _XENBUS_UNPLUG_INTERFACE_V2 XENBUS_UNPLUG_INTERFACE, *PXENBUS_UNPLUG_INTERFACE;
+/*! \struct _XENBUS_UNPLUG_INTERFACE_V3
+    \brief UNPLUG interface version 3
+    \ingroup interfaces
+*/
+struct _XENBUS_UNPLUG_INTERFACE_V3 {
+    INTERFACE                   Interface;
+    XENBUS_UNPLUG_ACQUIRE       UnplugAcquire;
+    XENBUS_UNPLUG_RELEASE       UnplugRelease;
+    XENBUS_UNPLUG_REQUEST       UnplugRequest;
+    XENBUS_UNPLUG_IS_REQUESTED  UnplugIsRequested;
+    XENBUS_UNPLUG_BOOT_EMULATED UnplugBootEmulated;
+    XENBUS_UNPLUG_REBOOT        UnplugReboot;
+};
+
+typedef struct _XENBUS_UNPLUG_INTERFACE_V3 XENBUS_UNPLUG_INTERFACE, *PXENBUS_UNPLUG_INTERFACE;
 
 /*! \def XENBUS_UNPLUG
     \brief Macro at assist in method invocation
@@ -137,6 +173,6 @@ typedef struct _XENBUS_UNPLUG_INTERFACE_V2 XENBUS_UNPLUG_INTERFACE, *PXENBUS_UNP
 #endif  // _WINDLL
 
 #define XENBUS_UNPLUG_INTERFACE_VERSION_MIN  1
-#define XENBUS_UNPLUG_INTERFACE_VERSION_MAX  2
+#define XENBUS_UNPLUG_INTERFACE_VERSION_MAX  3
 
 #endif  // _XENBUS_UNPLUG_INTERFACE_H
