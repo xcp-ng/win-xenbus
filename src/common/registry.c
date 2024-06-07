@@ -38,6 +38,7 @@
 
 #define REGISTRY_TAG 'GERX'
 
+static PDRIVER_OBJECT   RegistryDriverObject;
 static UNICODE_STRING   RegistryPath;
 
 static FORCEINLINE PVOID
@@ -58,7 +59,8 @@ __RegistryFree(
 
 NTSTATUS
 RegistryInitialize(
-    IN PUNICODE_STRING  Path
+    IN  PDRIVER_OBJECT  DriverObject,
+    IN  PUNICODE_STRING Path
     )
 {
     NTSTATUS            status;
@@ -68,6 +70,9 @@ RegistryInitialize(
     status = RtlUpcaseUnicodeString(&RegistryPath, Path, TRUE);
     if (!NT_SUCCESS(status))
         goto fail1;
+
+    ASSERT3P(RegistryDriverObject, ==, NULL);
+    RegistryDriverObject = DriverObject;
 
     return STATUS_SUCCESS;
 
@@ -82,9 +87,24 @@ RegistryTeardown(
     VOID
     )
 {
+    RegistryDriverObject = NULL;
+
     RtlFreeUnicodeString(&RegistryPath);
     RegistryPath.Buffer = NULL;
     RegistryPath.MaximumLength = RegistryPath.Length = 0;
+}
+
+NTSTATUS
+RegistryOpenParametersKey(
+    IN  ACCESS_MASK     DesiredAccess,
+    OUT PHANDLE         Key
+    )
+{
+    return IoOpenDriverRegistryKey(RegistryDriverObject,
+                                   DriverRegKeyParameters,
+                                   DesiredAccess,
+                                   0,
+                                   Key);
 }
 
 NTSTATUS

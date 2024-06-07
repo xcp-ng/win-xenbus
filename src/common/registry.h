@@ -37,12 +37,19 @@
 
 extern NTSTATUS
 RegistryInitialize(
-    IN PUNICODE_STRING  Path
+    IN  PDRIVER_OBJECT  DrvObj,
+    IN  PUNICODE_STRING Path
     );
 
 extern VOID
 RegistryTeardown(
     VOID
+    );
+
+extern NTSTATUS
+RegistryOpenParametersKey(
+    IN  ACCESS_MASK     DesiredAccess,
+    OUT PHANDLE         Key
     );
 
 extern NTSTATUS

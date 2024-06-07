@@ -113,33 +113,6 @@ DriverGetDriverObject(
     return __DriverGetDriverObject();
 }
 
-static FORCEINLINE NTSTATUS
-__DriverOpenParametersKey(
-    OUT PHANDLE     ParametersKey
-    )
-{
-    HANDLE          ServiceKey;
-    NTSTATUS        status;
-
-    status = RegistryOpenServiceKey(KEY_READ, &ServiceKey);
-    if (!NT_SUCCESS(status))
-        goto fail1;
-
-    status = RegistryOpenSubKey(ServiceKey, "Parameters", KEY_READ, ParametersKey);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    RegistryCloseKey(ServiceKey);
-
-    return STATUS_SUCCESS;
-
-fail2:
-    RegistryCloseKey(ServiceKey);
-
-fail1:
-    return status;
-}
-
 static FORCEINLINE VOID
 __DriverSetEmulatedContext(
     IN  PXENFILT_EMULATED_CONTEXT   Context
@@ -247,7 +220,7 @@ __DriverGetActive(
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
-    status = __DriverOpenParametersKey(&ParametersKey);
+    status = RegistryOpenParametersKey(KEY_READ, &ParametersKey);
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -752,7 +725,7 @@ DriverGetEmulatedType(
     ULONG                           Index;
     NTSTATUS                        status;
 
-    status = __DriverOpenParametersKey(&ParametersKey);
+    status = RegistryOpenParametersKey(KEY_READ, &ParametersKey);
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -947,7 +920,7 @@ DriverEntry(
     if (!NT_SUCCESS(status))
         goto done;
 
-    status = RegistryInitialize(RegistryPath);
+    status = RegistryInitialize(DriverObject, RegistryPath);
     if (!NT_SUCCESS(status))
         goto fail1;
 

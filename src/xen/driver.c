@@ -515,7 +515,7 @@ DllInitialize(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = RegistryInitialize(RegistryPath);
+    status = RegistryInitialize(NULL, RegistryPath);
     if (!NT_SUCCESS(status))
         goto fail2;
 

@@ -811,7 +811,6 @@ DriverEntry(
     IN  PUNICODE_STRING RegistryPath
     )
 {
-    HANDLE              ServiceKey;
     HANDLE              ParametersKey;
     ULONG               Index;
     LOG_LEVEL           LogLevel;
@@ -839,20 +838,13 @@ DriverEntry(
          MONTH,
          YEAR);
 
-    status = RegistryInitialize(RegistryPath);
+    status = RegistryInitialize(DriverObject, RegistryPath);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = RegistryOpenServiceKey(KEY_READ, &ServiceKey);
+    status = RegistryOpenParametersKey(KEY_READ, &ParametersKey);
     if (!NT_SUCCESS(status))
         goto fail2;
-
-    status = RegistryOpenSubKey(ServiceKey,
-                                "Parameters",
-                                KEY_READ,
-                                &ParametersKey);
-    if (!NT_SUCCESS(status))
-        goto fail3;
 
     __DriverSetParametersKey(ParametersKey);
 
@@ -863,8 +855,6 @@ DriverEntry(
         LogLevel = DEFAULT_CONSOLE_LOG_LEVEL;
 
     __DriverSetConsoleLogLevel(LogLevel);
-
-    RegistryCloseKey(ServiceKey);
 
     status = XenTouch(__MODULE__,
                       MAJOR_VERSION,
@@ -899,11 +889,6 @@ done:
     Trace("<====\n");
 
     return STATUS_SUCCESS;
-
-fail3:
-    Error("fail3\n");
-
-    RegistryCloseKey(ServiceKey);
 
 fail2:
     Error("fail2\n");
