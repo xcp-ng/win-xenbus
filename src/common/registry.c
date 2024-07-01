@@ -100,11 +100,38 @@ RegistryOpenParametersKey(
     OUT PHANDLE         Key
     )
 {
+#ifdef VERIFIER_REG_ISOLATION
     return IoOpenDriverRegistryKey(RegistryDriverObject,
                                    DriverRegKeyParameters,
                                    DesiredAccess,
                                    0,
                                    Key);
+#else
+    HANDLE              ServiceKey;
+    NTSTATUS            status;
+
+    status = RegistryOpenKey(NULL, &RegistryPath, DesiredAccess, &ServiceKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = RegistryOpenSubKey(ServiceKey, "Parameters", DesiredAccess, Key);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    RegistryCloseKey(ServiceKey);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(ServiceKey);
+
+fail1:
+    Error("fail1 %08x\n", status);
+
+    return status;
+#endif
 }
 
 NTSTATUS
