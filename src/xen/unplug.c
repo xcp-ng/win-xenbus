@@ -49,6 +49,11 @@
 
 #define UNPLUG_TAG  'LPNU'
 
+typedef struct _UNPLUG_DATA {
+    PCHAR       Name;
+    BOOLEAN     Found;
+} UNPLUG_DATA, *PUNPLUG_DATA;
+
 typedef struct _UNPLUG_CONTEXT {
     LONG        References;
     HIGH_LOCK   Lock;
@@ -186,6 +191,74 @@ fail1:
     return status;
 }
 
+static NTSTATUS
+UnplugCheckEnumKeyCallback(
+    IN  PVOID           Context,
+    IN  HANDLE          Key,
+    IN  PANSI_STRING    Name
+    )
+{
+    PUNPLUG_DATA        Data = Context;
+
+    UNREFERENCED_PARAMETER(Key);
+
+    if (strstr(Name->Buffer, Data->Name) != NULL)
+        Data->Found = TRUE;
+
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+UnplugCheckEnumKey(
+    IN  PCHAR           EnumName,
+    OUT PULONG          Value
+    )
+{
+    UNICODE_STRING      Unicode;
+    UNPLUG_DATA         Data;
+    HANDLE              Key;
+    NTSTATUS            status;
+
+    RtlInitUnicodeString(&Unicode, L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Enum\\XENBUS");
+
+    status = RegistryOpenKey(NULL,
+                             &Unicode,
+                             KEY_READ,
+                             &Key);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    Data.Found = FALSE;
+    Data.Name = EnumName;
+
+    status = RegistryEnumerateSubKeys(Key,
+                                      UnplugCheckEnumKeyCallback,
+                                      &Data);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    if (!Data.Found) {
+        Info("VETO Unplug %s\n", EnumName);
+        *Value = 0;
+    }
+
+    RegistryCloseKey(Key);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    RegistryCloseKey(Key);
+
+fail1:
+    Error("fail1 %08x\n", status);
+
+    *Value = 0;
+
+    return status;
+}
+
 static VOID
 UnplugSetRequest(
     IN  UNPLUG_TYPE     Type
@@ -194,6 +267,7 @@ UnplugSetRequest(
     PUNPLUG_CONTEXT     Context = &UnplugContext;
     HANDLE              UnplugKey;
     PCHAR               ValueName;
+    PCHAR               EnumName;
     ULONG               Value;
     KIRQL               Irql;
     NTSTATUS            status;
@@ -207,12 +281,15 @@ UnplugSetRequest(
     switch (Type) {
     case UNPLUG_DISKS:
         ValueName = "DISKS";
+        EnumName = "VBD";
         break;
     case UNPLUG_NICS:
         ValueName = "NICS";
+        EnumName = "VIF";
         break;
     default:
         ValueName = NULL;
+        EnumName = NULL;
         ASSERT(FALSE);
     }
 
@@ -223,6 +300,9 @@ UnplugSetRequest(
         goto done;
 
     (VOID) RegistryDeleteValue(UnplugKey, ValueName);
+
+    if (Value != 0)
+        (VOID) UnplugCheckEnumKey(EnumName, &Value);
 
     Info("%s (%u)\n", ValueName, Value);
 
