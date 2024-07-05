@@ -41,6 +41,10 @@
 static PDRIVER_OBJECT   RegistryDriverObject;
 static UNICODE_STRING   RegistryPath;
 
+typedef NTSTATUS(*IOOPENDRIVERREGISTRYKEY)(PDRIVER_OBJECT, DRIVER_REGKEY_TYPE, ACCESS_MASK, ULONG, PHANDLE);
+
+static IOOPENDRIVERREGISTRYKEY __IoOpenDriverRegistryKey;
+
 static FORCEINLINE PVOID
 __RegistryAllocate(
     IN  ULONG   Length
@@ -63,6 +67,8 @@ RegistryInitialize(
     IN  PUNICODE_STRING Path
     )
 {
+    UNICODE_STRING      Unicode;
+    PVOID               Func;
     NTSTATUS            status;
 
     ASSERT3P(RegistryPath.Buffer, ==, NULL);
@@ -73,6 +79,13 @@ RegistryInitialize(
 
     ASSERT3P(RegistryDriverObject, ==, NULL);
     RegistryDriverObject = DriverObject;
+
+    ASSERT3P(__IoOpenDriverRegistryKey, ==, NULL);
+    RtlInitUnicodeString(&Unicode, L"IoOpenDriverRegistryKey");
+
+    Func = MmGetSystemRoutineAddress(&Unicode);
+    if (Func != NULL)
+        __IoOpenDriverRegistryKey = (IOOPENDRIVERREGISTRYKEY)Func;
 
     return STATUS_SUCCESS;
 
@@ -87,6 +100,8 @@ RegistryTeardown(
     VOID
     )
 {
+    __IoOpenDriverRegistryKey = NULL;
+
     RegistryDriverObject = NULL;
 
     RtlFreeUnicodeString(&RegistryPath);
@@ -100,38 +115,46 @@ RegistryOpenParametersKey(
     OUT PHANDLE         Key
     )
 {
-#ifdef VERIFIER_REG_ISOLATION
-    return IoOpenDriverRegistryKey(RegistryDriverObject,
-                                   DriverRegKeyParameters,
-                                   DesiredAccess,
-                                   0,
-                                   Key);
-#else
     HANDLE              ServiceKey;
     NTSTATUS            status;
 
-    status = RegistryOpenKey(NULL, &RegistryPath, DesiredAccess, &ServiceKey);
-    if (!NT_SUCCESS(status))
-        goto fail1;
+    if (__IoOpenDriverRegistryKey != NULL) {
+        status = __IoOpenDriverRegistryKey(RegistryDriverObject,
+                                           DriverRegKeyParameters,
+                                           DesiredAccess,
+                                           0,
+                                           Key);
+        if (!NT_SUCCESS(status))
+            goto fail1;
 
-    status = RegistryOpenSubKey(ServiceKey, "Parameters", DesiredAccess, Key);
+        goto done;
+    }
+
+    status = RegistryOpenKey(NULL, &RegistryPath, DesiredAccess, &ServiceKey);
     if (!NT_SUCCESS(status))
         goto fail2;
 
+    status = RegistryOpenSubKey(ServiceKey, "Parameters", DesiredAccess, Key);
+    if (!NT_SUCCESS(status))
+        goto fail3;
+
     RegistryCloseKey(ServiceKey);
 
+done:
     return STATUS_SUCCESS;
+
+fail3:
+    Error("fail3\n");
+
+    RegistryCloseKey(ServiceKey);
 
 fail2:
     Error("fail2\n");
-
-    RegistryCloseKey(ServiceKey);
 
 fail1:
     Error("fail1 %08x\n", status);
 
     return status;
-#endif
 }
 
 NTSTATUS
