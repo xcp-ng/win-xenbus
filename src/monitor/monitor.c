@@ -36,6 +36,8 @@
 #include <strsafe.h>
 #include <wtsapi32.h>
 #include <cfgmgr32.h>
+#include <winternl.h>
+#include <powrprof.h>
 #include <malloc.h>
 #include <assert.h>
 
@@ -692,6 +694,8 @@ TryAutoReboot(
     PTCHAR              Description;
     PTCHAR              Text;
     DWORD               TextLength;
+    ULONG               PowerInfo;
+    NTSTATUS            Status;
     HRESULT             Error;
 
     if (!Context->RebootRequestedBy) {
@@ -704,6 +708,14 @@ TryAutoReboot(
 
     // We don't want to suddenly reboot if the user's already said no.
     if (Context->Response == IDNO)
+        goto done;
+
+    Status = CallNtPowerInformation(SystemExecutionState,
+                                    NULL,
+                                    0,
+                                    &PowerInfo,
+                                    sizeof(PowerInfo));
+    if (Status < 0 || (PowerInfo & ES_SYSTEM_REQUIRED))
         goto done;
 
     Length = sizeof (DWORD);
