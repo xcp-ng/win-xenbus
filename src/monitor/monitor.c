@@ -601,8 +601,18 @@ PromptForReboot(
     DWORD               Index;
     BOOL                Success;
     HRESULT             Error;
+    HANDLE              MsiMutex;
 
     Log("====> (%s)", DriverName);
+
+    // check if there's an installation under way
+    MsiMutex = OpenMutex(MUTEX_ALL_ACCESS,
+                         FALSE,
+                         TEXT("Global\\_MSIExecute"));
+    if (MsiMutex != NULL) {
+        CloseHandle(MsiMutex);
+        goto done;
+    }
 
     Title = Context->Title;
     TitleLength = (DWORD)((_tcslen(Context->Title) +
