@@ -8,7 +8,8 @@ param(
 	[string]$Arch,
 	[Parameter(Mandatory = $true)]
 	[string]$Type,
-	[string]$SignMode = "TestSign"
+	[string]$SignMode = "TestSign",
+	[string]$TestCertificate
 )
 
 Function Run-MSBuild {
@@ -22,23 +23,29 @@ Function Run-MSBuild {
 		[switch]$CodeAnalysis
 	)
 
-	$c = "msbuild.exe"
-	$c += " /m:4"
-	$c += [string]::Format(" /p:Configuration=""{0}""", $Configuration)
-	$c += [string]::Format(" /p:Platform=""{0}""", $Platform)
-	$c += [string]::Format(" /p:SignMode=""{0}""", $SignMode)
-	$c += [string]::Format(" /t:""{0}"" ", $Target)
+	$c = @(
+		"/m:4",
+		"/p:Configuration=$Configuration",
+		"/p:Platform=$Platform",
+		"/p:SignMode=$SignMode",
+		"/t:$Target"
+	)
+	if ($TestCertificate) {
+		$c += @("/p:TestCertificate=$TestCertificate")
+	}
 	if ($Inputs) {
-		$c += [string]::Format(" /p:Inputs=""{0}"" ", $Inputs)
+		$c += @("/p:Inputs=$Inputs")
 	}
 	if ($CodeAnalysis) {
-		$c += "/p:RunCodeAnalysis=true "
-		$c += "/p:EnablePREFast=true "
+		$c += @(
+			"/p:RunCodeAnalysis=true",
+			"/p:EnablePREFast=true"
+		)
 	}
 
-	$c += Join-Path -Path $SolutionPath -ChildPath $Name
+	$c += @(Join-Path -Path $SolutionPath -ChildPath $Name)
 
-	Invoke-Expression $c
+	& msbuild.exe @c
 	if ($LASTEXITCODE -ne 0) {
 		Write-Host -ForegroundColor Red "ERROR: MSBuild failed, code:" $LASTEXITCODE
 		Exit $LASTEXITCODE

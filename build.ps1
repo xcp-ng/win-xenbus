@@ -7,6 +7,7 @@ param(
 	[string]$Type,
 	[string]$Arch,
 	[string]$SignMode = "TestSign",
+	[string]$TestCertificate,
 	[switch]$CodeQL,
 	[switch]$Sdv
 )
@@ -30,7 +31,8 @@ Function Build {
 		ConfigurationBase = $configurationbase[$visualstudioversion];
 		Arch = $Arch;
 		Type = $Type;
-		SignMode = $SignMode
+		SignMode = $SignMode;
+		TestCertificate = $TestCertificate;
 		}
 	& ".\msbuild.ps1" @params
 	if ($LASTEXITCODE -ne 0) {
