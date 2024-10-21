@@ -17,6 +17,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
     <EnableInf2cat>true</EnableInf2cat>
+    <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
     <Inf2CatWindowsVersionList Condition="'$(Platform)'=='x64'">10_x64;Server10_x64;ServerRS5_X64;ServerFE_X64;10_CO_X64</Inf2CatWindowsVersionList>
     <Inf2CatWindowsVersionList Condition="'$(Platform)'=='Win32'">10_x86</Inf2CatWindowsVersionList>
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
