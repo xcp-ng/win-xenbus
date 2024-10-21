@@ -5,3 +5,12 @@
 
 # Output
 /xenbus
+/.build_number
+/vs20??/xenbus.inf
+/vs20??/version/.revision
+/vs20??/version/version.log
+/include/version.h
+
+.vs
+Win32/
+x64/
