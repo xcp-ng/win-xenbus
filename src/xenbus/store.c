@@ -32,6 +32,7 @@
 
 #include <ntddk.h>
 #include <ntstrsafe.h>
+#include <ntintsafe.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <xen.h>
@@ -210,6 +211,7 @@ StorePrepareRequest(
     Segment->Length = sizeof (struct xsd_sockmsg);
 
     va_start(Arguments, Type);
+    status = STATUS_UNSUCCESSFUL;
     for (;;) {
         PCHAR   Data;
         ULONG   Length;
@@ -222,20 +224,29 @@ StorePrepareRequest(
             break;
         }
 
+        if (Request->Count >= XENBUS_STORE_REQUEST_SEGMENT_COUNT)
+            goto fail2;
         Segment = &Request->Segment[Request->Count++];
-        ASSERT3U(Request->Count, <, XENBUS_STORE_REQUEST_SEGMENT_COUNT);
 
         Segment->Data = Data;
         Segment->Offset = 0;
         Segment->Length = Length;
 
-        Request->Header.len += Segment->Length;
+        if (!NT_SUCCESS(RtlULongAdd(Request->Header.len,
+                                    Segment->Length,
+                                    &Request->Header.len)) ||
+            Request->Header.len > XENSTORE_PAYLOAD_MAX)
+            goto fail3;
     }
     va_end(Arguments);
 
     Request->State = XENBUS_STORE_REQUEST_PREPARED;
 
     return STATUS_SUCCESS;
+
+fail3:
+fail2:
+    RtlZeroMemory(Request, sizeof (XENBUS_STORE_REQUEST));
 
 fail1:
     return status;
@@ -1272,10 +1283,12 @@ StoreVPrintf(
         if (status != STATUS_BUFFER_OVERFLOW)
             goto fail2;
 
-        __StoreFree(Buffer);
+        status = STATUS_INVALID_BUFFER_SIZE;
         Length <<= 1;
+        if (Length > 1024)
+            goto fail3;
 
-        ASSERT3U(Length, <=, 1024);
+        __StoreFree(Buffer);
     }
 
     status = StoreWrite(Context,
@@ -1284,12 +1297,13 @@ StoreVPrintf(
                           Node,
                           Buffer);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     __StoreFree(Buffer);
 
     return STATUS_SUCCESS;
 
+fail4:
 fail3:
 fail2:
     __StoreFree(Buffer);
