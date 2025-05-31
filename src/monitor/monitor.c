@@ -1315,8 +1315,6 @@ RemoveStartOverride(
     )
 {
     TCHAR               KeyName[MAX_PATH];
-    HKEY                Key;
-    DWORD               Value;
     HRESULT             Error;
 
     Error = StringCbPrintf(KeyName,
@@ -1325,36 +1323,11 @@ RemoveStartOverride(
                            DriverName);
     assert(SUCCEEDED(Error));
 
-    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                         KeyName,
-                         0,
-                         KEY_READ | KEY_WRITE,
-                         &Key);
-    if (Error != ERROR_SUCCESS) {
-        SetLastError(Error);
+    Error = RegDeleteKey(HKEY_LOCAL_MACHINE, KeyName);
+    if (Error != ERROR_SUCCESS)
         goto fail1;
-    }
-
-    Value = 0;
-    Error = RegSetValueEx(Key,
-                          "0",
-                          0,
-                          REG_DWORD,
-                          (const BYTE*)&Value,
-                          (DWORD) sizeof(Value));
-    if (Error != ERROR_SUCCESS) {
-        SetLastError(Error);
-        goto fail2;
-    }
-
-    RegCloseKey(Key);
 
     return TRUE;
-
-fail2:
-    Log("fail2");
-
-    RegCloseKey(Key);
 
 fail1:
     Error = GetLastError();
