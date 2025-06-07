@@ -219,6 +219,7 @@ BalloonAllocatePagesForMdl(
                                   TotalBytes,
                                   MmCached,
                                   MM_DONT_ZERO_ALLOCATION |
+                                  MM_ALLOCATE_PREFER_CONTIGUOUS |
                                   MM_ALLOCATE_AND_HOT_REMOVE);
     if (Mdl == NULL)
         goto done;
