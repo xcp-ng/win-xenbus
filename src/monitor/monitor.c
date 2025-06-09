@@ -459,7 +459,6 @@ TryAutoReboot(
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
-    HRESULT             Result;
     DWORD               Type;
     DWORD               AutoReboot;
     DWORD               RebootCount;
@@ -469,7 +468,7 @@ TryAutoReboot(
     PTCHAR              Description;
     PTCHAR              Text;
     DWORD               TextLength;
-    HRESULT             Error;
+    DWORD               Error;
 
     Length = sizeof (DWORD);
 
@@ -547,12 +546,12 @@ TryAutoReboot(
     if (Text == NULL)
         goto fail2;
 
-    Result = StringCbPrintf(Text,
-                            TextLength,
-                            TEXT("%s %s"),
-                            Description,
-                            Context->Text);
-    assert(SUCCEEDED(Result));
+    Error = StringCbPrintf(Text,
+                           TextLength,
+                           TEXT("%s %s"),
+                           Description,
+                           Context->Text);
+    assert(SUCCEEDED(Error));
 
     free(DisplayName);
 
