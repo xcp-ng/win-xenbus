@@ -685,6 +685,7 @@ TryAutoReboot(
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
+    HANDLE              MsiMutex;
     DWORD               Type;
     DWORD               AutoReboot;
     DWORD               RebootCount;
@@ -709,6 +710,22 @@ TryAutoReboot(
     // We don't want to suddenly reboot if the user's already said no.
     if (Context->Response == IDNO)
         goto done;
+
+    // Check if there's an installation under way.
+    MsiMutex = OpenMutex(SYNCHRONIZE,
+                         FALSE,
+                         TEXT("Global\\_MSIExecute"));
+    if (MsiMutex != NULL) {
+        Error = WaitForSingleObject(MsiMutex, 0);
+        if (Error == WAIT_OBJECT_0 || Error == WAIT_ABANDONED)
+            ReleaseMutex(MsiMutex);
+
+        CloseHandle(MsiMutex);
+
+        if (Error == WAIT_TIMEOUT)
+            // The only case where an installation is definitely running.
+            goto done;
+    }
 
     Status = CallNtPowerInformation(SystemExecutionState,
                                     NULL,
