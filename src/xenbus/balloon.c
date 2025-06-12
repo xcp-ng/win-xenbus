@@ -194,6 +194,7 @@ BalloonSort(
         ASSERT3U(PfnArray[Index], <, PfnArray[Index + 1]);
 }
 
+__drv_requiresIRQL(PASSIVE_LEVEL)
 static PMDL
 BalloonAllocatePagesForMdl(
     IN  ULONG       Count
@@ -205,6 +206,8 @@ BalloonAllocatePagesForMdl(
     SIZE_T          TotalBytes;
     PMDL            Mdl;
 
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
     LowAddress.QuadPart = 0ull;
     HighAddress.QuadPart = ~0ull;
     SkipBytes.QuadPart = 0ull;
@@ -215,7 +218,8 @@ BalloonAllocatePagesForMdl(
                                   SkipBytes,
                                   TotalBytes,
                                   MmCached,
-                                  MM_DONT_ZERO_ALLOCATION);
+                                  MM_DONT_ZERO_ALLOCATION |
+                                  MM_ALLOCATE_AND_HOT_REMOVE);
     if (Mdl == NULL)
         goto done;
 
@@ -223,8 +227,7 @@ BalloonAllocatePagesForMdl(
                              MDL_PARTIAL_HAS_BEEN_MAPPED |
                              MDL_PARTIAL |
                              MDL_PARENT_MAPPED_SYSTEM_VA |
-                             MDL_SOURCE_IS_NONPAGED_POOL |
-                             MDL_IO_SPACE)) == 0);
+                             MDL_SOURCE_IS_NONPAGED_POOL)) == 0);
 
 done:
     return Mdl;
@@ -238,6 +241,9 @@ BalloonFreePagesFromMdl(
 {
     volatile UCHAR  *Mapping;
     ULONG           Index;
+    PPFN_NUMBER     Pfn;
+    PFN_NUMBER      RangeStart, RangeEnd;
+    NTSTATUS        Status;
 
     if (!Check)
         goto done;
@@ -280,7 +286,34 @@ BalloonFreePagesFromMdl(
     MmUnmapLockedPages((PVOID)Mapping, Mdl);
 
 done:
-    MmFreePagesFromMdl(Mdl);
+    Pfn = MmGetMdlPfnArray(Mdl);
+
+    RangeStart = 0;
+    while (RangeStart < (MmGetMdlByteCount(Mdl) >> PAGE_SHIFT)) {
+        PHYSICAL_ADDRESS    StartAddress;
+        LARGE_INTEGER       NumberOfBytes;
+
+        for (RangeEnd = RangeStart;
+             RangeEnd < (MmGetMdlByteCount(Mdl) >> PAGE_SHIFT);
+             RangeEnd++) {
+            if (Pfn[RangeEnd] != Pfn[RangeStart] + (RangeEnd - RangeStart))
+                break;
+        }
+
+        StartAddress.QuadPart = Pfn[RangeStart] << PAGE_SHIFT;
+        NumberOfBytes.QuadPart = (RangeEnd - RangeStart) << PAGE_SHIFT;
+
+        Status = MmAddPhysicalMemory(&StartAddress, &NumberOfBytes);
+        if (!NT_SUCCESS(Status)) {
+            Error("MmAddPhysicalMemory failed: %08x (PFN %llx + %llx pages)\n",
+                  Status,
+                  Pfn[RangeStart],
+                  RangeEnd - RangeStart);
+            break;
+        }
+
+        RangeStart = RangeEnd;
+    }
 }
 
 #define XENBUS_BALLOON_MIN_PAGES_PER_S 1000ull
@@ -548,7 +581,7 @@ BalloonFreePfnArray(
 
     Mdl->Next = NULL;
     Mdl->Size = (SHORT)(sizeof(MDL) + (sizeof(PFN_NUMBER) * Requested));
-    Mdl->MdlFlags = MDL_PAGES_LOCKED;
+    Mdl->MdlFlags = MDL_PAGES_LOCKED | MDL_IO_SPACE;
     Mdl->Process = NULL;
     Mdl->MappedSystemVa = NULL;
     Mdl->StartVa = NULL;
