@@ -3959,6 +3959,9 @@ not_active:
 
         ASSERT(__FdoIsActive(Fdo));
 
+        KeClearEvent(&Fdo->BalloonEvent);
+        ThreadWake(Fdo->BalloonThread);
+
         //
         // Balloon inflation should complete within a reasonable
         // time (otherwise the target is probably unreasonable).
