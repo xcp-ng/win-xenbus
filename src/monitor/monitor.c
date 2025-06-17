@@ -57,6 +57,7 @@ typedef struct _MONITOR_CONTEXT {
     HANDLE                  EventLog;
     HANDLE                  StopEvent;
     HANDLE                  RequestEvent;
+    HANDLE                  Timer;
     HKEY                    RequestKey;
     PTCHAR                  Title;
     PTCHAR                  Text;
@@ -77,6 +78,7 @@ typedef struct _REBOOT_PROMPT {
 MONITOR_CONTEXT MonitorContext;
 
 #define MAXIMUM_BUFFER_SIZE 1024
+#define REBOOT_RETRY_DELAY  60000L // 1 minute
 
 #define SERVICES_KEY "SYSTEM\\CurrentControlSet\\Services"
 
@@ -1347,6 +1349,7 @@ MonitorMain(
     PTCHAR              RequestKeyName;
     BOOL                Success;
     HRESULT             Error;
+    LARGE_INTEGER       DueTime;
 
     UNREFERENCED_PARAMETER(argc);
     UNREFERENCED_PARAMETER(argv);
@@ -1426,17 +1429,33 @@ MonitorMain(
     if (!Success)
         goto fail10;
 
+    Context->Timer = CreateWaitableTimer(NULL, FALSE, NULL);
+    if (Context->Timer == NULL)
+        goto fail11;
+
+    DueTime.QuadPart = -10000LL * REBOOT_RETRY_DELAY;
+
+    Success = SetWaitableTimer(Context->Timer,
+                               &DueTime,
+                               REBOOT_RETRY_DELAY,
+                               NULL,
+                               NULL,
+                               FALSE);
+    if (!Success)
+        goto fail12;
+
     SetEvent(Context->RequestEvent);
 
     ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
 
     for (;;) {
-        HANDLE  Events[3];
+        HANDLE  Events[4];
         DWORD   Object;
 
         Events[0] = Context->StopEvent;
         Events[1] = Context->RequestEvent;
         Events[2] = Context->ResponseEvent;
+        Events[3] = Context->Timer;
 
         Log("waiting (%u)...", ARRAYSIZE(Events));
         Object = WaitForMultipleObjects(ARRAYSIZE(Events),
@@ -1460,12 +1479,21 @@ MonitorMain(
                 DoReboot(NULL, 0);
             break;
 
+        case WAIT_OBJECT_0 + 3:
+            if (Context->RebootRequestedBy)
+                TryAutoReboot(Context->RebootRequestedBy);
+            break;
+
         default:
             break;
         }
     }
 
 done:
+    free(Context->RebootRequestedBy);
+    CancelWaitableTimer(Context->Timer);
+    CloseHandle(Context->Timer);
+
     (VOID) RegDeleteTree(Context->RequestKey, NULL);
 
     free(Context->Question);
@@ -1487,6 +1515,14 @@ done:
     Log("<====");
 
     return;
+
+fail12:
+    Log("fail12");
+
+    CloseHandle(Context->Timer);
+
+fail11:
+    Log("fail11");
 
 fail10:
     Log("fail10");
