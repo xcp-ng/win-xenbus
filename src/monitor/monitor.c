@@ -469,7 +469,7 @@ TryAutoReboot(
     PTCHAR              Description;
     PTCHAR              Text;
     DWORD               TextLength;
-    HRESULT             Error;
+    DWORD               Error;
 
     Length = sizeof (DWORD);
 
