@@ -50,8 +50,8 @@ DriverReleaseMutex(
 
 extern NTSTATUS
 DriverGetActive(
-    _In_ const CHAR *Key,
-    _Out_ PCHAR     *Value
+    _In_ PCSTR              Key,
+    _Outptr_result_z_ PSTR  *Value
     );
 
 typedef enum _XENFILT_FILTER_STATE {
@@ -74,14 +74,14 @@ extern NTSTATUS
 DriverQueryId(
     _In_ PDEVICE_OBJECT     PhysicalDeviceObject,
     _In_ BUS_QUERY_ID_TYPE  Type,
-    _Out_ PCHAR             *Id
+    _Outptr_result_z_ PSTR  *Id
     );
 
 extern NTSTATUS
 DriverQueryDeviceText(
     _In_ PDEVICE_OBJECT     LowerDeviceObject,
     _In_ DEVICE_TEXT_TYPE   Type,
-    _Out_ PCHAR             *Text
+    _Outptr_result_z_ PSTR  *Text
     );
 
 #include "emulated.h"
@@ -120,9 +120,9 @@ typedef struct _XENFILT_DX {
     SYSTEM_POWER_STATE  SystemPowerState;
     DEVICE_POWER_STATE  DevicePowerState;
 
-    PCHAR               DeviceID;
-    PCHAR               InstanceID;
-    PCHAR               LocationInformation;
+    PSTR                DeviceID;
+    PSTR                InstanceID;
+    PSTR                LocationInformation;
 
     IO_REMOVE_LOCK      RemoveLock;
 

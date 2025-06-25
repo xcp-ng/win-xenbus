@@ -36,7 +36,7 @@
 #include <ntddk.h>
 #include <xen.h>
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 PowerStateTypeName(
     _In_ POWER_STATE_TYPE   Type
     )
@@ -56,7 +56,7 @@ PowerStateTypeName(
 #undef  _POWER_ACTION_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 SystemPowerStateName(
     _In_ SYSTEM_POWER_STATE State
     )
@@ -82,7 +82,7 @@ SystemPowerStateName(
 #undef  _POWER_SYSTEM_STATE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 DevicePowerStateName(
     _In_ DEVICE_POWER_STATE State
     )
@@ -106,7 +106,7 @@ DevicePowerStateName(
 #undef  _POWER_DEVICE_STATE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 PowerActionName(
     _In_ POWER_ACTION   Type
     )
@@ -132,7 +132,7 @@ PowerActionName(
 #undef  _POWER_ACTION_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 PowerMinorFunctionName(
     _In_ ULONG  MinorFunction
     )
@@ -154,7 +154,7 @@ PowerMinorFunctionName(
 #undef  _POWER_MINOR_FUNCTION_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 PnpMinorFunctionName(
     _In_ ULONG  Function
     )
@@ -197,7 +197,7 @@ PnpMinorFunctionName(
 #undef  _PNP_MINOR_FUNCTION_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 ResourceDescriptorTypeName(
     _In_ UCHAR  Type
     )
@@ -226,7 +226,7 @@ ResourceDescriptorTypeName(
 #undef  _RESOURCE_DESCRIPTOR_TYPE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 ResourceDescriptorShareDispositionName(
     _In_ UCHAR  Disposition
     )
@@ -249,7 +249,7 @@ ResourceDescriptorShareDispositionName(
 #undef  _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 IrqDevicePolicyName(
     _In_ IRQ_DEVICE_POLICY  Policy
     )
@@ -274,7 +274,7 @@ IrqDevicePolicyName(
 #undef  _IRQ_DEVICE_POLICY_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 IrqPriorityName(
     _In_ IRQ_PRIORITY   Priority
     )
@@ -297,7 +297,7 @@ IrqPriorityName(
 #undef  _IRQ_PRIORITY_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 InterruptModeName(
     _In_ KINTERRUPT_MODE    Mode
     )
@@ -318,7 +318,7 @@ InterruptModeName(
 #undef  _INTERRUPT_MODE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 DeviceUsageNotificationTypeName(
     _In_ DEVICE_USAGE_NOTIFICATION_TYPE Type
     )
@@ -340,7 +340,7 @@ DeviceUsageNotificationTypeName(
 #undef  _DEVICE_USAGE_TYPE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 InterfaceTypeName(
     _In_ INTERFACE_TYPE Type
     )
@@ -378,7 +378,7 @@ InterfaceTypeName(
 #undef  _INTERFACE_TYPE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 DmaWidthName(
     _In_ DMA_WIDTH  Width
     )
@@ -402,7 +402,7 @@ DmaWidthName(
 #undef  _DMA_WIDTH_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 DmaSpeedName(
     _In_ DMA_SPEED  Speed
     )
@@ -427,7 +427,7 @@ DmaSpeedName(
 #undef  _DMA_SPEED_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 BusQueryIdTypeName(
     _In_ BUS_QUERY_ID_TYPE  Type
     )
@@ -452,7 +452,7 @@ BusQueryIdTypeName(
 #undef  _BUS_QUERY_ID_TYPE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 ProcessorChangeName(
     _In_ KE_PROCESSOR_CHANGE_NOTIFY_STATE   Change
     )
@@ -474,7 +474,7 @@ ProcessorChangeName(
 #undef _PROCESSOR_CHANGE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 VirqName(
     _In_ ULONG  Type
     )

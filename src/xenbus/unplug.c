@@ -154,7 +154,7 @@ UnplugBootEmulated(
     PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
     CHAR                            KeyName[] = "XEN:BOOT_EMULATED=";
     PANSI_STRING                    Option;
-    PCHAR                           Value;
+    PSTR                            Value;
     NTSTATUS                        status;
     BOOLEAN                         BootEmulated;
 
@@ -187,7 +187,7 @@ _IRQL_requires_(PASSIVE_LEVEL)
 static VOID
 UnplugReboot(
     _In_ PINTERFACE                 Interface,
-    _In_ PCHAR                      Module
+    _In_ PSTR                       Module
     )
 {
     PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;

@@ -115,7 +115,7 @@ ModuleSearchBackwards(
 static NTSTATUS
 ModuleAdd(
     _In_ PMODULE_CONTEXT    Context,
-    _In_ PCHAR              Name,
+    _In_ PSTR               Name,
     _In_ ULONG_PTR          Start,
     _In_ ULONG_PTR          Size
     )
@@ -274,8 +274,8 @@ ModuleLoad(
 {
     PMODULE_CONTEXT     Context = &ModuleContext;
     ANSI_STRING         Ansi;
-    PCHAR               Buffer;
-    PCHAR               Name;
+    PSTR                Buffer;
+    PSTR                Name;
     NTSTATUS            status;
 
     UNREFERENCED_PARAMETER(ProcessId);
@@ -297,7 +297,7 @@ ModuleLoad(
 
     RtlCopyMemory(Buffer, Ansi.Buffer, Ansi.Length);
 
-    Name = strrchr((const CHAR *)Buffer, '\\');
+    Name = strrchr((PCSTR)Buffer, '\\');
     Name = (Name == NULL) ? Buffer : (Name + 1);
 
     status = ModuleAdd(Context,
@@ -330,14 +330,14 @@ fail1:
 XEN_API
 VOID
 ModuleLookup(
-    _In_ ULONG_PTR  Address,
-    _Out_ PCHAR     *Name,
-    _Out_ PULONG_PTR Offset
+    _In_ ULONG_PTR          Address,
+    _Outptr_result_z_ PSTR  *Name,
+    _Out_ PULONG_PTR        Offset
     )
 {
-    PMODULE_CONTEXT Context = &ModuleContext;
-    PLIST_ENTRY     ListEntry;
-    KIRQL           Irql;
+    PMODULE_CONTEXT         Context = &ModuleContext;
+    PLIST_ENTRY             ListEntry;
+    KIRQL                   Irql;
 
     *Name = NULL;
     *Offset = 0;
@@ -448,10 +448,10 @@ again:
     Context->Cursor = &Context->List;
 
     for (Index = 0; Index < Count; Index++) {
-        PCHAR   Name;
+        PSTR    Name;
 
-        Name = strrchr((const CHAR *)QueryInfo[Index].FullPathName, '\\');
-        Name = (Name == NULL) ? (PCHAR)QueryInfo[Index].FullPathName : (Name + 1);
+        Name = strrchr((PCSTR)QueryInfo[Index].FullPathName, '\\');
+        Name = (Name == NULL) ? (PSTR)QueryInfo[Index].FullPathName : (Name + 1);
 
         status = ModuleAdd(Context,
                            Name,

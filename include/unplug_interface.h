@@ -118,7 +118,7 @@ typedef BOOLEAN
 typedef VOID
 (*XENBUS_UNPLUG_REBOOT)(
     _In_ PINTERFACE                 Interface,
-    _In_ PCHAR                      Module
+    _In_ PSTR                       Module
     );
 
 // {73db6517-3d06-4937-989f-199b7501e229}

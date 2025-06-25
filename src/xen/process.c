@@ -40,7 +40,7 @@
 #include "dbg_print.h"
 #include "assert.h"
 
-typedef PCHAR (*GET_PROCESS_IMAGE_NAME)(PEPROCESS Process);
+typedef PSTR (*GET_PROCESS_IMAGE_NAME)(PEPROCESS Process);
 
 typedef struct _PROCESS_CONTEXT {
     LONG                    References;
@@ -77,7 +77,7 @@ ProcessNotify(
     KeLowerIrql(Irql);
 }
 
-PCHAR
+PSTR
 ProcessGetImageFileName(
     _In_ PEPROCESS  Process
     )

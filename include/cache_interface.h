@@ -127,7 +127,7 @@ typedef VOID
 typedef NTSTATUS
 (*XENBUS_CACHE_CREATE_V1)(
     _In_ PINTERFACE                 Interface,
-    _In_ const CHAR                 *Name,
+    _In_ PCSTR                      Name,
     _In_ ULONG                      Size,
     _In_ ULONG                      Reservation,
     _In_ XENBUS_CACHE_CTOR          Ctor,
@@ -159,7 +159,7 @@ typedef NTSTATUS
 typedef NTSTATUS
 (*XENBUS_CACHE_CREATE)(
     _In_ PINTERFACE                 Interface,
-    _In_ const CHAR                 *Name,
+    _In_ PCSTR                      Name,
     _In_ ULONG                      Size,
     _In_ ULONG                      Reservation,
     _In_ ULONG                      Cap,

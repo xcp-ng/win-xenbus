@@ -568,7 +568,7 @@ fail1:
 NTSTATUS
 RangeSetCreate(
     _In_ PINTERFACE             Interface,
-    _In_ const CHAR             *Name,
+    _In_ PCSTR                  Name,
     _Out_ PXENBUS_RANGE_SET     *RangeSet
     )
 {

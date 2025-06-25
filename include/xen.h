@@ -69,7 +69,7 @@
 XEN_API
 NTSTATUS
 XenTouch(
-    _In_ const CHAR *Name,
+    _In_ PCSTR      Name,
     _In_ ULONG      MajorVersion,
     _In_ ULONG      MinorVersion,
     _In_ ULONG      MicroVersion,
@@ -338,7 +338,7 @@ _Check_return_
 XEN_API
 NTSTATUS
 XenVersionExtra(
-    _Out_writes_(XEN_EXTRAVERSION_LEN) PCHAR    Extra
+    _Out_writes_z_(XEN_EXTRAVERSION_LEN) PSTR   Extra
     );
 
 // MODULE
@@ -346,9 +346,9 @@ XenVersionExtra(
 XEN_API
 VOID
 ModuleLookup(
-    _In_ ULONG_PTR      Address,
-    _Out_ PCHAR         *Name,
-    _Out_ PULONG_PTR    Offset
+    _In_ ULONG_PTR          Address,
+    _Outptr_result_z_ PSTR  *Name,
+    _Out_ PULONG_PTR        Offset
     );
 
 // UNPLUG
@@ -399,7 +399,7 @@ VOID
 LogCchVPrintf(
     _In_ LOG_LEVEL  Level,
     _In_ ULONG      Count,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     _In_ va_list    Arguments
     );
 
@@ -407,7 +407,7 @@ XEN_API
 VOID
 LogVPrintf(
     _In_ LOG_LEVEL  Level,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     _In_ va_list    Arguments
     );
 
@@ -416,7 +416,7 @@ VOID
 LogCchPrintf(
     _In_ LOG_LEVEL  Level,
     _In_ ULONG      Count,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     ...
     );
 
@@ -424,7 +424,7 @@ XEN_API
 VOID
 LogPrintf(
     _In_ LOG_LEVEL  Level,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     ...
     );
 
@@ -438,7 +438,7 @@ XEN_API
 NTSTATUS
 LogReadLogLevel(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _Out_ PLOG_LEVEL    LogLevel
     );
 
@@ -448,7 +448,7 @@ XEN_API
 NTSTATUS
 LogAddDisposition(
     _In_ LOG_LEVEL          Mask,
-    _In_ VOID               (*Function)(PVOID, PCHAR, ULONG),
+    _In_ VOID               (*Function)(PVOID, PSTR, ULONG),
     _In_opt_ PVOID          Argument,
     _Out_ PLOG_DISPOSITION  *Disposition
     );
@@ -545,24 +545,24 @@ FiltersUninstall(
 XEN_API
 NTSTATUS
 ConfigGetActive(
-    _In_ const CHAR *Key,
-    _Out_ PCHAR     *Value
+    _In_ PCSTR              Key,
+    _Outptr_result_z_ PSTR  *Value
     );
 
 XEN_API
 NTSTATUS
 ConfigSetActive(
-    _In_ PCHAR  DeviceID,
-    _In_ PCHAR  InstanceID,
-    _In_ PCHAR  LocationInformation
+    _In_ PSTR   DeviceID,
+    _In_ PSTR   InstanceID,
+    _In_ PSTR   LocationInformation
     );
 
 XEN_API
 NTSTATUS
 ConfigUpdateActive(
-    _In_ PCHAR  DeviceID,
-    _In_ PCHAR  InstanceID,
-    _In_ PCHAR  LocationInformation
+    _In_ PSTR   DeviceID,
+    _In_ PSTR   InstanceID,
+    _In_ PSTR   LocationInformation
     );
 
 XEN_API
@@ -575,13 +575,13 @@ XEN_API
 NTSTATUS
 ConfigRequestReboot(
     _In_ HANDLE     ParametersKey,
-    _In_ PCHAR      Module
+    _In_ PSTR       Module
     );
 
 XEN_API
 NTSTATUS
 ConfigQuerySystemStartOption(
-    _In_ PCHAR          Key,
+    _In_ PSTR           Key,
     _Out_ PANSI_STRING  *Option
     );
 

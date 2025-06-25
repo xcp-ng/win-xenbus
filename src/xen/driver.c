@@ -164,7 +164,7 @@ __DriverGetMemoryKey(
 
 static FORCEINLINE NTSTATUS
 __DriverSetPfnArray(
-    _In_ PCHAR      Name,
+    _In_ PSTR       Name,
     _In_ ULONG      Count,
     _In_ PFN_NUMBER PfnArray[]
     )
@@ -224,7 +224,7 @@ fail1:
 
 static FORCEINLINE NTSTATUS
 __DriverAllocatePfnArray(
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _In_ ULONG          Count,
     _Out_ PFN_NUMBER    PfnArray[]
     )
@@ -289,7 +289,7 @@ fail1:
 
 static FORCEINLINE NTSTATUS
 __DriverGetPfnArray(
-    _In_ PCHAR                      Name,
+    _In_ PSTR                       Name,
     _In_ ULONG                      Count,
     _Out_writes_(Count) PFN_NUMBER  PfnArray[]
     )
@@ -341,7 +341,7 @@ fail1:
 
 PMDL
 DriverGetNamedPages(
-    _In_ PCHAR  Name,
+    _In_ PSTR   Name,
     _In_ ULONG  Count
     )
 {
@@ -425,7 +425,7 @@ DriverPutNamedPages(
 XEN_API
 NTSTATUS
 XenTouch(
-    _In_ const CHAR *Name,
+    _In_ PCSTR      Name,
     _In_ ULONG      MajorVersion,
     _In_ ULONG      MinorVersion,
     _In_ ULONG      MicroVersion,
@@ -480,7 +480,7 @@ fail1:
 static VOID
 DriverOutputBuffer(
     _In_ PVOID  Argument,
-    _In_ PCHAR  Buffer,
+    _In_ PSTR   Buffer,
     _In_ ULONG  Length
     )
 {

@@ -521,7 +521,7 @@ fail1:
     return status;
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __FdoGetVendorName(
     _In_ PXENBUS_FDO    Fdo
     )
@@ -529,7 +529,7 @@ __FdoGetVendorName(
     return Fdo->VendorName;
 }
 
-PCHAR
+PSTR
 FdoGetVendorName(
     _In_ PXENBUS_FDO    Fdo
     )
@@ -552,7 +552,7 @@ __FdoSetName(
     ASSERT(NT_SUCCESS(status));
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __FdoGetName(
     _In_ PXENBUS_FDO    Fdo
     )
@@ -562,7 +562,7 @@ __FdoGetName(
     return Dx->Name;
 }
 
-PCHAR
+PSTR
 FdoGetName(
     _In_ PXENBUS_FDO    Fdo
     )
@@ -575,14 +575,14 @@ static NTSTATUS
 FdoQueryId(
     _In_ PXENBUS_FDO        Fdo,
     _In_ BUS_QUERY_ID_TYPE  Type,
-    _Out_ PCHAR             *Id
+    _Outptr_result_z_ PSTR  *Id
     )
 {
     KEVENT                  Event;
     IO_STATUS_BLOCK         StatusBlock;
     PIRP                    Irp;
     PIO_STACK_LOCATION      StackLocation;
-    PWCHAR                  Buffer;
+    PWSTR                   Buffer;
     ULONG                   Length;
     NTSTATUS                status;
 
@@ -623,7 +623,7 @@ FdoQueryId(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Buffer = (PWCHAR)StatusBlock.Information;
+    Buffer = (PWSTR)StatusBlock.Information;
     Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
 
     *Id = __AllocatePoolWithTag(PagedPool, Length, 'SUB');
@@ -658,14 +658,14 @@ static NTSTATUS
 FdoQueryDeviceText(
     _In_ PXENBUS_FDO        Fdo,
     _In_ DEVICE_TEXT_TYPE   Type,
-    _Out_ PCHAR             *Text
+    _Outptr_result_z_ PSTR  *Text
     )
 {
     KEVENT                  Event;
     IO_STATUS_BLOCK         StatusBlock;
     PIRP                    Irp;
     PIO_STACK_LOCATION      StackLocation;
-    PWCHAR                  Buffer;
+    PWSTR                   Buffer;
     ULONG                   Length;
     NTSTATUS                status;
 
@@ -706,7 +706,7 @@ FdoQueryDeviceText(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Buffer = (PWCHAR)StatusBlock.Information;
+    Buffer = (PWSTR)StatusBlock.Information;
     Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
 
     *Text = __AllocatePoolWithTag(PagedPool, Length, 'SUB');
@@ -741,10 +741,10 @@ FdoSetActive(
     _In_ PXENBUS_FDO    Fdo
     )
 {
-    PCHAR               DeviceID;
-    PCHAR               InstanceID;
-    PCHAR               ActiveDeviceID;
-    PCHAR               LocationInformation;
+    PSTR                DeviceID;
+    PSTR                InstanceID;
+    PSTR                ActiveDeviceID;
+    PSTR                LocationInformation;
     NTSTATUS            status;
 
     status = FdoQueryId(Fdo,
@@ -1110,7 +1110,7 @@ FdoEnumerate(
         PXENBUS_PDO     Pdo = Dx->Pdo;
 
         if (!PdoIsMissing(Pdo) && PdoGetDevicePnpState(Pdo) != Deleted) {
-            PCHAR           Name;
+            PSTR            Name;
             BOOLEAN         Missing;
 
             Name = PdoGetName(Pdo);
@@ -1171,7 +1171,7 @@ done:
 
 static PANSI_STRING
 FdoMultiSzToUpcaseAnsi(
-    _In_ PCHAR      Buffer
+    _In_ PSTR       Buffer
     )
 {
     PANSI_STRING    Ansi;
@@ -1355,7 +1355,7 @@ FdoScan(
     ParametersKey = DriverGetParametersKey();
 
     for (;;) {
-        PCHAR                   Buffer;
+        PSTR                    Buffer;
         PANSI_STRING            StoreClasses;
         PANSI_STRING            SyntheticClasses;
         PANSI_STRING            SupportedClasses;
@@ -1529,7 +1529,7 @@ FdoSuspend(
     Event = ThreadGetEvent(Self);
 
     for (;;) {
-        PCHAR       Buffer;
+        PSTR        Buffer;
         BOOLEAN     Suspend;
         NTSTATUS    status;
 
@@ -1679,7 +1679,7 @@ FdoBalloon(
     Active = FALSE;
 
     for (;;) {
-        PCHAR                   Buffer;
+        PSTR                    Buffer;
         ULONGLONG               Target;
         ULONGLONG               Size;
 
@@ -2442,13 +2442,13 @@ FdoDestroyInterrupt(
 static FORCEINLINE BOOLEAN
 __FdoMatchDistribution(
     _In_ PXENBUS_FDO    Fdo,
-    _In_ PCHAR          Buffer
+    _In_ PSTR           Buffer
     )
 {
-    PCHAR               Vendor;
-    PCHAR               Product;
-    PCHAR               Context;
-    const CHAR          *Text;
+    PSTR                Vendor;
+    PSTR                Product;
+    PSTR                Context;
+    PCSTR               Text;
     BOOLEAN             Match;
     ULONG               Index;
     NTSTATUS            status;
@@ -2504,7 +2504,7 @@ FdoClearDistribution(
     _In_ PXENBUS_FDO    Fdo
     )
 {
-    PCHAR               Buffer;
+    PSTR                Buffer;
     PANSI_STRING        Distributions;
     ULONG               Index;
     NTSTATUS            status;
@@ -2570,14 +2570,14 @@ FdoSetDistribution(
     ULONG               Index;
     CHAR                Distribution[MAXNAMELEN];
     CHAR                Vendor[MAXNAMELEN];
-    const CHAR          *Product;
+    PCSTR               Product;
     NTSTATUS            status;
 
     Trace("====>\n");
 
     Index = 0;
     while (Index <= MAXIMUM_INDEX) {
-        PCHAR   Buffer;
+        PSTR    Buffer;
 
         status = RtlStringCbPrintfA(Distribution,
                                     MAXNAMELEN,
@@ -2663,13 +2663,13 @@ CHAR FdoOutBuffer[FDO_OUT_BUFFER_SIZE];
 static VOID
 FdoOutputBuffer(
     _In_ PVOID  Argument,
-    _In_ PCHAR  Buffer,
+    _In_ PSTR   Buffer,
     _In_ ULONG  Length
     )
 {
     PXENBUS_FDO Fdo = Argument;
     ULONG       Index;
-    PCHAR       Cursor;
+    PSTR        Cursor;
 
     Cursor = FdoOutBuffer;
     for (Index = 0; Index < Length; Index++) {
@@ -5632,7 +5632,7 @@ FdoBalloonInitialize(
 {
     CHAR                Key[] = "XEN:BALLOON=";
     PANSI_STRING        Option;
-    PCHAR               Value;
+    PSTR                Value;
     BOOLEAN             Enabled;
     NTSTATUS            status;
 

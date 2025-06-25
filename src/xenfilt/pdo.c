@@ -59,7 +59,7 @@ struct _XENFILT_PDO {
 
     PXENFILT_FDO                    Fdo;
     BOOLEAN                         Missing;
-    const CHAR                      *Reason;
+    PCSTR                           Reason;
 
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     PXENFILT_EMULATED_OBJECT        EmulatedObject;
@@ -189,7 +189,7 @@ PdoGetPhysicalDeviceObject(
 static FORCEINLINE VOID
 __PdoSetMissing(
     _In_ PXENFILT_PDO   Pdo,
-    _In_ const CHAR     *Reason
+    _In_ PCSTR          Reason
     )
 {
     Pdo->Reason = Reason;
@@ -199,7 +199,7 @@ __PdoSetMissing(
 VOID
 PdoSetMissing(
     _In_ PXENFILT_PDO   Pdo,
-    _In_ const CHAR     *Reason
+    _In_ PCSTR          Reason
     )
 {
     __PdoSetMissing(Pdo, Reason);
@@ -253,10 +253,10 @@ PdoSetDeviceInformation(
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
-    PCHAR               DeviceID;
-    PCHAR               ActiveDeviceID;
-    PCHAR               InstanceID;
-    PCHAR               LocationInformation;
+    PSTR                DeviceID;
+    PSTR                ActiveDeviceID;
+    PSTR                InstanceID;
+    PSTR                LocationInformation;
     NTSTATUS            status;
 
     status = DriverQueryId(Pdo->LowerDeviceObject,
@@ -350,7 +350,7 @@ PdoClearDeviceInformation(
     Pdo->Active = FALSE;
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __PdoGetDeviceID(
     _In_ PXENFILT_PDO   Pdo
     )
@@ -361,7 +361,7 @@ __PdoGetDeviceID(
     return Dx->DeviceID;
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __PdoGetInstanceID(
     _In_ PXENFILT_PDO   Pdo
     )
@@ -380,7 +380,7 @@ __PdoGetType(
     return Pdo->Type;
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __PdoGetLocationInformation(
     _In_ PXENFILT_PDO   Pdo
     )
@@ -413,7 +413,7 @@ __PdoSetName(
     ASSERT(NT_SUCCESS(status));
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __PdoGetName(
     _In_ PXENFILT_PDO   Pdo
     )
@@ -814,7 +814,7 @@ DEFINE_PDO_QUERY_INTERFACE(Emulated)
 
 struct _INTERFACE_ENTRY {
     const GUID  *Guid;
-    const CHAR  *Name;
+    PCSTR       Name;
     NTSTATUS    (*Query)(PXENFILT_PDO, PIRP);
 };
 
@@ -1630,7 +1630,7 @@ PdoCreate(
     PDEVICE_OBJECT                      FilterDeviceObject;
     PXENFILT_DX                         Dx;
     PXENFILT_PDO                        Pdo;
-    PCHAR                               CompatibleIDs;
+    PSTR                                CompatibleIDs;
     NTSTATUS                            status;
 
     ASSERT(Type != XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN);

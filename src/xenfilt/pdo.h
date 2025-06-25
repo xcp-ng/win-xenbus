@@ -65,7 +65,7 @@ PdoIsMissing(
 extern VOID
 PdoSetMissing(
     _In_ PXENFILT_PDO   Pdo,
-    _In_ const CHAR     *Reason
+    _In_ PCSTR          Reason
     );
 
 extern BOOLEAN

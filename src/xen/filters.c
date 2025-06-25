@@ -67,9 +67,9 @@ __FiltersFree(
 
 static NTSTATUS
 FiltersInstallClass(
-    _In_ const CHAR *ClassName,
+    _In_ PCSTR      ClassName,
     _In_ const GUID *ClassGuid,
-    _In_ const CHAR *DriverName
+    _In_ PCSTR      DriverName
     )
 {
     HANDLE          ClassKey;
@@ -196,9 +196,9 @@ fail1:
 
 static NTSTATUS
 FiltersUninstallClass(
-    _In_ const CHAR *ClassName,
+    _In_ PCSTR      ClassName,
     _In_ const GUID *ClassGuid,
-    _In_ const CHAR *DriverName
+    _In_ PCSTR      DriverName
     )
 {
     HANDLE          ClassKey;

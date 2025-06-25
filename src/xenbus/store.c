@@ -68,7 +68,7 @@ struct _XENBUS_STORE_WATCH {
     ULONG       Magic;
     PVOID       Caller;
     USHORT      Id;
-    PCHAR       Path;
+    PSTR        Path;
     PKEVENT     Event;
     BOOLEAN     Active; // Must be tested at >= DISPATCH_LEVEL
 };
@@ -82,7 +82,7 @@ typedef enum _XENBUS_STORE_REQUEST_STATE {
 } XENBUS_STORE_REQUEST_STATE, *PXENBUS_STORE_REQUEST_STATE;
 
 typedef struct _XENBUS_STORE_SEGMENT {
-    PCHAR   Data;
+    PSTR    Data;
     ULONG   Offset;
     ULONG   Length;
 } XENBUS_STORE_SEGMENT, *PXENBUS_STORE_SEGMENT;
@@ -206,17 +206,17 @@ StorePrepareRequest(
     Request->Count = 0;
     Segment = &Request->Segment[Request->Count++];
 
-    Segment->Data = (PCHAR)&Request->Header;
+    Segment->Data = (PSTR)&Request->Header;
     Segment->Offset = 0;
     Segment->Length = sizeof (struct xsd_sockmsg);
 
     va_start(Arguments, Type);
     status = STATUS_UNSUCCESSFUL;
     for (;;) {
-        PCHAR   Data;
+        PSTR    Data;
         ULONG   Length;
 
-        Data = va_arg(Arguments, PCHAR);
+        Data = va_arg(Arguments, PSTR);
         Length = va_arg(Arguments, ULONG);
 
         if (Data == NULL) {
@@ -255,7 +255,7 @@ fail1:
 static ULONG
 StoreCopyToRing(
     _In_ PXENBUS_STORE_CONTEXT          Context,
-    _In_ PCHAR                          Data,
+    _In_ PSTR                           Data,
     _In_ ULONG                          Length
     )
 {
@@ -372,7 +372,7 @@ StoreSendRequests(
 static ULONG
 StoreCopyFromRing(
     _In_ PXENBUS_STORE_CONTEXT          Context,
-    _In_ PCHAR                          Data,
+    _In_ PSTR                           Data,
     _In_ ULONG                          Length
     )
 {
@@ -609,14 +609,14 @@ StoreNextWatchId(
 
 static NTSTATUS
 StoreParseWatchEvent(
-    _In_ PCHAR      Data,
-    _In_ ULONG      Length,
-    _Out_ PCHAR     *Path,
-    _Out_ PVOID     *Caller,
-    _Out_ PUSHORT   Id
+    _In_ PSTR               Data,
+    _In_ ULONG              Length,
+    _Outptr_result_z_ PSTR  *Path,
+    _Outptr_ PVOID          *Caller,
+    _Out_ PUSHORT           Id
     )
 {
-    PCHAR           End;
+    PSTR            End;
 
     *Path = Data;
     while (*Data != '\0' && Length != 0) {
@@ -682,7 +682,7 @@ StoreProcessWatchEvent(
     )
 {
     PXENBUS_STORE_RESPONSE      Response;
-    PCHAR                       Path;
+    PSTR                        Path;
     PVOID                       Caller;
     USHORT                      Id;
     PXENBUS_STORE_WATCH         Watch;
@@ -705,7 +705,7 @@ StoreProcessWatchEvent(
     Watch = StoreFindWatch(Context, Id);
 
     if (Watch == NULL) {
-        PCHAR       Name;
+        PSTR        Name;
         ULONG_PTR   Offset;
 
         ModuleLookup((ULONG_PTR)Caller, &Name, &Offset);
@@ -742,7 +742,7 @@ StoreResetResponse(
 
     Segment = &Response->Segment[XENBUS_STORE_RESPONSE_HEADER_SEGMENT];
 
-    Segment->Data = (PCHAR)&Response->Header;
+    Segment->Data = (PSTR)&Response->Header;
     Segment->Offset = 0;
     Segment->Length = sizeof (struct xsd_sockmsg);
 }
@@ -759,8 +759,8 @@ StoreCopyResponse(
     *Response = Context->Response;
 
     Segment = &Response->Segment[XENBUS_STORE_RESPONSE_HEADER_SEGMENT];
-    ASSERT3P(Segment->Data, ==, (PCHAR)&Context->Response.Header);
-    Segment->Data = (PCHAR)&Response->Header;
+    ASSERT3P(Segment->Data, ==, (PSTR)&Context->Response.Header);
+    Segment->Data = (PSTR)&Response->Header;
 
     Segment = &Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT];
     if (Segment->Length != 0) {
@@ -987,7 +987,7 @@ StoreCheckResponse(
     status = STATUS_SUCCESS;
 
     if (Response->Header.type == XS_ERROR) {
-        PCHAR   Error;
+        PSTR    Error;
         ULONG   Length;
         ULONG   Index;
 
@@ -1024,7 +1024,7 @@ StoreCopyPayload(
     _In_ PVOID                  Caller
     )
 {
-    PCHAR                       Data;
+    PSTR                        Data;
     ULONG                       Length;
     PXENBUS_STORE_BUFFER        Buffer;
     KIRQL                       Irql;
@@ -1079,7 +1079,7 @@ StoreFreePayload(
 static VOID
 StoreFree(
     _In_ PINTERFACE         Interface,
-    _In_ PCHAR              Value
+    _In_ PSTR               Value
     )
 {
     PXENBUS_STORE_CONTEXT   Context = Interface->Context;
@@ -1102,9 +1102,9 @@ static NTSTATUS
 StoreRead(
     _In_ PINTERFACE                     Interface,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
-    _In_opt_ PCHAR                      Prefix,
-    _In_ PCHAR                          Node,
-    _Out_ PCHAR                         *Value
+    _In_opt_ PSTR                       Prefix,
+    _In_ PSTR                           Node,
+    _Outptr_result_z_ PSTR              *Value
     )
 {
     PXENBUS_STORE_CONTEXT               Context = Interface->Context;
@@ -1184,9 +1184,9 @@ static NTSTATUS
 StoreWrite(
     _In_ PXENBUS_STORE_CONTEXT          Context,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
-    _In_opt_ PCHAR                      Prefix,
-    _In_ PCHAR                          Node,
-    _In_ PCHAR                          Value
+    _In_opt_ PSTR                       Prefix,
+    _In_ PSTR                           Node,
+    _In_ PSTR                           Value
     )
 {
     XENBUS_STORE_REQUEST                Request;
@@ -1254,14 +1254,14 @@ static NTSTATUS
 StoreVPrintf(
     _In_ PINTERFACE                     Interface,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
-    _In_opt_ PCHAR                      Prefix,
-    _In_ PCHAR                          Node,
-    _In_ const CHAR                     *Format,
+    _In_opt_ PSTR                       Prefix,
+    _In_ PSTR                           Node,
+    _In_ PCSTR                          Format,
     _In_ va_list                        Arguments
     )
 {
     PXENBUS_STORE_CONTEXT               Context = Interface->Context;
-    PCHAR                               Buffer;
+    PSTR                                Buffer;
     ULONG                               Length;
     NTSTATUS                            status;
 
@@ -1316,9 +1316,9 @@ static NTSTATUS
 StorePrintf(
     _In_ PINTERFACE                     Interface,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
-    _In_opt_ PCHAR                      Prefix,
-    _In_ PCHAR                          Node,
-    _In_ const CHAR                     *Format,
+    _In_opt_ PSTR                       Prefix,
+    _In_ PSTR                           Node,
+    _In_ PCSTR                          Format,
     ...
     )
 {
@@ -1341,8 +1341,8 @@ static NTSTATUS
 StoreRemove(
     _In_ PINTERFACE                     Interface,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
-    _In_opt_ PCHAR                      Prefix,
-    _In_ PCHAR                          Node
+    _In_opt_ PSTR                       Prefix,
+    _In_ PSTR                           Node
     )
 {
     PXENBUS_STORE_CONTEXT               Context = Interface->Context;
@@ -1409,9 +1409,9 @@ static NTSTATUS
 StoreDirectory(
     _In_ PINTERFACE                     Interface,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
-    _In_opt_ PCHAR                      Prefix,
-    _In_ PCHAR                          Node,
-    _Out_ PCHAR                         *Value
+    _In_opt_ PSTR                       Prefix,
+    _In_ PSTR                           Node,
+    _Outptr_result_z_ PSTR              *Value
     )
 {
     PXENBUS_STORE_CONTEXT               Context = Interface->Context;
@@ -1656,15 +1656,15 @@ fail1:
 static NTSTATUS
 StoreWatchAdd(
     _In_ PINTERFACE             Interface,
-    _In_opt_ PCHAR              Prefix,
-    _In_ PCHAR                  Node,
+    _In_opt_ PSTR               Prefix,
+    _In_ PSTR                   Node,
     _In_ PKEVENT                Event,
     _Out_ PXENBUS_STORE_WATCH   *Watch
     )
 {
     PXENBUS_STORE_CONTEXT       Context = Interface->Context;
     ULONG                       Length;
-    PCHAR                       Path;
+    PSTR                        Path;
     CHAR                        Token[TOKEN_LENGTH];
     XENBUS_STORE_REQUEST        Request;
     PXENBUS_STORE_RESPONSE      Response;
@@ -1791,7 +1791,7 @@ StoreWatchRemove(
     )
 {
     PXENBUS_STORE_CONTEXT       Context = Interface->Context;
-    PCHAR                       Path;
+    PSTR                        Path;
     CHAR                        Token[TOKEN_LENGTH];
     XENBUS_STORE_REQUEST        Request;
     PXENBUS_STORE_RESPONSE      Response;
@@ -1978,7 +1978,8 @@ StoreWatchdog(
 static NTSTATUS
 StorePermissionToString(
     _In_ PXENBUS_STORE_PERMISSION   Permission,
-    _Out_ PCHAR                     Buffer,
+    _Out_writes_to_(BufferSize, *UsedSize)
+    PSTR                            Buffer,
     _In_ ULONG                      BufferSize,
     _Out_ PULONG                    UsedSize
     )
@@ -2037,8 +2038,8 @@ static NTSTATUS
 StorePermissionsSet(
     _In_ PINTERFACE                     Interface,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
-    _In_opt_ PCHAR                      Prefix,
-    _In_ PCHAR                          Node,
+    _In_opt_ PSTR                       Prefix,
+    _In_ PSTR                           Node,
     _In_ PXENBUS_STORE_PERMISSION       Permissions,
     _In_ ULONG                          NumberPermissions
     )
@@ -2051,9 +2052,9 @@ StorePermissionsSet(
     ULONG                               Index;
     ULONG                               Length;
     ULONG                               Used;
-    PCHAR                               Path;
-    PCHAR                               PermissionString;
-    PCHAR                               Segment;
+    PSTR                                Path;
+    PSTR                                PermissionString;
+    PSTR                                Segment;
 
     PermissionString = __StoreAllocate(XENSTORE_PAYLOAD_MAX);
 
@@ -2378,7 +2379,7 @@ StoreDebugCallback(
              ListEntry != &(Context->BufferList);
              ListEntry = ListEntry->Flink) {
             PXENBUS_STORE_BUFFER    Buffer;
-            PCHAR                   Name;
+            PSTR                    Name;
             ULONG_PTR               Offset;
 
             Buffer = CONTAINING_RECORD(ListEntry, XENBUS_STORE_BUFFER, ListEntry);
@@ -2413,7 +2414,7 @@ StoreDebugCallback(
              ListEntry != &(Context->WatchList);
              ListEntry = ListEntry->Flink) {
             PXENBUS_STORE_WATCH Watch;
-            PCHAR               Name;
+            PSTR                Name;
             ULONG_PTR           Offset;
 
             Watch = CONTAINING_RECORD(ListEntry, XENBUS_STORE_WATCH, ListEntry);
@@ -2452,7 +2453,7 @@ StoreDebugCallback(
              ListEntry != &(Context->TransactionList);
              ListEntry = ListEntry->Flink) {
             PXENBUS_STORE_TRANSACTION   Transaction;
-            PCHAR                       Name;
+            PSTR                        Name;
             ULONG_PTR                   Offset;
 
             Transaction = CONTAINING_RECORD(ListEntry, XENBUS_STORE_TRANSACTION, ListEntry);

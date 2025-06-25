@@ -213,7 +213,7 @@ BugCheckStackDump(
             ULONG       EIP;
             ULONG       Parameter[PARAMETER_COUNT] = {0};
             ULONG       Index;
-            PCHAR       Name;
+            PSTR        Name;
             ULONG       Offset;
 
             NextEBP = *(PULONG)EBP;
@@ -515,7 +515,7 @@ BugCheckStackDump(
             ULONG64             RSP;
             ULONG64             Parameter[PARAMETER_COUNT] = {0};
             ULONG               Index;
-            PCHAR               Name;
+            PSTR                Name;
             ULONG64             Offset;
 
             if (Context->Rip == 0)
@@ -619,7 +619,7 @@ BugCheckIrqlNotLessOrEqual(
         KIRQL       Irql = (KIRQL)Parameter2;
         ULONG_PTR   Access = Parameter3;
         PVOID       Address = (PVOID)Parameter4;
-        PCHAR       Name;
+        PSTR        Name;
         ULONG_PTR   Offset;
 
         LogPrintf(LOG_LEVEL_CRITICAL,
@@ -670,7 +670,7 @@ BugCheckDriverIrqlNotLessOrEqual(
         KIRQL       Irql = (KIRQL)Parameter2;
         ULONG_PTR   Access = Parameter3;
         PVOID       Address = (PVOID)Parameter4;
-        PCHAR       Name;
+        PSTR        Name;
         ULONG_PTR   Offset;
 
         LogPrintf(LOG_LEVEL_CRITICAL,
@@ -743,7 +743,7 @@ BugCheckSystemThreadExceptionNotHandled(
         PVOID               Address = (PVOID)Parameter2;
         PEXCEPTION_RECORD   Exception = (PEXCEPTION_RECORD)Parameter3;
         PCONTEXT            Context = (PCONTEXT)Parameter4;
-        PCHAR               Name;
+        PSTR                Name;
         ULONG_PTR           Offset;
 
         ModuleLookup((ULONG_PTR)Address, &Name, &Offset);
@@ -783,7 +783,7 @@ BugCheckKernelModeExceptionNotHandled(
         CONTEXT     Context;
         ULONG       Code = (ULONG)Parameter1;
         PVOID       Address = (PVOID)Parameter2;
-        PCHAR       Name;
+        PSTR        Name;
         ULONG_PTR	Offset;
 
         UNREFERENCED_PARAMETER(Parameter3);
@@ -829,8 +829,8 @@ BugCheckCriticalObjectTermination(
     __try {
         ULONG       Type = (ULONG)Parameter1;
         PVOID	    Object = (PVOID)Parameter2;
-        PCHAR	    Name = (PCHAR)Parameter3;
-        PCHAR       Reason = (PCHAR)Parameter4;
+        PSTR        Name = (PSTR)Parameter3;
+        PSTR        Reason = (PSTR)Parameter4;
         CONTEXT     Context;
 
         LogPrintf(LOG_LEVEL_CRITICAL,
@@ -933,7 +933,7 @@ BugCheckDriverPowerStateFailure(
                       __MODULE__);
 
             for (Index = 0; Index <= Irp->StackCount; Index++) {
-                PCHAR       Name;
+                PSTR        Name;
                 ULONG_PTR   Offset;
 
                 LogPrintf(LOG_LEVEL_CRITICAL,
@@ -993,8 +993,8 @@ BugCheckAssertionFailure(
     )
 {
     __try {
-        PCHAR       Text = (PCHAR)Parameter1;
-        PCHAR       File = (PCHAR)Parameter2;
+        PSTR        Text = (PSTR)Parameter1;
+        PSTR        File = (PSTR)Parameter2;
         ULONG       Line = (ULONG)Parameter3;
         CONTEXT     Context;
 
@@ -1041,7 +1041,7 @@ BugCheckBugEFCriticalProcessDied(
         switch (Code) {
         case 0x0: {
             PEPROCESS   EProcess = (PEPROCESS)Parameter1;
-            PCHAR       Name = ProcessGetImageFileName(EProcess);
+            PSTR        Name = ProcessGetImageFileName(EProcess);
 
             if (Name == NULL)
                 Name = "(unknown)";
@@ -1079,7 +1079,7 @@ BugCheckBugEFCriticalProcessDied(
 
 struct _BUG_CODE_ENTRY {
     ULONG       Code;
-    const CHAR  *Name;
+    PCSTR       Name;
     VOID        (*Handler)(ULONG_PTR, ULONG_PTR, ULONG_PTR, ULONG_PTR);
 };
 

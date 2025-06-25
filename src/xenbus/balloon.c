@@ -750,7 +750,7 @@ BalloonGetFISTEntries(
     _In_ PXENBUS_BALLOON_CONTEXT    Context
     )
 {
-    PCHAR                           Buffer;
+    PSTR                            Buffer;
     NTSTATUS                        status;
 
     status = XENBUS_STORE(Read,
@@ -792,7 +792,7 @@ BalloonGetFISTEntries(
         Warning("deflation disallowed\n");
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __BalloonStatus(
     _In_ NTSTATUS   status
     )

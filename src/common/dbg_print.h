@@ -44,8 +44,8 @@
 
 static __inline VOID
 __Error(
-    _In_ const CHAR *Prefix,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Prefix,
+    _In_ PCSTR      Format,
     ...
     )
 {
@@ -67,8 +67,8 @@ __Error(
 
 static __inline VOID
 __Warning(
-    _In_ const CHAR *Prefix,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Prefix,
+    _In_ PCSTR      Format,
     ...
     )
 {
@@ -91,8 +91,8 @@ __Warning(
 #if DBG
 static __inline VOID
 __Trace(
-    _In_ const CHAR *Prefix,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Prefix,
+    _In_ PCSTR      Format,
     ...
     )
 {
@@ -117,8 +117,8 @@ __Trace(
 
 static __inline VOID
 __Info(
-    _In_ const CHAR *Prefix,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Prefix,
+    _In_ PCSTR      Format,
     ...
     )
 {

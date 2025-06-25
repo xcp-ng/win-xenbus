@@ -81,7 +81,7 @@ _Check_return_
 XEN_API
 NTSTATUS
 XenVersionExtra(
-    _Out_writes_(XEN_EXTRAVERSION_LEN) PCHAR    Extra
+    _Out_writes_z_(XEN_EXTRAVERSION_LEN) PSTR   Extra
     )
 {
     xen_extraversion_t                          op;

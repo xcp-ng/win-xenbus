@@ -59,7 +59,7 @@ struct _XENBUS_DEBUG_CONTEXT {
     LONG                        References;
     KBUGCHECK_CALLBACK_RECORD   CallbackRecord;
     LIST_ENTRY                  CallbackList;
-    const CHAR                  *CallbackPrefix;
+    PCSTR                       CallbackPrefix;
     HIGH_LOCK                   CallbackLock;
 };
 
@@ -92,7 +92,7 @@ RtlCaptureStackBackTrace(
 static NTSTATUS
 DebugRegister(
     _In_ PINTERFACE                     Interface,
-    _In_ PCHAR                          Prefix,
+    _In_ PSTR                           Prefix,
     _In_ XENBUS_DEBUG_FUNCTION          Function,
     _In_opt_ PVOID                      Argument,
     _Out_opt_ PXENBUS_DEBUG_CALLBACK    *Callback
@@ -132,7 +132,7 @@ fail1:
 static VOID
 DebugPrintf(
     _In_ PINTERFACE             Interface,
-    _In_ const CHAR             *Format,
+    _In_ PCSTR                  Format,
     ...
     )
 {
@@ -175,7 +175,7 @@ DebugCallback(
     _In_ BOOLEAN                Crashing
     )
 {
-    PCHAR                       Name;
+    PSTR                        Name;
     ULONG_PTR                   Offset;
 
     ModuleLookup((ULONG_PTR)Callback->Function, &Name, &Offset);

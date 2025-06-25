@@ -90,7 +90,7 @@ typedef BOOLEAN
 typedef ULONG
 (*XENBUS_CONSOLE_READ)(
     _In_ PINTERFACE Interface,
-    _In_ PCHAR      Data,
+    _In_ PSTR       Data,
     _In_ ULONG      Length
     );
 
@@ -118,7 +118,7 @@ typedef BOOLEAN
 typedef ULONG
 (*XENBUS_CONSOLE_WRITE)(
     _In_ PINTERFACE Interface,
-    _In_ PCHAR      Data,
+    _In_ PSTR       Data,
     _In_ ULONG      Length
     );
 

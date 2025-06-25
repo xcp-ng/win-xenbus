@@ -57,10 +57,10 @@ PdoIsMissing(
 extern VOID
 PdoSetMissing(
     _In_ PXENBUS_PDO    Pdo,
-    _In_ const CHAR     *Reason
+    _In_ PCSTR          Reason
     );
 
-extern PCHAR
+extern PSTR
 PdoGetName(
     _In_ PXENBUS_PDO    Pdo
     );

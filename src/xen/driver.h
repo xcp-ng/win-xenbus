@@ -45,7 +45,7 @@ DriverGetUnplugKey(
 
 extern PMDL
 DriverGetNamedPages(
-    _In_ PCHAR  Name,
+    _In_ PSTR   Name,
     _In_ ULONG  Count
     );
 

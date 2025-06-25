@@ -50,7 +50,7 @@
 #define UNPLUG_TAG  'LPNU'
 
 typedef struct _UNPLUG_DATA {
-    PCHAR       Name;
+    PSTR        Name;
     BOOLEAN     Found;
 } UNPLUG_DATA, *PUNPLUG_DATA;
 
@@ -88,7 +88,7 @@ UnplugSetBootEmulated(
     PUNPLUG_CONTEXT Context = &UnplugContext;
     CHAR            Key[] = "XEN:BOOT_EMULATED=";
     PANSI_STRING    Option;
-    PCHAR           Value;
+    PSTR            Value;
     NTSTATUS        status;
 
     status = RegistryQuerySystemStartOption(Key, &Option);
@@ -210,7 +210,7 @@ UnplugCheckEnumKeyCallback(
 
 static NTSTATUS
 UnplugCheckEnumKey(
-    _In_ PCHAR          EnumName,
+    _In_ PSTR           EnumName,
     _Out_ PULONG        Value
     )
 {
@@ -266,8 +266,8 @@ UnplugSetRequest(
 {
     PUNPLUG_CONTEXT     Context = &UnplugContext;
     HANDLE              UnplugKey;
-    PCHAR               ValueName;
-    PCHAR               EnumName;
+    PSTR                ValueName;
+    PSTR                EnumName;
     ULONG               Value;
     KIRQL               Irql;
     NTSTATUS            status;
@@ -321,7 +321,7 @@ UnplugIncrementValue(
     )
 {
     HANDLE              UnplugKey;
-    PCHAR               ValueName;
+    PSTR                ValueName;
     ULONG               Value;
     NTSTATUS            status;
 
@@ -372,7 +372,7 @@ UnplugDecrementValue(
     )
 {
     HANDLE              UnplugKey;
-    PCHAR               ValueName;
+    PSTR                ValueName;
     LONG                Value;
     NTSTATUS            status;
 

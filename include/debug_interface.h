@@ -93,7 +93,7 @@ typedef VOID
 typedef NTSTATUS
 (*XENBUS_DEBUG_REGISTER)(
     _In_ PINTERFACE                 Interface,
-    _In_ PCHAR                      Prefix,
+    _In_ PSTR                       Prefix,
     _In_ XENBUS_DEBUG_FUNCTION      Function,
     _In_opt_ PVOID                  Argument,
     _Out_ PXENBUS_DEBUG_CALLBACK    *Callback
@@ -112,7 +112,7 @@ typedef NTSTATUS
 typedef VOID
 (*XENBUS_DEBUG_PRINTF)(
     _In_ PINTERFACE             Interface,
-    _In_ const CHAR             *Format,
+    _In_ PCSTR                  Format,
     ...
     );
 

@@ -75,8 +75,8 @@ typedef VOID
 typedef BOOLEAN
 (*XENFILT_EMULATED_IS_DEVICE_PRESENT)(
     _In_ PVOID      Context,
-    _In_ PCHAR      DeviceID,
-    _In_opt_ PCHAR  InstanceID
+    _In_ PSTR       DeviceID,
+    _In_opt_ PSTR   InstanceID
     );
 
 typedef BOOLEAN

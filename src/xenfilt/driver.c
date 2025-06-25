@@ -206,15 +206,15 @@ DriverRemoveFunctionDeviceObject(
 
 static FORCEINLINE NTSTATUS
 __DriverGetActive(
-    _In_ const CHAR *Key,
-    _Out_ PCHAR     *Value
+    _In_ PCSTR              Key,
+    _Outptr_result_z_ PSTR  *Value
     )
 {
-    HANDLE          ParametersKey;
-    CHAR            Name[MAXNAMELEN];
-    PANSI_STRING    Ansi;
-    ULONG           Length;
-    NTSTATUS        status;
+    HANDLE                  ParametersKey;
+    CHAR                    Name[MAXNAMELEN];
+    PANSI_STRING            Ansi;
+    ULONG                   Length;
+    NTSTATUS                status;
 
     Trace("====>\n");
 
@@ -272,8 +272,8 @@ fail1:
 
 NTSTATUS
 DriverGetActive(
-    _In_ const CHAR *Key,
-    _Out_ PCHAR     *Value
+    _In_ PCSTR              Key,
+    _Outptr_result_z_ PSTR  *Value
     )
 {
     return __DriverGetActive(Key, Value);
@@ -284,7 +284,7 @@ DriverIsActivePresent(
     VOID
     )
 {
-    PCHAR       ActiveDeviceID;
+    PSTR        ActiveDeviceID;
     BOOLEAN     Present;
     NTSTATUS    status;
 
@@ -453,13 +453,13 @@ NTSTATUS
 DriverQueryId(
     _In_ PDEVICE_OBJECT     DeviceObject,
     _In_ BUS_QUERY_ID_TYPE  Type,
-    _Out_ PCHAR             *Id
+    _Outptr_result_z_ PSTR  *Id
     )
 {
     PIRP                    Irp;
     KEVENT                  Event;
     PIO_STACK_LOCATION      StackLocation;
-    PWCHAR                  Buffer;
+    PWSTR                   Buffer;
     NTSTATUS                status;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
@@ -524,7 +524,7 @@ DriverQueryId(
     if (!NT_SUCCESS(status))
         goto fail3;
 
-    Buffer = (PWCHAR)Irp->IoStatus.Information;
+    Buffer = (PWSTR)Irp->IoStatus.Information;
 
     switch (Type) {
     case BusQueryDeviceID:
@@ -617,13 +617,13 @@ NTSTATUS
 DriverQueryDeviceText(
     _In_ PDEVICE_OBJECT     DeviceObject,
     _In_ DEVICE_TEXT_TYPE   Type,
-    _Out_ PCHAR             *Text
+    _Outptr_result_z_ PSTR  *Text
     )
 {
     PIRP                    Irp;
     KEVENT                  Event;
     PIO_STACK_LOCATION      StackLocation;
-    PWCHAR                  Buffer;
+    PWSTR                   Buffer;
     ULONG                   Length;
     NTSTATUS                status;
 
@@ -673,7 +673,7 @@ DriverQueryDeviceText(
     if (!NT_SUCCESS(status))
         goto fail2;
 
-    Buffer = (PWCHAR)Irp->IoStatus.Information;
+    Buffer = (PWSTR)Irp->IoStatus.Information;
     Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
 
     *Text = __AllocatePoolWithTag(PagedPool, Length, 'TLIF');
@@ -703,7 +703,7 @@ fail1:
     return status;
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __EmulatedTypeName(
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
     )
@@ -718,7 +718,7 @@ __EmulatedTypeName(
 
 static XENFILT_EMULATED_OBJECT_TYPE
 DriverGetEmulatedType(
-    _In_ PCHAR                      Id
+    _In_ PSTR                       Id
     )
 {
     HANDLE                          ParametersKey;
@@ -780,7 +780,7 @@ DriverAddDevice(
     _In_ PDEVICE_OBJECT             PhysicalDeviceObject
     )
 {
-    PCHAR                           Id;
+    PSTR                            Id;
     XENFILT_EMULATED_OBJECT_TYPE    Type;
     NTSTATUS                        status;
 

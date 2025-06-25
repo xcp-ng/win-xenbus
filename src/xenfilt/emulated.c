@@ -93,13 +93,13 @@ static NTSTATUS
 EmulatedSetObjectDeviceData(
     _In_ PXENFILT_EMULATED_OBJECT       EmulatedObject,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
-    _In_ PCHAR                          DeviceID,
-    _In_ PCHAR                          InstanceID,
-    _In_opt_ PCHAR                      CompatibleIDs
+    _In_ PSTR                           DeviceID,
+    _In_ PSTR                           InstanceID,
+    _In_opt_ PSTR                       CompatibleIDs
     )
 {
     ULONG                               Index;
-    PCHAR                               LastMatch;
+    PSTR                                LastMatch;
     NTSTATUS                            status;
 
     status = STATUS_INVALID_PARAMETER;
@@ -154,12 +154,12 @@ static NTSTATUS
 EmulatedSetObjectDiskData(
     _In_ PXENFILT_EMULATED_OBJECT       EmulatedObject,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
-    _In_ PCHAR                          DeviceID,
-    _In_ PCHAR                          InstanceID,
-    _In_opt_ PCHAR                      CompatibleIDs
+    _In_ PSTR                           DeviceID,
+    _In_ PSTR                           InstanceID,
+    _In_opt_ PSTR                       CompatibleIDs
     )
 {
-    PCHAR                               End;
+    PSTR                                End;
     ULONG                               Controller;
     ULONG                               Target;
     ULONG                               Lun;
@@ -223,9 +223,9 @@ fail1:
 NTSTATUS
 EmulatedAddObject(
     _In_ PXENFILT_EMULATED_CONTEXT      Context,
-    _In_ PCHAR                          DeviceID,
-    _In_ PCHAR                          InstanceID,
-    _In_opt_ PCHAR                      CompatibleIDs,
+    _In_ PSTR                           DeviceID,
+    _In_ PSTR                           InstanceID,
+    _In_opt_ PSTR                       CompatibleIDs,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
     _Out_ PXENFILT_EMULATED_OBJECT      *EmulatedObject
     )
@@ -305,8 +305,8 @@ EmulatedRemoveObject(
 static BOOLEAN
 EmulatedIsDevicePresent(
     _In_ PINTERFACE             Interface,
-    _In_ PCHAR                  DeviceID,
-    _In_opt_ PCHAR              InstanceID
+    _In_ PSTR                   DeviceID,
+    _In_opt_ PSTR               InstanceID
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;

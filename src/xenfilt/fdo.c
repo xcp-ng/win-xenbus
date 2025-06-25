@@ -221,7 +221,7 @@ __FdoSetDeviceID(
 
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __FdoGetDeviceID(
     _In_ PXENFILT_FDO   Fdo
     )
@@ -254,7 +254,7 @@ __FdoSetInstanceID(
                          &Dx->InstanceID);
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __FdoGetInstanceID(
     _In_ PXENFILT_FDO   Fdo
     )
@@ -290,7 +290,7 @@ __FdoSetName(
     ASSERT(NT_SUCCESS(status));
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __FdoGetName(
     _In_ PXENFILT_FDO   Fdo
     )

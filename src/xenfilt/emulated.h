@@ -68,9 +68,9 @@ EmulatedTeardown(
 extern NTSTATUS
 EmulatedAddObject(
     _In_ PXENFILT_EMULATED_CONTEXT      Context,
-    _In_ PCHAR                          DeviceID,
-    _In_ PCHAR                          InstanceID,
-    _In_opt_ PCHAR                      CompatibleIDs,
+    _In_ PSTR                           DeviceID,
+    _In_ PSTR                           InstanceID,
+    _In_opt_ PSTR                       CompatibleIDs,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
     _Out_ PXENFILT_EMULATED_OBJECT      *EmulatedObject
     );

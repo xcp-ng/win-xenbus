@@ -44,7 +44,7 @@ ProcessTeardown(
     VOID
     );
 
-extern PCHAR
+extern PSTR
 ProcessGetImageFileName(
     _In_ PEPROCESS  Process
     );

@@ -118,7 +118,7 @@ ConsoleOutAvailable(
 static ULONG
 ConsoleCopyToOut(
     _In_ PXENBUS_CONSOLE_CONTEXT    Context,
-    _In_ PCHAR                      Data,
+    _In_ PSTR                       Data,
     _In_ ULONG                      Length
     )
 {
@@ -193,7 +193,7 @@ ConsoleInAvailable(
 static ULONG
 ConsoleCopyFromIn(
     _In_ PXENBUS_CONSOLE_CONTEXT    Context,
-    _In_ PCHAR                      Data,
+    _In_ PSTR                       Data,
     _In_ ULONG                      Length
     )
 {
@@ -486,7 +486,7 @@ ConsoleDebugCallback(
              ListEntry != &(Context->WakeupList);
              ListEntry = ListEntry->Flink) {
             PXENBUS_CONSOLE_WAKEUP  Wakeup;
-            PCHAR                   Name;
+            PSTR                    Name;
             ULONG_PTR               Offset;
 
             Wakeup = CONTAINING_RECORD(ListEntry,
@@ -530,7 +530,7 @@ ConsoleCanRead(
 static ULONG
 ConsoleRead(
     _In_ PINTERFACE         Interface,
-    _In_ PCHAR              Data,
+    _In_ PSTR               Data,
     _In_ ULONG              Length
     )
 {
@@ -579,7 +579,7 @@ ConsoleCanWrite(
 static ULONG
 ConsoleWrite(
     _In_ PINTERFACE         Interface,
-    _In_ PCHAR              Data,
+    _In_ PSTR               Data,
     _In_ ULONG              Length
     )
 {

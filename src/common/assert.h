@@ -58,8 +58,8 @@ __Bug(
 
 #define BUG(_TEXT)                                              \
         do {                                                    \
-            const CHAR  *_Text = (_TEXT);                       \
-            const CHAR  *_File = __FILE__;                      \
+            PCSTR       _Text = (_TEXT);                       \
+            PCSTR       _File = __FILE__;                      \
             ULONG       _Line = __LINE__;                       \
                                                                 \
             Error("BUG: " _TEXT "\n");                          \
@@ -154,8 +154,8 @@ __Bug(
 
 static __inline BOOLEAN
 _IsZeroMemory(
-    _In_ const PCHAR    Caller,
-    _In_ const PCHAR    Name,
+    _In_ const PSTR     Caller,
+    _In_ const PSTR     Name,
     _In_ PVOID          Buffer,
     _In_ ULONG          Length
     )
@@ -178,8 +178,8 @@ _IsZeroMemory(
 
 static __inline BOOLEAN
 _IsZeroMemory(
-    _In_ const PCHAR    Caller,
-    _In_ const PCHAR    Name,
+    _In_ const PSTR     Caller,
+    _In_ const PSTR     Name,
     _In_ PVOID          Buffer,
     _In_ ULONG          Length
     )

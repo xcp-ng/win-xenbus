@@ -143,7 +143,7 @@ SuspendDeregister(
 
 static FORCEINLINE VOID
 __SuspendLogTimers(
-    _In_ const CHAR *Prefix
+    _In_ PCSTR      Prefix
     )
 {
     LARGE_INTEGER   SystemTime;
@@ -331,7 +331,7 @@ SuspendDebugCallback(
          ListEntry != &Context->EarlyList;
          ListEntry = ListEntry->Flink) {
         PXENBUS_SUSPEND_CALLBACK    Callback;
-        PCHAR                       Name;
+        PSTR                        Name;
         ULONG_PTR                   Offset;
 
         Callback = CONTAINING_RECORD(ListEntry, XENBUS_SUSPEND_CALLBACK, ListEntry);
@@ -358,7 +358,7 @@ SuspendDebugCallback(
          ListEntry != &Context->LateList;
          ListEntry = ListEntry->Flink) {
         PXENBUS_SUSPEND_CALLBACK    Callback;
-        PCHAR                       Name;
+        PSTR                        Name;
         ULONG_PTR                   Offset;
 
         Callback = CONTAINING_RECORD(ListEntry, XENBUS_SUSPEND_CALLBACK, ListEntry);

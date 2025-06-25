@@ -99,7 +99,7 @@ __SystemFree(
     __FreePoolWithTag(Buffer, XEN_SYSTEM_TAG);
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 __PlatformIdName(
     _In_ ULONG  PlatformId
     )
@@ -120,7 +120,7 @@ __PlatformIdName(
 #undef  PLATFORM_ID_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 __SuiteName(
     _In_ ULONG SuiteBit
     )
@@ -153,7 +153,7 @@ __SuiteName(
 #undef  SUITE_NAME
 }
 
-static FORCEINLINE const CHAR *
+static FORCEINLINE PCSTR
 __ProductTypeName(
     _In_ UCHAR  ProductType
     )
@@ -1071,7 +1071,7 @@ fail1:
 
 static NTSTATUS
 SystemRegisterCallback(
-    _In_ PWCHAR             Name,
+    _In_ PWSTR              Name,
     _In_ PCALLBACK_FUNCTION Function,
     _In_opt_ PVOID          Argument,
     _Out_ PVOID             *Handle

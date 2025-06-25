@@ -61,18 +61,18 @@ typedef struct _MONITOR_CONTEXT {
     HANDLE                  RequestEvent;
     HANDLE                  Timer;
     HKEY                    RequestKey;
-    PTCHAR                  Title;
-    PTCHAR                  Text;
-    PTCHAR                  Question;
+    PTSTR                   Title;
+    PTSTR                   Text;
+    PTSTR                   Question;
     BOOL                    RebootPrompted;
-    PTCHAR                  RebootRequestedBy;
+    PTSTR                   RebootRequestedBy;
     HANDLE                  ResponseEvent;
     DWORD                   Response;
 } MONITOR_CONTEXT, *PMONITOR_CONTEXT;
 
 typedef struct _REBOOT_PROMPT {
-    PTCHAR                  Title;
-    PTCHAR                  Text;
+    PTSTR                   Title;
+    PTSTR                   Text;
     HANDLE                  ResponseEvent;
     PDWORD                  PResponse;
 } REBOOT_PROMPT, *PREBOOT_PROMPT;
@@ -93,7 +93,7 @@ MONITOR_CONTEXT MonitorContext;
 static VOID
 #pragma prefast(suppress:6262) // Function uses '1036' bytes of stack: exceeds /analyze:stacksize'1024'
 __Log(
-    _In_ const CHAR     *Format,
+    _In_ PCSTR          Format,
     ...
     )
 {
@@ -146,12 +146,12 @@ __Log(
 #define Log(_Format, ...) \
         __Log(__MODULE__ "|" __FUNCTION__ ": " _Format, __VA_ARGS__)
 
-static PTCHAR
+static PTSTR
 GetErrorMessage(
     _In_  HRESULT   Error
     )
 {
-    PTCHAR          Message;
+    PTSTR           Message;
     ULONG           Index;
 
     if (!FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
@@ -175,7 +175,7 @@ GetErrorMessage(
     return Message;
 }
 
-static const CHAR *
+static PCSTR
 ServiceStateName(
     _In_ DWORD  State
     )
@@ -241,7 +241,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -285,7 +285,7 @@ MonitorCtrlHandlerEx(
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
-static const CHAR *
+static PCSTR
 WTSStateName(
     _In_ DWORD  State
     )
@@ -316,7 +316,7 @@ WTSStateName(
 
 static VOID
 DoReboot(
-    _In_ PTCHAR Message,
+    _In_ PTSTR  Message,
     _In_ DWORD  Timeout
     )
 {
@@ -365,9 +365,9 @@ GetPromptTimeout(
     return Value;
 }
 
-static PTCHAR
+static PTSTR
 GetDisplayName(
-    _In_ PTCHAR         DriverName
+    _In_ PTSTR          DriverName
     )
 {
     HRESULT             Result;
@@ -376,7 +376,7 @@ GetDisplayName(
     DWORD               MaxValueLength;
     DWORD               Type;
     DWORD               DisplayNameLength;
-    PTCHAR              DisplayName;
+    PTSTR               DisplayName;
     HRESULT             Error;
 
     Result = StringCbPrintf(ServiceKeyName,
@@ -458,7 +458,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -521,7 +521,7 @@ DoPromptForReboot(
 
     for (Index = 0; Index < Count; Index++) {
         DWORD                   SessionId = SessionInfo[Index].SessionId;
-        PTCHAR                  Name = SessionInfo[Index].pWinStationName;
+        PTSTR                   Name = SessionInfo[Index].pWinStationName;
         WTS_CONNECTSTATE_CLASS  State = SessionInfo[Index].State;
         DWORD                   Response;
 
@@ -570,14 +570,14 @@ fail1:
 
 static VOID
 PromptForReboot(
-    _In_ PTCHAR         DriverName
+    _In_ PTSTR          DriverName
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
     HRESULT             Result;
     PREBOOT_PROMPT      Prompt;
-    PTCHAR              DisplayName;
-    PTCHAR              Description;
+    PTSTR               DisplayName;
+    PTSTR               Description;
     HANDLE              PromptThread;
     DWORD               TextLength;
     DWORD               Error;
@@ -670,7 +670,7 @@ fail2:
 
 fail1:
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -681,7 +681,7 @@ fail1:
 
 static VOID
 TryAutoReboot(
-    _In_ PTCHAR         DriverName
+    _In_ PTSTR          DriverName
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
@@ -692,9 +692,9 @@ TryAutoReboot(
     DWORD               RebootCount;
     DWORD               Length;
     DWORD               Timeout;
-    PTCHAR              DisplayName;
-    PTCHAR              Description;
-    PTCHAR              Text;
+    PTSTR               DisplayName;
+    PTSTR               Description;
+    PTSTR               Text;
     DWORD               TextLength;
     ULONG               PowerInfo;
     NTSTATUS            Status;
@@ -847,7 +847,7 @@ fail2:
 
 fail1:
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -865,7 +865,7 @@ CheckRequestSubKeys(
     DWORD               SubKeys;
     DWORD               MaxSubKeyLength;
     DWORD               SubKeyLength;
-    PTCHAR              SubKeyName;
+    PTSTR               SubKeyName;
     DWORD               Index;
     HKEY                SubKey;
     HRESULT             Error;
@@ -976,7 +976,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1012,7 +1012,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1077,7 +1077,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1089,14 +1089,14 @@ fail1:
 _Success_(return)
 static BOOL
 GetRequestKeyName(
-    _Out_ PTCHAR        *RequestKeyName
+    _Outptr_result_z_ PTSTR     *RequestKeyName
     )
 {
-    PMONITOR_CONTEXT    Context = &MonitorContext;
-    DWORD               MaxValueLength;
-    DWORD               RequestKeyNameLength;
-    DWORD               Type;
-    HRESULT             Error;
+    PMONITOR_CONTEXT            Context = &MonitorContext;
+    DWORD                       MaxValueLength;
+    DWORD                       RequestKeyNameLength;
+    DWORD                       Type;
+    HRESULT                     Error;
 
     Error = RegQueryInfoKey(Context->ParametersKey,
                             NULL,
@@ -1156,7 +1156,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1300,7 +1300,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1311,7 +1311,7 @@ fail1:
 
 static BOOL
 RemoveStartOverride(
-    _In_ PTCHAR         DriverName
+    _In_ PTSTR          DriverName
     )
 {
     TCHAR               KeyName[MAX_PATH];
@@ -1360,7 +1360,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1376,7 +1376,7 @@ MonitorMain(
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
-    PTCHAR              RequestKeyName;
+    PTSTR               RequestKeyName;
     BOOL                Success;
     HRESULT             Error;
     LARGE_INTEGER       DueTime;
@@ -1601,7 +1601,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1666,7 +1666,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1738,7 +1738,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);
@@ -1775,7 +1775,7 @@ fail1:
     Error = GetLastError();
 
     {
-        PTCHAR  Message;
+        PTSTR   Message;
         Message = GetErrorMessage(Error);
         Log("fail1 (%s)", Message);
         LocalFree(Message);

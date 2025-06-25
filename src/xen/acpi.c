@@ -212,7 +212,7 @@ fail1:
 
 NTSTATUS
 AcpiGetTable(
-    _In_ const CHAR     *Signature,
+    _In_ PCSTR          Signature,
     _Out_opt_ PVOID     Buffer,
     _Inout_ PULONG      Length
     )

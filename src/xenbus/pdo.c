@@ -65,7 +65,7 @@ struct _XENBUS_PDO {
 
     PXENBUS_FDO                 Fdo;
     BOOLEAN                     Missing;
-    const CHAR                  *Reason;
+    PCSTR                       Reason;
 
     BOOLEAN                     Removable;
     BOOLEAN                     Ejectable;
@@ -191,7 +191,7 @@ __PdoGetSystemPowerState(
 static FORCEINLINE VOID
 __PdoSetMissing(
     _In_ PXENBUS_PDO    Pdo,
-    _In_ const CHAR     *Reason
+    _In_ PCSTR          Reason
     )
 {
     Pdo->Reason = Reason;
@@ -201,7 +201,7 @@ __PdoSetMissing(
 VOID
 PdoSetMissing(
     _In_ PXENBUS_PDO    Pdo,
-    _In_ const CHAR     *Reason
+    _In_ PCSTR          Reason
     )
 {
     __PdoSetMissing(Pdo, Reason);
@@ -239,7 +239,7 @@ __PdoSetName(
     ASSERT(NT_SUCCESS(status));
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __PdoGetName(
     _In_ PXENBUS_PDO    Pdo
     )
@@ -249,7 +249,7 @@ __PdoGetName(
     return Dx->Name;
 }
 
-PCHAR
+PSTR
 PdoGetName(
     _In_ PXENBUS_PDO    Pdo
     )
@@ -491,7 +491,7 @@ PdoGetDeviceObject(
     return __PdoGetDeviceObject(Pdo);
 }
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __PdoGetVendorName(
     _In_ PXENBUS_PDO    Pdo
     )
@@ -1038,7 +1038,7 @@ DEFINE_PDO_QUERY_INTERFACE(Console)
 
 struct _INTERFACE_ENTRY {
     const GUID  *Guid;
-    const CHAR  *Name;
+    PCSTR       Name;
     NTSTATUS    (*Query)(PXENBUS_PDO, PIRP);
 };
 
@@ -1250,7 +1250,7 @@ PdoQueryDeviceText(
     )
 {
     PIO_STACK_LOCATION  StackLocation;
-    PWCHAR              Buffer;
+    PWSTR               Buffer;
     UNICODE_STRING      Text;
     NTSTATUS            status;
 
@@ -1361,7 +1361,7 @@ PdoQueryId(
     )
 {
     PIO_STACK_LOCATION  StackLocation;
-    PWCHAR              Buffer;
+    PWSTR               Buffer;
     UNICODE_STRING      Id;
     ULONG               Type;
     NTSTATUS            status;

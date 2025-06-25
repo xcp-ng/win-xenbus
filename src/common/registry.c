@@ -188,15 +188,15 @@ fail1:
 
 static NTSTATUS
 RegistryOpenRoot(
-    _In_ PWCHAR         Path,
-    _Out_ PHANDLE       Parent,
-    _Out_ PWCHAR        *ChildPath
+    _In_ PWSTR              Path,
+    _Out_ PHANDLE           Parent,
+    _Outptr_result_z_ PWSTR *ChildPath
     )
 {
-    const WCHAR         Prefix[] = L"\\Registry\\Machine\\";
-    ULONG               Length;
-    UNICODE_STRING      Unicode;
-    NTSTATUS            status;
+    PCWSTR                  Prefix = L"\\Registry\\Machine\\";
+    ULONG                   Length;
+    UNICODE_STRING          Unicode;
+    NTSTATUS                status;
 
     Length = (ULONG)wcslen(Prefix);
 
@@ -227,11 +227,11 @@ RegistryCreateKey(
     _Out_ PHANDLE           Key
     )
 {
-    PWCHAR              Buffer;
+    PWSTR               Buffer;
     HANDLE              Root;
-    PWCHAR              ChildPath;
-    PWCHAR              ChildName;
-    PWCHAR              Context;
+    PWSTR               ChildPath;
+    PWSTR               ChildName;
+    PWSTR               Context;
     HANDLE              Child;
     NTSTATUS            status;
 
@@ -368,7 +368,7 @@ RegistryOpenHardwareKey(
     HANDLE                  SubKey;
     ULONG                   Length;
     PKEY_NAME_INFORMATION   Info;
-    PWCHAR                  Cursor;
+    PWSTR                   Cursor;
     UNICODE_STRING          Unicode;
     NTSTATUS                status;
 
@@ -438,7 +438,7 @@ fail1:
 NTSTATUS
 RegistryOpenSubKey(
     _In_opt_ PHANDLE    Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _In_ ACCESS_MASK    DesiredAccess,
     _Out_ PHANDLE       SubKey
     )
@@ -471,7 +471,7 @@ fail1:
 NTSTATUS
 RegistryCreateSubKey(
     _In_opt_ HANDLE     Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _In_ ULONG          Options,
     _Out_ PHANDLE       SubKey
     )
@@ -504,7 +504,7 @@ fail1:
 NTSTATUS
 RegistryDeleteSubKey(
     _In_ PHANDLE        Key,
-    _In_ PCHAR          Name
+    _In_ PSTR           Name
     )
 {
     ANSI_STRING         Ansi;
@@ -756,7 +756,7 @@ fail1:
 NTSTATUS
 RegistryDeleteValue(
     _In_ PHANDLE        Key,
-    _In_ PCHAR          Name
+    _In_ PSTR           Name
     )
 {
     ANSI_STRING         Ansi;
@@ -787,7 +787,7 @@ fail1:
 NTSTATUS
 RegistryQueryDwordValue(
     _In_ HANDLE                     Key,
-    _In_ PCHAR                      Name,
+    _In_ PSTR                       Name,
     _Out_ PULONG                    Value
     )
 {
@@ -857,7 +857,7 @@ fail1:
 NTSTATUS
 RegistryUpdateDwordValue(
     _In_ HANDLE                     Key,
-    _In_ PCHAR                      Name,
+    _In_ PSTR                       Name,
     _In_ ULONG                      Value
     )
 {
@@ -912,7 +912,7 @@ fail1:
 
 static PANSI_STRING
 RegistrySzToAnsi(
-    _In_ PWCHAR     Buffer
+    _In_ PWSTR      Buffer
     )
 {
     PANSI_STRING    Ansi;
@@ -951,7 +951,7 @@ fail1:
 
 static PANSI_STRING
 RegistryMultiSzToAnsi(
-    _In_ PWCHAR     Buffer
+    _In_ PWSTR      Buffer
     )
 {
     PANSI_STRING    Ansi;
@@ -1014,7 +1014,7 @@ fail1:
 NTSTATUS
 RegistryQuerySzValue(
     _In_ HANDLE                     Key,
-    _In_ PCHAR                      Name,
+    _In_ PSTR                       Name,
     _Out_opt_ PULONG                Type,
     _Out_ PANSI_STRING              *Array
     )
@@ -1060,12 +1060,12 @@ RegistryQuerySzValue(
     switch (Value->Type) {
     case REG_SZ:
         status = STATUS_NO_MEMORY;
-        *Array = RegistrySzToAnsi((PWCHAR)Value->Data);
+        *Array = RegistrySzToAnsi((PWSTR)Value->Data);
         break;
 
     case REG_MULTI_SZ:
         status = STATUS_NO_MEMORY;
-        *Array = RegistryMultiSzToAnsi((PWCHAR)Value->Data);
+        *Array = RegistryMultiSzToAnsi((PWSTR)Value->Data);
         break;
 
     default:
@@ -1101,7 +1101,7 @@ fail1:
 NTSTATUS
 RegistryQueryBinaryValue(
     _In_ HANDLE                     Key,
-    _In_ PCHAR                      Name,
+    _In_ PSTR                       Name,
     _Out_ PVOID                     *Buffer,
     _Out_ PULONG                    Length
     )
@@ -1186,7 +1186,7 @@ fail1:
 NTSTATUS
 RegistryUpdateBinaryValue(
     _In_ HANDLE                     Key,
-    _In_ PCHAR                      Name,
+    _In_ PSTR                       Name,
     _In_ PVOID                      Buffer,
     _In_ ULONG                      Length
     )
@@ -1276,7 +1276,7 @@ RegistryQueryKeyName(
         goto fail3;
 
     Value->Name[Value->NameLength / sizeof (WCHAR)] = L'\0';
-    *Array = RegistrySzToAnsi((PWCHAR)Value->Name);
+    *Array = RegistrySzToAnsi((PWSTR)Value->Name);
 
     status = STATUS_NO_MEMORY;
     if (*Array == NULL)
@@ -1297,7 +1297,7 @@ fail1:
 
 NTSTATUS
 RegistryQuerySystemStartOption(
-    _In_ PCHAR                      Prefix,
+    _In_ PSTR                       Prefix,
     _Out_ PANSI_STRING              *Value
     )
 {
@@ -1305,8 +1305,8 @@ RegistryQuerySystemStartOption(
     HANDLE                          Key;
     PANSI_STRING                    Ansi;
     ULONG                           Length;
-    PCHAR                           Option;
-    PCHAR                           Context;
+    PSTR                            Option;
+    PSTR                            Context;
     NTSTATUS                        status;
 
     RtlInitUnicodeString(&Unicode, L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control");
@@ -1468,7 +1468,7 @@ fail1:
 NTSTATUS
 RegistryUpdateSzValue(
     _In_ HANDLE                     Key,
-    _In_ PCHAR                      Name,
+    _In_ PSTR                       Name,
     _In_ ULONG                      Type,
     _In_ PANSI_STRING               Array
     )

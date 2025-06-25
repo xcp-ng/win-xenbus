@@ -52,7 +52,7 @@ FdoDestroy(
     _In_ PXENFILT_FDO   Fdo
     );
 
-extern PCHAR
+extern PSTR
 FdoGetPrefix(
     _In_ PXENFILT_FDO   Fdo
     );

@@ -274,15 +274,15 @@ __FreePages(
 
 #define __FreePage(_Mdl)    __FreePages(_Mdl)
 
-static FORCEINLINE PCHAR
+static FORCEINLINE PSTR
 __strtok_r(
-    _In_opt_ PCHAR  Buffer,
-    _In_ PCHAR      Delimiter,
-    _Inout_ PCHAR   *Context
+    _In_opt_ PSTR   Buffer,
+    _In_ PSTR       Delimiter,
+    _Inout_ PSTR    *Context
     )
 {
-    PCHAR           Token;
-    PCHAR           End;
+    PSTR            Token;
+    PSTR            End;
 
     if (Buffer != NULL)
         *Context = Buffer;
@@ -312,15 +312,15 @@ __strtok_r(
     return Token;
 }
 
-static FORCEINLINE PWCHAR
+static FORCEINLINE PWSTR
 __wcstok_r(
-    _In_opt_ PWCHAR Buffer,
-    _In_ PWCHAR     Delimiter,
-    _Inout_ PWCHAR  *Context
+    _In_opt_ PWSTR  Buffer,
+    _In_ PWSTR      Delimiter,
+    _Inout_ PWSTR   *Context
     )
 {
-    PWCHAR          Token;
-    PWCHAR          End;
+    PWSTR           Token;
+    PWSTR           End;
 
     if (Buffer != NULL)
         *Context = Buffer;

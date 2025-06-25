@@ -824,7 +824,7 @@ __CacheFlushMagazines(
 static NTSTATUS
 CacheCreate(
     _In_ PINTERFACE         Interface,
-    _In_ const CHAR         *Name,
+    _In_ PCSTR              Name,
     _In_ ULONG              Size,
     _In_ ULONG              Reservation,
     _In_ ULONG              Cap,
@@ -946,7 +946,7 @@ fail1:
 static NTSTATUS
 CacheCreateVersion1(
     _In_ PINTERFACE         Interface,
-    _In_ const CHAR         *Name,
+    _In_ PCSTR              Name,
     _In_ ULONG              Size,
     _In_ ULONG              Reservation,
     _In_ NTSTATUS           (*Ctor)(PVOID, PVOID),

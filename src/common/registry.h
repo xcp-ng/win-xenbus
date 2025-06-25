@@ -96,7 +96,7 @@ RegistryOpenHardwareKey(
 extern NTSTATUS
 RegistryOpenSubKey(
     _In_opt_ HANDLE     Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _In_ ACCESS_MASK    DesiredAccess,
     _Out_ PHANDLE       SubKey
     );
@@ -104,7 +104,7 @@ RegistryOpenSubKey(
 extern NTSTATUS
 RegistryCreateSubKey(
     _In_opt_ HANDLE Key,
-    _In_ PCHAR      Name,
+    _In_ PSTR       Name,
     _In_ ULONG      Options,
     _Out_ PHANDLE   SubKey
     );
@@ -112,7 +112,7 @@ RegistryCreateSubKey(
 extern NTSTATUS
 RegistryDeleteSubKey(
     _In_ HANDLE     Key,
-    _In_ PCHAR      Name
+    _In_ PSTR       Name
     );
 
 extern NTSTATUS
@@ -132,27 +132,27 @@ RegistryEnumerateValues(
 extern NTSTATUS
 RegistryDeleteValue(
     _In_ HANDLE     Key,
-    _In_ PCHAR      Name
+    _In_ PSTR       Name
     );
 
 extern NTSTATUS
 RegistryQueryDwordValue(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _Out_ PULONG        Value
     );
 
 extern NTSTATUS
 RegistryUpdateDwordValue(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _In_ ULONG          Value
     );
 
 extern NTSTATUS
 RegistryQuerySzValue(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _Out_opt_ PULONG    Type,
     _Out_ PANSI_STRING  *Array
     );
@@ -160,7 +160,7 @@ RegistryQuerySzValue(
 extern NTSTATUS
 RegistryQueryBinaryValue(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _Out_ PVOID         *Buffer,
     _Out_ PULONG        Length
     );
@@ -168,7 +168,7 @@ RegistryQueryBinaryValue(
 extern NTSTATUS
 RegistryUpdateBinaryValue(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _In_ PVOID          Buffer,
     _In_ ULONG          Length
     );
@@ -181,7 +181,7 @@ RegistryQueryKeyName(
 
 extern NTSTATUS
 RegistryQuerySystemStartOption(
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _Out_ PANSI_STRING  *Option
     );
 
@@ -198,7 +198,7 @@ RegistryFreeBinaryValue(
 extern NTSTATUS
 RegistryUpdateSzValue(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _In_ ULONG          Type,
     _In_ PANSI_STRING   Array
     );

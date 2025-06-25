@@ -56,15 +56,15 @@
 XEN_API
 NTSTATUS
 ConfigGetActive(
-    _In_ const CHAR *Key,
-    _Out_ PCHAR     *Value
+    _In_ PCSTR              Key,
+    _Outptr_result_z_ PSTR  *Value
     )
 {
-    HANDLE          ActiveKey;
-    CHAR            Name[MAXNAMELEN];
-    PANSI_STRING    Ansi;
-    ULONG           Length;
-    NTSTATUS        status;
+    HANDLE                  ActiveKey;
+    CHAR                    Name[MAXNAMELEN];
+    PANSI_STRING            Ansi;
+    ULONG                   Length;
+    NTSTATUS                status;
 
     Trace("====>\n");
 
@@ -126,13 +126,13 @@ fail1:
 
 static FORCEINLINE BOOLEAN
 __ConfigIsDeviceLegacy(
-    _In_ PCHAR  DeviceID
+    _In_ PSTR   DeviceID
     )
 {
     UNREFERENCED_PARAMETER(DeviceID);
 
 #ifdef VENDOR_DEVICE_ID_STR
-    const CHAR  *VendorDeviceID = "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR;
+    PCSTR       VendorDeviceID = "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR;
 
     return _strnicmp(DeviceID, VendorDeviceID, strlen(VendorDeviceID)) != 0;
 #endif
@@ -152,7 +152,7 @@ __ConfigIsVendorDevicePresent(
     HANDLE      DeviceKey;
     BOOLEAN     Found;
     NTSTATUS    status;
-    const CHAR  *VendorDeviceID = "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR "&SUBSYS_C0005853&REV_01";
+    PCSTR       VendorDeviceID = "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR "&SUBSYS_C0005853&REV_01";
 
     status = RegistryOpenSubKey(NULL,
                                 ENUM_PATH,
@@ -164,7 +164,7 @@ __ConfigIsVendorDevicePresent(
     Found = FALSE;
 
     status = RegistryOpenSubKey(EnumKey,
-                                (PCHAR)VendorDeviceID,
+                                (PSTR)VendorDeviceID,
                                 KEY_READ,
                                 &DeviceKey);
     if (!NT_SUCCESS(status))
@@ -188,9 +188,9 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigSetActive(
-    _In_ PCHAR  DeviceID,
-    _In_ PCHAR  InstanceID,
-    _In_ PCHAR  LocationInformation
+    _In_ PSTR   DeviceID,
+    _In_ PSTR   InstanceID,
+    _In_ PSTR   LocationInformation
     )
 {
     HANDLE      ActiveKey;
@@ -273,15 +273,15 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigUpdateActive(
-    _In_ PCHAR  DeviceID,
-    _In_ PCHAR  InstanceID,
-    _In_ PCHAR  LocationInformation
+    _In_ PSTR   DeviceID,
+    _In_ PSTR   InstanceID,
+    _In_ PSTR   LocationInformation
     )
 {
     HANDLE      ActiveKey;
     ANSI_STRING Ansi[2];
-    PCHAR       ActiveInstanceID;
-    PCHAR       ActiveLocationInformation;
+    PSTR        ActiveInstanceID;
+    PSTR        ActiveLocationInformation;
     NTSTATUS    status;
 
     Trace("====>\n");
@@ -411,7 +411,7 @@ XEN_API
 NTSTATUS
 ConfigRequestReboot(
     _In_ HANDLE     ParametersKey,
-    _In_ PCHAR      Module
+    _In_ PSTR       Module
     )
 {
     PANSI_STRING    Ansi;
@@ -489,7 +489,7 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigQuerySystemStartOption(
-    _In_ PCHAR          Key,
+    _In_ PSTR           Key,
     _Out_ PANSI_STRING  *Option
     )
 {

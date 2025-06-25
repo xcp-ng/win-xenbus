@@ -52,7 +52,7 @@ typedef struct _LOG_SLOT {
 
 struct _LOG_DISPOSITION {
     LOG_LEVEL   Mask;
-    VOID        (*Function)(PVOID, PCHAR, ULONG);
+    VOID        (*Function)(PVOID, PSTR, ULONG);
     PVOID       Argument;
 };
 
@@ -121,9 +121,9 @@ __LogPut(
     Slot->Buffer[Slot->Offset++] = Character;
 }
 
-static PCHAR
+static PSTR
 LogFormatNumber(
-    _In_ PCHAR      Buffer,
+    _In_ PSTR       Buffer,
     _In_ ULONGLONG  Value,
     _In_ UCHAR      Base,
     _In_ BOOLEAN    UpperCase
@@ -185,7 +185,7 @@ static VOID
 LogWriteSlot(
     _In_ PLOG_SLOT  Slot,
     _In_ LONG       Count,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     _In_ va_list    Arguments
     )
 {
@@ -298,7 +298,7 @@ LogWriteSlot(
         }
         case 's': {
             if (Wide) {
-                PWCHAR  Value = va_arg(Arguments, PWCHAR);
+                PWSTR   Value = va_arg(Arguments, PWSTR);
                 ULONG   Length;
                 ULONG   Index;
 
@@ -324,7 +324,7 @@ LogWriteSlot(
                     }
                 }
             } else {
-                PCHAR   Value = va_arg(Arguments, PCHAR);
+                PSTR    Value = va_arg(Arguments, PSTR);
                 ULONG   Length;
                 ULONG   Index;
 
@@ -356,7 +356,7 @@ LogWriteSlot(
         case 'Z': {
             if (Wide) {
                 PUNICODE_STRING Value = va_arg(Arguments, PUNICODE_STRING);
-                PWCHAR          Buffer;
+                PWSTR           Buffer;
                 ULONG           Length;
                 ULONG           Index;
 
@@ -386,7 +386,7 @@ LogWriteSlot(
                 }
             } else {
                 PANSI_STRING Value = va_arg(Arguments, PANSI_STRING);
-                PCHAR        Buffer;
+                PSTR         Buffer;
                 ULONG        Length;
                 ULONG        Index;
 
@@ -434,7 +434,7 @@ VOID
 LogCchVPrintf(
     _In_ LOG_LEVEL  Level,
     _In_ ULONG      Count,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     _In_ va_list    Arguments
     )
 {
@@ -464,7 +464,7 @@ XEN_API
 VOID
 LogVPrintf(
     _In_ LOG_LEVEL  Level,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     _In_ va_list    Arguments
     )
 {
@@ -476,7 +476,7 @@ VOID
 LogCchPrintf(
     _In_ LOG_LEVEL  Level,
     _In_ ULONG      Count,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     ...
     )
 {
@@ -491,7 +491,7 @@ XEN_API
 VOID
 LogPrintf(
     _In_ LOG_LEVEL  Level,
-    _In_ const CHAR *Format,
+    _In_ PCSTR      Format,
     ...
     )
 {
@@ -603,7 +603,7 @@ LogTeardown(
 NTSTATUS
 LogAddDisposition(
     _In_ LOG_LEVEL          Mask,
-    _In_ VOID               (*Function)(PVOID, PCHAR, ULONG),
+    _In_ VOID               (*Function)(PVOID, PSTR, ULONG),
     _In_opt_ PVOID          Argument,
     _Out_ PLOG_DISPOSITION  *Disposition
     )
@@ -682,7 +682,7 @@ __LogDbgPrintCallbackEnable(
 {
     CHAR            Key[] = "XEN:DBG_PRINT=";
     PANSI_STRING    Option;
-    PCHAR           Value;
+    PSTR            Value;
     BOOLEAN         Enable;
     NTSTATUS        status;
 
@@ -721,7 +721,7 @@ LogResume(
 }
 
 typedef struct _XEN_LOG_LEVEL_NAME {
-    const CHAR      *Name;
+    PCSTR           Name;
     LOG_LEVEL       LogLevel;
 } XEN_LOG_LEVEL_NAME, *PXEN_LOG_LEVEL_NAME;
 
@@ -737,7 +737,7 @@ XEN_API
 NTSTATUS
 LogReadLogLevel(
     _In_ HANDLE         Key,
-    _In_ PCHAR          Name,
+    _In_ PSTR           Name,
     _Out_ PLOG_LEVEL    LogLevel
     )
 {

@@ -1465,7 +1465,7 @@ EvtchnDebugCallback(
              ListEntry != &Context->List;
              ListEntry = ListEntry->Flink) {
             PXENBUS_EVTCHN_CHANNEL  Channel;
-            PCHAR                   Name;
+            PSTR                    Name;
             ULONG_PTR               Offset;
 
             Channel = CONTAINING_RECORD(ListEntry, XENBUS_EVTCHN_CHANNEL, ListEntry);

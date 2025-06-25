@@ -122,12 +122,12 @@ FdoGetBusData(
     _In_ ULONG          Length
     );
 
-extern PCHAR
+extern PSTR
 FdoGetVendorName(
     _In_ PXENBUS_FDO    Fdo
     );
 
-extern PCHAR
+extern PSTR
 FdoGetName(
     _In_ PXENBUS_FDO    Fdo
     );
