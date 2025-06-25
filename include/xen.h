@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -69,11 +69,11 @@
 XEN_API
 NTSTATUS
 XenTouch(
-    IN  const CHAR  *Name,
-    IN  ULONG       MajorVersion,
-    IN  ULONG       MinorVersion,
-    IN  ULONG       MicroVersion,
-    IN  ULONG       BuildNumber
+    _In_ const CHAR *Name,
+    _In_ ULONG      MajorVersion,
+    _In_ ULONG      MinorVersion,
+    _In_ ULONG      MicroVersion,
+    _In_ ULONG      BuildNumber
     );
 
 // HYPERCALL
@@ -86,229 +86,229 @@ HypercallPopulate(
 
 // HVM
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 HvmSetParam(
-    IN  ULONG       Parameter,
-    IN  ULONGLONG   Value
+    _In_ ULONG      Parameter,
+    _In_ ULONGLONG  Value
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 HvmGetParam(
-    IN  ULONG       Parameter,
-    OUT PULONGLONG  Value
+    _In_ ULONG          Parameter,
+    _Out_ PULONGLONG    Value
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 HvmPagetableDying(
-    IN  PHYSICAL_ADDRESS    Address
+    _In_ PHYSICAL_ADDRESS   Address
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 HvmSetEvtchnUpcallVector(
-    IN  unsigned int    vcpu_id,
-    IN  UCHAR           Vector
+    _In_ unsigned int   vcpu_id,
+    _In_ UCHAR          Vector
     );
 
 // MEMORY
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 MemoryAddToPhysmap(
-    IN  PFN_NUMBER  Pfn,
-    IN  ULONG       Space,
-    IN  ULONG_PTR   Offset
+    _In_ PFN_NUMBER Pfn,
+    _In_ ULONG      Space,
+    _In_ ULONG_PTR  Offset
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 MemoryRemoveFromPhysmap(
-    IN  PFN_NUMBER  Pfn
+    _In_ PFN_NUMBER Pfn
     );
 
 #define PAGE_ORDER_4K   0
 #define PAGE_ORDER_2M   9
 
-__checkReturn
+_Check_return_
 XEN_API
 ULONG
 MemoryDecreaseReservation(
-    IN  ULONG       Order,
-    IN  ULONG       Count,
-    IN  PPFN_NUMBER PfnArray
+    _In_ ULONG          Order,
+    _In_ ULONG          Count,
+    _In_ PPFN_NUMBER    PfnArray
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 ULONG
 MemoryPopulatePhysmap(
-    IN  ULONG       Order,
-    IN  ULONG       Count,
-    IN  PPFN_NUMBER PfnArray
+    _In_ ULONG          Order,
+    _In_ ULONG          Count,
+    _In_ PPFN_NUMBER    PfnArray
     );
 
 // EVENT CHANNEL
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelSend(
-    IN  ULONG   Port
+    _In_ ULONG  Port
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelAllocateUnbound(
-    IN  USHORT  Domain,
-    OUT ULONG   *Port
+    _In_ USHORT Domain,
+    _Out_ ULONG *Port
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelBindInterDomain(
-    IN  USHORT  RemoteDomain,
-    IN  ULONG   RemotePort,
-    OUT ULONG   *LocalPort
+    _In_ USHORT RemoteDomain,
+    _In_ ULONG  RemotePort,
+    _Out_ ULONG *LocalPort
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelBindVirq(
-    IN  ULONG           Virq,
-    IN  unsigned int    vcpu_id,
-    OUT ULONG           *LocalPort
+    _In_ ULONG          Virq,
+    _In_ unsigned int   vcpu_id,
+    _Out_ ULONG         *LocalPort
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelQueryInterDomain(
-    IN  ULONG   LocalPort,
-    OUT USHORT  *RemoteDomain,
-    OUT ULONG   *RemotePort
+    _In_ ULONG      LocalPort,
+    _Out_ USHORT    *RemoteDomain,
+    _Out_ ULONG     *RemotePort
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelClose(
-    IN  ULONG   LocalPort
+    _In_ ULONG  LocalPort
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelExpandArray(
-    IN  PFN_NUMBER  Pfn
+    _In_ PFN_NUMBER Pfn
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelInitControl(
-    IN  PFN_NUMBER      Pfn,
-    IN  unsigned int    vcpu_id
+    _In_ PFN_NUMBER     Pfn,
+    _In_ unsigned int   vcpu_id
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelReset(
     VOID
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelBindVirtualCpu(
-    IN  ULONG           LocalPort,
-    IN  unsigned int    vcpu_id
+    _In_ ULONG          LocalPort,
+    _In_ unsigned int   vcpu_id
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelUnmask(
-    IN  ULONG   LocalPort
+    _In_ ULONG  LocalPort
     );
 
 // GRANT TABLE
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableSetVersion(
-    IN  uint32_t    Version
+    _In_ uint32_t   Version
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableGetVersion(
-    OUT uint32_t    *Version
+    _Out_ uint32_t  *Version
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableCopy(
-    IN  struct gnttab_copy  op[],
-    IN  ULONG               Count
+    _In_ struct gnttab_copy op[],
+    _In_ ULONG              Count
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableMapForeignPage(
-    IN  USHORT              Domain,
-    IN  ULONG               GrantRef,
-    IN  PHYSICAL_ADDRESS    Address,
-    IN  BOOLEAN             ReadOnly,
-    OUT ULONG               *Handle
+    _In_ USHORT             Domain,
+    _In_ ULONG              GrantRef,
+    _In_ PHYSICAL_ADDRESS   Address,
+    _In_ BOOLEAN            ReadOnly,
+    _Out_ ULONG             *Handle
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableUnmapForeignPage(
-    IN  ULONG               Handle,
-    IN  PHYSICAL_ADDRESS    Address
+    _In_ ULONG              Handle,
+    _In_ PHYSICAL_ADDRESS   Address
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableQuerySize(
-    OUT uint32_t    *Current OPTIONAL,
-    OUT uint32_t    *Maximum OPTIONAL
+    _Out_opt_ uint32_t      *Current,
+    _Out_opt_ uint32_t      *Maximum
     );
 
 // SCHED
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 SchedShutdownCode(
-    ULONG   Reason
+    _In_ ULONG  Reason
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 SchedShutdown(
-    ULONG   Reason
+    _In_ ULONG  Reason
     );
 
 XEN_API
@@ -320,25 +320,25 @@ SchedYield(
 XEN_API
 NTSTATUS
 SchedWatchdog(
-    IN OUT  PULONG  Id,
-    IN      ULONG   Seconds
+    _Inout_ PULONG  Id,
+    _In_ ULONG      Seconds
     );
 
 // XEN VERSION
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 XenVersion(
-    OUT PULONG  Major,
-    OUT PULONG  Minor
+    _Out_ PULONG    Major,
+    _Out_ PULONG    Minor
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 XenVersionExtra(
-    OUT PCHAR   Extra
+    _Out_writes_(XEN_EXTRAVERSION_LEN) PCHAR    Extra
     );
 
 // MODULE
@@ -346,9 +346,9 @@ XenVersionExtra(
 XEN_API
 VOID
 ModuleLookup(
-    IN  ULONG_PTR   Address,
-    OUT PCHAR       *Name,
-    OUT PULONG_PTR  Offset
+    _In_ ULONG_PTR      Address,
+    _Out_ PCHAR         *Name,
+    _Out_ PULONG_PTR    Offset
     );
 
 // UNPLUG
@@ -368,19 +368,19 @@ UnplugDevices(
 XEN_API
 NTSTATUS
 UnplugIncrementValue(
-    IN  UNPLUG_TYPE Type
+    _In_ UNPLUG_TYPE    Type
     );
 
 XEN_API
 NTSTATUS
 UnplugDecrementValue(
-    IN  UNPLUG_TYPE Type
+    _In_ UNPLUG_TYPE    Type
     );
 
 XEN_API
 BOOLEAN
 UnplugGetRequest(
-    IN  UNPLUG_TYPE Type
+    _In_ UNPLUG_TYPE    Type
     );
 
 // LOG
@@ -397,34 +397,34 @@ typedef enum _LOG_LEVEL {
 XEN_API
 VOID
 LogCchVPrintf(
-    IN  LOG_LEVEL   Level,
-    IN  ULONG       Count,
-    IN  const CHAR  *Format,
-    IN  va_list     Arguments
+    _In_ LOG_LEVEL  Level,
+    _In_ ULONG      Count,
+    _In_ const CHAR *Format,
+    _In_ va_list    Arguments
     );
 
 XEN_API
 VOID
 LogVPrintf(
-    IN  LOG_LEVEL   Level,
-    IN  const CHAR  *Format,
-    IN  va_list     Arguments
+    _In_ LOG_LEVEL  Level,
+    _In_ const CHAR *Format,
+    _In_ va_list    Arguments
     );
 
 XEN_API
 VOID
 LogCchPrintf(
-    IN  LOG_LEVEL   Level,
-    IN  ULONG       Count,
-    IN  const CHAR  *Format,
+    _In_ LOG_LEVEL  Level,
+    _In_ ULONG      Count,
+    _In_ const CHAR *Format,
     ...
     );
 
 XEN_API
 VOID
 LogPrintf(
-    IN  LOG_LEVEL   Level,
-    IN  const CHAR  *Format,
+    _In_ LOG_LEVEL  Level,
+    _In_ const CHAR *Format,
     ...
     );
 
@@ -437,9 +437,9 @@ LogResume(
 XEN_API
 NTSTATUS
 LogReadLogLevel(
-    IN  HANDLE      Key,
-    IN  PCHAR       Name,
-    OUT PLOG_LEVEL  LogLevel
+    _In_ HANDLE         Key,
+    _In_ PCHAR          Name,
+    _Out_ PLOG_LEVEL    LogLevel
     );
 
 typedef struct _LOG_DISPOSITION LOG_DISPOSITION, *PLOG_DISPOSITION;
@@ -447,16 +447,16 @@ typedef struct _LOG_DISPOSITION LOG_DISPOSITION, *PLOG_DISPOSITION;
 XEN_API
 NTSTATUS
 LogAddDisposition(
-    IN  LOG_LEVEL           Mask,
-    IN  VOID                (*Function)(PVOID, PCHAR, ULONG),
-    IN  PVOID               Argument OPTIONAL,
-    OUT PLOG_DISPOSITION    *Disposition
+    _In_ LOG_LEVEL          Mask,
+    _In_ VOID               (*Function)(PVOID, PCHAR, ULONG),
+    _In_opt_ PVOID          Argument,
+    _Out_ PLOG_DISPOSITION  *Disposition
     );
 
 XEN_API
 VOID
 LogRemoveDisposition(
-    IN  PLOG_DISPOSITION    Disposition
+    _In_ PLOG_DISPOSITION   Disposition
     );
 
 
@@ -465,22 +465,22 @@ LogRemoveDisposition(
 XEN_API
 NTSTATUS
 SystemProcessorVcpuId(
-    IN  ULONG           Cpu,
-    OUT unsigned int    *vcpu_id
+    _In_ ULONG          Cpu,
+    _Out_ unsigned int  *vcpu_id
     );
 
 XEN_API
 NTSTATUS
 SystemProcessorVcpuInfo(
-    IN  ULONG       Cpu,
-    OUT vcpu_info_t **Vcpu
+    _In_ ULONG          Cpu,
+    _Out_ vcpu_info_t   **Vcpu
     );
 
 XEN_API
 NTSTATUS
 SystemProcessorRegisterVcpuInfo(
-    IN  ULONG   Cpu,
-    IN  BOOLEAN Force
+    _In_ ULONG      Cpu,
+    _In_ BOOLEAN    Force
     );
 
 XEN_API
@@ -498,7 +498,7 @@ SystemRealTimeIsUniversal(
 XEN_API
 NTSTATUS
 SystemSetWatchdog(
-    IN  ULONG       Seconds
+    _In_ ULONG      Seconds
     );
 
 XEN_API
@@ -509,21 +509,21 @@ SystemStopWatchdog(
 
 // VCPU
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 VcpuSetPeriodicTimer(
-    IN  unsigned int    vcpu_id,
-    IN  PLARGE_INTEGER  Period
+    _In_ unsigned int       vcpu_id,
+    _In_opt_ PLARGE_INTEGER Period
     );
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 VcpuRegisterVcpuInfo(
-    IN  unsigned int                vcpu_id,
-    IN  PFN_NUMBER                  Pfn,
-    IN  ULONG                       Offset
+    _In_ unsigned int               vcpu_id,
+    _In_ PFN_NUMBER                 Pfn,
+    _In_ ULONG                      Offset
     );
 
 // FILTERS
@@ -545,24 +545,24 @@ FiltersUninstall(
 XEN_API
 NTSTATUS
 ConfigGetActive(
-    IN  const CHAR  *Key,
-    OUT PCHAR       *Value
+    _In_ const CHAR *Key,
+    _Out_ PCHAR     *Value
     );
 
 XEN_API
 NTSTATUS
 ConfigSetActive(
-    IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID,
-    IN  PCHAR   LocationInformation
+    _In_ PCHAR  DeviceID,
+    _In_ PCHAR  InstanceID,
+    _In_ PCHAR  LocationInformation
     );
 
 XEN_API
 NTSTATUS
 ConfigUpdateActive(
-    IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID,
-    IN  PCHAR   LocationInformation
+    _In_ PCHAR  DeviceID,
+    _In_ PCHAR  InstanceID,
+    _In_ PCHAR  LocationInformation
     );
 
 XEN_API
@@ -574,15 +574,15 @@ ConfigClearActive(
 XEN_API
 NTSTATUS
 ConfigRequestReboot(
-    IN  HANDLE      ParametersKey,
-    IN  PCHAR       Module
+    _In_ HANDLE     ParametersKey,
+    _In_ PCHAR      Module
     );
 
 XEN_API
 NTSTATUS
 ConfigQuerySystemStartOption(
-    IN  PCHAR           Key,
-    OUT PANSI_STRING    *Option
+    _In_ PCHAR          Key,
+    _Out_ PANSI_STRING  *Option
     );
 
 #endif  // _XEN_H

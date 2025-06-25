@@ -66,7 +66,7 @@ static UNPLUG_CONTEXT   UnplugContext;
 
 static FORCEINLINE PVOID
 __UnplugAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, UNPLUG_TAG);
@@ -74,7 +74,7 @@ __UnplugAllocate(
 
 static FORCEINLINE VOID
 __UnplugFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, UNPLUG_TAG);
@@ -107,7 +107,7 @@ UnplugSetBootEmulated(
 
 static VOID
 UnplugDeviceType(
-    IN  UNPLUG_TYPE Type
+    _In_ UNPLUG_TYPE    Type
     )
 {
     PUNPLUG_CONTEXT Context = &UnplugContext;
@@ -193,9 +193,9 @@ fail1:
 
 static NTSTATUS
 UnplugCheckEnumKeyCallback(
-    IN  PVOID           Context,
-    IN  HANDLE          Key,
-    IN  PANSI_STRING    Name
+    _In_ PVOID          Context,
+    _In_ HANDLE         Key,
+    _In_ PANSI_STRING   Name
     )
 {
     PUNPLUG_DATA        Data = Context;
@@ -210,8 +210,8 @@ UnplugCheckEnumKeyCallback(
 
 static NTSTATUS
 UnplugCheckEnumKey(
-    IN  PCHAR           EnumName,
-    OUT PULONG          Value
+    _In_ PCHAR          EnumName,
+    _Out_ PULONG        Value
     )
 {
     UNICODE_STRING      Unicode;
@@ -261,7 +261,7 @@ fail1:
 
 static VOID
 UnplugSetRequest(
-    IN  UNPLUG_TYPE     Type
+    _In_ UNPLUG_TYPE    Type
     )
 {
     PUNPLUG_CONTEXT     Context = &UnplugContext;
@@ -317,7 +317,7 @@ done:
 XEN_API
 NTSTATUS
 UnplugIncrementValue(
-    IN  UNPLUG_TYPE     Type
+    _In_ UNPLUG_TYPE    Type
     )
 {
     HANDLE              UnplugKey;
@@ -368,7 +368,7 @@ fail1:
 XEN_API
 NTSTATUS
 UnplugDecrementValue(
-    IN  UNPLUG_TYPE     Type
+    _In_ UNPLUG_TYPE    Type
     )
 {
     HANDLE              UnplugKey;
@@ -427,12 +427,12 @@ fail1:
 XEN_API
 BOOLEAN
 UnplugGetRequest(
-    IN  UNPLUG_TYPE Type
+    _In_ UNPLUG_TYPE    Type
     )
 {
-    PUNPLUG_CONTEXT Context = &UnplugContext;
-    KIRQL           Irql;
-    BOOLEAN         Request;
+    PUNPLUG_CONTEXT     Context = &UnplugContext;
+    KIRQL               Irql;
+    BOOLEAN             Request;
 
     AcquireHighLock(&Context->Lock, &Irql);
     Request = Context->Request[Type];

@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -75,7 +75,7 @@ struct _XENFILT_EMULATED_CONTEXT {
 
 static FORCEINLINE PVOID
 __EmulatedAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENFILT_EMULATED_TAG);
@@ -83,7 +83,7 @@ __EmulatedAllocate(
 
 static FORCEINLINE VOID
 __EmulatedFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENFILT_EMULATED_TAG);
@@ -91,11 +91,11 @@ __EmulatedFree(
 
 static NTSTATUS
 EmulatedSetObjectDeviceData(
-    IN  PXENFILT_EMULATED_OBJECT        EmulatedObject,
-    IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
-    IN  PCHAR                           DeviceID,
-    IN  PCHAR                           InstanceID,
-    IN  PCHAR                           CompatibleIDs OPTIONAL
+    _In_ PXENFILT_EMULATED_OBJECT       EmulatedObject,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
+    _In_ PCHAR                          DeviceID,
+    _In_ PCHAR                          InstanceID,
+    _In_opt_ PCHAR                      CompatibleIDs
     )
 {
     ULONG                               Index;
@@ -152,11 +152,11 @@ fail1:
 
 static NTSTATUS
 EmulatedSetObjectDiskData(
-    IN  PXENFILT_EMULATED_OBJECT        EmulatedObject,
-    IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
-    IN  PCHAR                           DeviceID,
-    IN  PCHAR                           InstanceID,
-    IN  PCHAR                           CompatibleIDs OPTIONAL
+    _In_ PXENFILT_EMULATED_OBJECT       EmulatedObject,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
+    _In_ PCHAR                          DeviceID,
+    _In_ PCHAR                          InstanceID,
+    _In_opt_ PCHAR                      CompatibleIDs
     )
 {
     PCHAR                               End;
@@ -222,12 +222,12 @@ fail1:
 
 NTSTATUS
 EmulatedAddObject(
-    IN  PXENFILT_EMULATED_CONTEXT       Context,
-    IN  PCHAR                           DeviceID,
-    IN  PCHAR                           InstanceID,
-    IN  PCHAR                           CompatibleIDs OPTIONAL,
-    IN  XENFILT_EMULATED_OBJECT_TYPE    Type,
-    OUT PXENFILT_EMULATED_OBJECT        *EmulatedObject
+    _In_ PXENFILT_EMULATED_CONTEXT      Context,
+    _In_ PCHAR                          DeviceID,
+    _In_ PCHAR                          InstanceID,
+    _In_opt_ PCHAR                      CompatibleIDs,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
+    _Out_ PXENFILT_EMULATED_OBJECT      *EmulatedObject
     )
 {
     KIRQL                               Irql;
@@ -289,8 +289,8 @@ fail1:
 
 VOID
 EmulatedRemoveObject(
-    IN  PXENFILT_EMULATED_CONTEXT   Context,
-    IN  PXENFILT_EMULATED_OBJECT    EmulatedObject
+    _In_ PXENFILT_EMULATED_CONTEXT  Context,
+    _In_ PXENFILT_EMULATED_OBJECT   EmulatedObject
     )
 {
     KIRQL                           Irql;
@@ -304,9 +304,9 @@ EmulatedRemoveObject(
 
 static BOOLEAN
 EmulatedIsDevicePresent(
-    IN  PINTERFACE              Interface,
-    IN  PCHAR                   DeviceID,
-    IN  PCHAR                   InstanceID OPTIONAL
+    _In_ PINTERFACE             Interface,
+    _In_ PCHAR                  DeviceID,
+    _In_opt_ PCHAR              InstanceID
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
@@ -347,8 +347,8 @@ EmulatedIsDevicePresent(
 
 static BOOLEAN
 EmulatedIsDiskPresent(
-    IN  PINTERFACE              Interface,
-    IN  ULONG                   Index
+    _In_ PINTERFACE             Interface,
+    _In_ ULONG                  Index
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
@@ -392,10 +392,10 @@ EmulatedIsDiskPresent(
 
 static BOOLEAN
 EmulatedIsDiskPresentVersion1(
-    IN  PINTERFACE              Interface,
-    IN  ULONG                   Controller,
-    IN  ULONG                   Target,
-    IN  ULONG                   Lun
+    _In_ PINTERFACE             Interface,
+    _In_ ULONG                  Controller,
+    _In_ ULONG                  Target,
+    _In_ ULONG                  Lun
     )
 {
     UNREFERENCED_PARAMETER(Controller);
@@ -412,7 +412,7 @@ EmulatedIsDiskPresentVersion1(
 
 NTSTATUS
 EmulatedAcquire(
-    IN  PINTERFACE              Interface
+    _In_ PINTERFACE             Interface
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
@@ -433,7 +433,7 @@ done:
 
 VOID
 EmulatedRelease(
-    IN  PINTERFACE              Interface
+    _In_ PINTERFACE             Interface
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
@@ -457,7 +457,7 @@ static struct _XENFILT_EMULATED_INTERFACE_V1 EmulatedInterfaceVersion1 = {
     EmulatedIsDevicePresent,
     EmulatedIsDiskPresentVersion1
 };
-                     
+
 static struct _XENFILT_EMULATED_INTERFACE_V2 EmulatedInterfaceVersion2 = {
     { sizeof (struct _XENFILT_EMULATED_INTERFACE_V2), 2, NULL, NULL, NULL },
     EmulatedAcquire,
@@ -468,7 +468,7 @@ static struct _XENFILT_EMULATED_INTERFACE_V2 EmulatedInterfaceVersion2 = {
 
 NTSTATUS
 EmulatedInitialize(
-    OUT PXENFILT_EMULATED_CONTEXT   *Context
+    _Out_ PXENFILT_EMULATED_CONTEXT *Context
     )
 {
     NTSTATUS                        status;
@@ -496,13 +496,13 @@ fail1:
 
 NTSTATUS
 EmulatedGetInterface(
-    IN      PXENFILT_EMULATED_CONTEXT   Context,
-    IN      ULONG                       Version,
-    IN OUT  PINTERFACE                  Interface,
-    IN      ULONG                       Size
+    _In_ PXENFILT_EMULATED_CONTEXT  Context,
+    _In_ ULONG                      Version,
+    _Inout_ PINTERFACE              Interface,
+    _In_ ULONG                      Size
     )
 {
-    NTSTATUS                            status;
+    NTSTATUS                        status;
 
     ASSERT(Context != NULL);
 
@@ -547,11 +547,11 @@ EmulatedGetInterface(
     }
 
     return status;
-}   
+}
 
 VOID
 EmulatedTeardown(
-    IN  PXENFILT_EMULATED_CONTEXT   Context
+    _In_ PXENFILT_EMULATED_CONTEXT  Context
     )
 {
     Trace("====>\n");

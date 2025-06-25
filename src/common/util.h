@@ -43,7 +43,7 @@
 
 static FORCEINLINE LONG
 __ffs(
-    IN  unsigned long long  mask
+    _In_ unsigned long long mask
     )
 {
     unsigned char           *array = (unsigned char *)&mask;
@@ -82,11 +82,11 @@ __ffs(
 
 static FORCEINLINE VOID
 __CpuId(
-    IN  ULONG   Leaf,
-    OUT PULONG  EAX OPTIONAL,
-    OUT PULONG  EBX OPTIONAL,
-    OUT PULONG  ECX OPTIONAL,
-    OUT PULONG  EDX OPTIONAL
+    _In_ ULONG          Leaf,
+    _Out_opt_ PULONG    EAX,
+    _Out_opt_ PULONG    EBX,
+    _Out_opt_ PULONG    ECX,
+    _Out_opt_ PULONG    EDX
     )
 {
     int         Value[4] = {0};
@@ -108,8 +108,8 @@ __CpuId(
 
 static FORCEINLINE LONG
 __InterlockedAdd(
-    IN  LONG    *Value,
-    IN  LONG    Delta
+    _In_ LONG   *Value,
+    _In_ LONG   Delta
     )
 {
     LONG        New;
@@ -125,8 +125,8 @@ __InterlockedAdd(
 
 static FORCEINLINE LONG
 __InterlockedSubtract(
-    IN  LONG    *Value,
-    IN  LONG    Delta
+    _In_ LONG   *Value,
+    _In_ LONG   Delta
     )
 {
     LONG        New;
@@ -140,12 +140,12 @@ __InterlockedSubtract(
     return New;
 }
 
-__checkReturn
+_Check_return_
 static FORCEINLINE PVOID
 __AllocatePoolWithTag(
-    IN  POOL_TYPE   PoolType,
-    IN  SIZE_T      NumberOfBytes,
-    IN  ULONG       Tag
+    _In_ POOL_TYPE  PoolType,
+    _In_ SIZE_T     NumberOfBytes,
+    _In_ ULONG      Tag
     )
 {
     PUCHAR          Buffer;
@@ -171,8 +171,8 @@ __AllocatePoolWithTag(
 
 static FORCEINLINE VOID
 __FreePoolWithTag(
-    IN  PVOID   Buffer,
-    IN  ULONG   Tag
+    _In_ PVOID  Buffer,
+    _In_ ULONG  Tag
     )
 {
     ExFreePoolWithTag(Buffer, Tag);
@@ -180,8 +180,8 @@ __FreePoolWithTag(
 
 static FORCEINLINE PMDL
 __AllocatePages(
-    IN  ULONG           Count,
-    IN  BOOLEAN         Contiguous
+    _In_ ULONG          Count,
+    _In_ BOOLEAN        Contiguous
     )
 {
     PHYSICAL_ADDRESS    LowAddress;
@@ -258,7 +258,7 @@ fail1:
 
 static FORCEINLINE VOID
 __FreePages(
-    IN	PMDL	Mdl
+    _In_ PMDL   Mdl
     )
 {
     PUCHAR	MdlMappedSystemVa;
@@ -276,9 +276,9 @@ __FreePages(
 
 static FORCEINLINE PCHAR
 __strtok_r(
-    IN      PCHAR   Buffer,
-    IN      PCHAR   Delimiter,
-    IN OUT  PCHAR   *Context
+    _In_opt_ PCHAR  Buffer,
+    _In_ PCHAR      Delimiter,
+    _Inout_ PCHAR   *Context
     )
 {
     PCHAR           Token;
@@ -314,9 +314,9 @@ __strtok_r(
 
 static FORCEINLINE PWCHAR
 __wcstok_r(
-    IN      PWCHAR  Buffer,
-    IN      PWCHAR  Delimiter,
-    IN OUT  PWCHAR  *Context
+    _In_opt_ PWCHAR Buffer,
+    _In_ PWCHAR     Delimiter,
+    _Inout_ PWCHAR  *Context
     )
 {
     PWCHAR          Token;
@@ -352,7 +352,7 @@ __wcstok_r(
 
 static FORCEINLINE CHAR
 __toupper(
-    IN  CHAR    Character
+    _In_ CHAR   Character
     )
 {
     if (Character < 'a' || Character > 'z')
@@ -363,7 +363,7 @@ __toupper(
 
 static FORCEINLINE CHAR
 __tolower(
-    IN  CHAR    Character
+    _In_ CHAR   Character
     )
 {
     if (Character < 'A' || Character > 'Z')

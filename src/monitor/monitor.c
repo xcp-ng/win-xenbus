@@ -93,8 +93,8 @@ MONITOR_CONTEXT MonitorContext;
 static VOID
 #pragma prefast(suppress:6262) // Function uses '1036' bytes of stack: exceeds /analyze:stacksize'1024'
 __Log(
-    IN  const CHAR      *Format,
-    IN  ...
+    _In_ const CHAR     *Format,
+    ...
     )
 {
 #if DBG
@@ -148,11 +148,11 @@ __Log(
 
 static PTCHAR
 GetErrorMessage(
-    IN  HRESULT Error
+    _In_  HRESULT   Error
     )
 {
-    PTCHAR      Message;
-    ULONG       Index;
+    PTCHAR          Message;
+    ULONG           Index;
 
     if (!FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
                        FORMAT_MESSAGE_FROM_SYSTEM |
@@ -177,7 +177,7 @@ GetErrorMessage(
 
 static const CHAR *
 ServiceStateName(
-    IN  DWORD   State
+    _In_ DWORD  State
     )
 {
 #define _STATE_NAME(_State) \
@@ -200,9 +200,9 @@ ServiceStateName(
 
 static VOID
 ReportStatus(
-    IN  DWORD           CurrentState,
-    IN  DWORD           Win32ExitCode,
-    IN  DWORD           WaitHint)
+    _In_ DWORD          CurrentState,
+    _In_ DWORD          Win32ExitCode,
+    _In_ DWORD          WaitHint)
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
     static DWORD        CheckPoint = 1;
@@ -250,10 +250,10 @@ fail1:
 
 DWORD WINAPI
 MonitorCtrlHandlerEx(
-    IN  DWORD           Ctrl,
-    IN  DWORD           EventType,
-    IN  LPVOID          EventData,
-    IN  LPVOID          Argument
+    _In_ DWORD          Ctrl,
+    _In_ DWORD          EventType,
+    _In_ LPVOID         EventData,
+    _In_ LPVOID         Argument
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
@@ -287,7 +287,7 @@ MonitorCtrlHandlerEx(
 
 static const CHAR *
 WTSStateName(
-    IN  DWORD   State
+    _In_ DWORD  State
     )
 {
 #define _STATE_NAME(_State) \
@@ -316,8 +316,8 @@ WTSStateName(
 
 static VOID
 DoReboot(
-    IN PTCHAR   Message,
-    IN DWORD    Timeout
+    _In_ PTCHAR Message,
+    _In_ DWORD  Timeout
     )
 {
     Log("waiting for pending install events...");
@@ -367,7 +367,7 @@ GetPromptTimeout(
 
 static PTCHAR
 GetDisplayName(
-    IN PTCHAR           DriverName
+    _In_ PTCHAR         DriverName
     )
 {
     HRESULT             Result;
@@ -570,7 +570,7 @@ fail1:
 
 static VOID
 PromptForReboot(
-    IN PTCHAR           DriverName
+    _In_ PTCHAR         DriverName
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
@@ -681,7 +681,7 @@ fail1:
 
 static VOID
 TryAutoReboot(
-    IN PTCHAR           DriverName
+    _In_ PTCHAR         DriverName
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
@@ -1086,9 +1086,10 @@ fail1:
     return FALSE;
 }
 
+_Success_(return)
 static BOOL
 GetRequestKeyName(
-    OUT PTCHAR          *RequestKeyName
+    _Out_ PTCHAR        *RequestKeyName
     )
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
@@ -1310,7 +1311,7 @@ fail1:
 
 static BOOL
 RemoveStartOverride(
-    IN PTCHAR           DriverName
+    _In_ PTCHAR         DriverName
     )
 {
     TCHAR               KeyName[MAX_PATH];

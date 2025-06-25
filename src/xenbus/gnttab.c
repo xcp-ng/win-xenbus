@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -101,7 +101,7 @@ struct _XENBUS_GNTTAB_CONTEXT {
 
 static FORCEINLINE PVOID
 __GnttabAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_GNTTAB_TAG);
@@ -109,7 +109,7 @@ __GnttabAllocate(
 
 static FORCEINLINE VOID
 __GnttabFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_GNTTAB_TAG);
@@ -117,7 +117,7 @@ __GnttabFree(
 
 static NTSTATUS
 GnttabExpand(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    _In_ PXENBUS_GNTTAB_CONTEXT Context
     )
 {
     ULONG                       Index;
@@ -200,7 +200,7 @@ fail1:
 
 static VOID
 GnttabMap(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    _In_ PXENBUS_GNTTAB_CONTEXT Context
     )
 {
     LONG                        Index;
@@ -228,7 +228,7 @@ GnttabMap(
 
 static VOID
 GnttabUnmap(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    _In_ PXENBUS_GNTTAB_CONTEXT Context
     )
 {
     LONG                        Index;
@@ -249,7 +249,7 @@ GnttabUnmap(
 
 static VOID
 GnttabContract(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    _In_ PXENBUS_GNTTAB_CONTEXT Context
     )
 {
     LONG                        Index;
@@ -290,8 +290,8 @@ GnttabContract(
 
 static NTSTATUS
 GnttabEntryCtor(
-    IN  PVOID               Argument,
-    IN  PVOID               Object
+    _In_ PVOID              Argument,
+    _In_ PVOID              Object
     )
 {
     PXENBUS_GNTTAB_CACHE    Cache = Argument;
@@ -327,8 +327,8 @@ fail1:
 
 static VOID
 GnttabEntryDtor(
-    IN  PVOID               Argument,
-    IN  PVOID               Object
+    _In_ PVOID              Argument,
+    _In_ PVOID              Object
     )
 {
     PXENBUS_GNTTAB_CACHE    Cache = Argument;
@@ -346,7 +346,7 @@ GnttabEntryDtor(
 
 static VOID
 GnttabAcquireLock(
-    IN  PVOID               Argument
+    _In_ PVOID              Argument
     )
 {
     PXENBUS_GNTTAB_CACHE    Cache = Argument;
@@ -356,7 +356,7 @@ GnttabAcquireLock(
 
 static VOID
 GnttabReleaseLock(
-    IN  PVOID               Argument
+    _In_ PVOID              Argument
     )
 {
     PXENBUS_GNTTAB_CACHE    Cache = Argument;
@@ -366,14 +366,14 @@ GnttabReleaseLock(
 
 static NTSTATUS
 GnttabCreateCache(
-    IN  PINTERFACE              Interface,
-    IN  const CHAR              *Name,
-    IN  ULONG                   Reservation,
-    IN  ULONG                   Cap,
-    IN  VOID                    (*AcquireLock)(PVOID),
-    IN  VOID                    (*ReleaseLock)(PVOID),
-    IN  PVOID                   Argument,
-    OUT PXENBUS_GNTTAB_CACHE    *Cache
+    _In_ PINTERFACE             Interface,
+    _In_ const CHAR             *Name,
+    _In_ ULONG                  Reservation,
+    _In_ ULONG                  Cap,
+    _In_ VOID                   (*AcquireLock)(PVOID),
+    _In_ VOID                   (*ReleaseLock)(PVOID),
+    _In_ PVOID                  Argument,
+    _Out_ PXENBUS_GNTTAB_CACHE  *Cache
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
@@ -428,7 +428,7 @@ fail3:
     (*Cache)->AcquireLock = NULL;
 
     RtlZeroMemory((*Cache)->Name, sizeof ((*Cache)->Name));
-    
+
 fail2:
     Error("fail2\n");
 
@@ -445,13 +445,13 @@ fail1:
 
 static NTSTATUS
 GnttabCreateCacheVersion1(
-    IN  PINTERFACE              Interface,
-    IN  const CHAR              *Name,
-    IN  ULONG                   Reservation,
-    IN  VOID                    (*AcquireLock)(PVOID),
-    IN  VOID                    (*ReleaseLock)(PVOID),
-    IN  PVOID                   Argument,
-    OUT PXENBUS_GNTTAB_CACHE    *Cache
+    _In_ PINTERFACE             Interface,
+    _In_ const CHAR             *Name,
+    _In_ ULONG                  Reservation,
+    _In_ VOID                   (*AcquireLock)(PVOID),
+    _In_ VOID                   (*ReleaseLock)(PVOID),
+    _In_ PVOID                  Argument,
+    _Out_ PXENBUS_GNTTAB_CACHE  *Cache
     )
 {
     return GnttabCreateCache(Interface,
@@ -466,8 +466,8 @@ GnttabCreateCacheVersion1(
 
 static VOID
 GnttabDestroyCache(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_GNTTAB_CACHE    Cache
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_GNTTAB_CACHE   Cache
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
@@ -489,7 +489,7 @@ GnttabDestroyCache(
     Cache->AcquireLock = NULL;
 
     RtlZeroMemory(Cache->Name, sizeof (Cache->Name));
-    
+
     Cache->Context = NULL;
 
     ASSERT(IsZeroMemory(Cache, sizeof (XENBUS_GNTTAB_CACHE)));
@@ -497,14 +497,14 @@ GnttabDestroyCache(
 }
 
 static NTSTATUS
-GnttabPermitForeignAccess( 
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_GNTTAB_CACHE    Cache,
-    IN  BOOLEAN                 Locked,
-    IN  USHORT                  Domain,
-    IN  PFN_NUMBER              Pfn,
-    IN  BOOLEAN                 ReadOnly,
-    OUT PXENBUS_GNTTAB_ENTRY    *Entry
+GnttabPermitForeignAccess(
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_GNTTAB_CACHE   Cache,
+    _In_ BOOLEAN                Locked,
+    _In_ USHORT                 Domain,
+    _In_ PFN_NUMBER             Pfn,
+    _In_ BOOLEAN                ReadOnly,
+    _Out_ PXENBUS_GNTTAB_ENTRY  *Entry
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
@@ -549,10 +549,10 @@ fail1:
 
 static NTSTATUS
 GnttabRevokeForeignAccess(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_GNTTAB_CACHE    Cache,
-    IN  BOOLEAN                 Locked,
-    IN  PXENBUS_GNTTAB_ENTRY    Entry
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_GNTTAB_CACHE   Cache,
+    _In_ BOOLEAN                Locked,
+    _In_ PXENBUS_GNTTAB_ENTRY   Entry
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
@@ -610,8 +610,8 @@ fail1:
 
 static ULONG
 GnttabGetReference(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_GNTTAB_ENTRY    Entry
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_GNTTAB_ENTRY   Entry
     )
 {
     UNREFERENCED_PARAMETER(Interface);
@@ -623,10 +623,10 @@ GnttabGetReference(
 
 static NTSTATUS
 GnttabQueryReference(
-    IN  PINTERFACE          Interface,
-    IN	ULONG               Reference,
-    OUT PPFN_NUMBER         Pfn OPTIONAL,
-    OUT PBOOLEAN            ReadOnly OPTIONAL
+    _In_ PINTERFACE         Interface,
+    _In_ ULONG              Reference,
+    _Out_opt_ PPFN_NUMBER   Pfn,
+    _Out_opt_ PBOOLEAN      ReadOnly
     )
 {
     PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
@@ -657,12 +657,12 @@ fail1:
 
 static NTSTATUS
 GnttabMapForeignPages(
-    IN  PINTERFACE              Interface,
-    IN  USHORT                  Domain,
-    IN  ULONG                   NumberPages,
-    IN  PULONG                  References,
-    IN  BOOLEAN                 ReadOnly,
-    OUT PHYSICAL_ADDRESS        *Address
+    _In_ PINTERFACE             Interface,
+    _In_ USHORT                 Domain,
+    _In_ ULONG                  NumberPages,
+    _In_ PULONG                 References,
+    _In_ BOOLEAN                ReadOnly,
+    _Out_ PHYSICAL_ADDRESS      *Address
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
@@ -740,8 +740,8 @@ fail1:
 
 static NTSTATUS
 GnttabUnmapForeignPages(
-    IN  PINTERFACE              Interface,
-    IN  PHYSICAL_ADDRESS        Address
+    _In_ PINTERFACE             Interface,
+    _In_ PHYSICAL_ADDRESS       Address
     )
 {
     PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
@@ -793,18 +793,18 @@ fail1:
 
 static VOID
 GnttabSuspendCallbackEarly(
-    IN  PVOID               Argument
+    _In_ PVOID              Argument
     )
 {
     PXENBUS_GNTTAB_CONTEXT  Context = Argument;
 
     GnttabMap(Context);
 }
-                     
+
 static VOID
 GnttabDebugCallback(
-    IN  PVOID               Argument,
-    IN  BOOLEAN             Crashing
+    _In_ PVOID              Argument,
+    _In_ BOOLEAN            Crashing
     )
 {
     PXENBUS_GNTTAB_CONTEXT  Context = Argument;
@@ -817,7 +817,7 @@ GnttabDebugCallback(
         PHYSICAL_ADDRESS        Address;
 
         Address.QuadPart = MmGetMdlPfnArray(Frame->Mdl)[0] << PAGE_SHIFT;
-    
+
         XENBUS_DEBUG(Printf,
                     &Context->DebugInterface,
                      "[%u] Address = %08x.%08x\n",
@@ -825,10 +825,10 @@ GnttabDebugCallback(
                      Address.LowPart);
     }
 }
-                     
+
 NTSTATUS
 GnttabAcquire(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
@@ -872,7 +872,7 @@ GnttabAcquire(
     status = XENBUS_CACHE(Acquire, &Context->CacheInterface);
     if (!NT_SUCCESS(status))
         goto fail5;
-    
+
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
         goto fail6;
@@ -983,7 +983,7 @@ fail1:
 
 VOID
 GnttabRelease(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
@@ -1081,11 +1081,11 @@ static struct _XENBUS_GNTTAB_INTERFACE_V4   GnttabInterfaceVersion4 = {
 
 NTSTATUS
 GnttabInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_GNTTAB_CONTEXT  *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Out_ PXENBUS_GNTTAB_CONTEXT    *Context
     )
 {
-    NTSTATUS                    status;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 
@@ -1147,13 +1147,13 @@ fail1:
 
 NTSTATUS
 GnttabGetInterface(
-    IN      PXENBUS_GNTTAB_CONTEXT  Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_GNTTAB_CONTEXT Context,
+    _In_ ULONG                  Version,
+    _Inout_ PINTERFACE          Interface,
+    _In_ ULONG                  Size
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                    status;
 
     ASSERT(Context != NULL);
 
@@ -1215,11 +1215,11 @@ GnttabGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 GnttabGetReferences(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    _In_ PXENBUS_GNTTAB_CONTEXT Context
     )
 {
     return Context->References;
@@ -1227,7 +1227,7 @@ GnttabGetReferences(
 
 VOID
 GnttabTeardown(
-    IN  PXENBUS_GNTTAB_CONTEXT  Context
+    _In_ PXENBUS_GNTTAB_CONTEXT Context
     )
 {
     Trace("====>\n");

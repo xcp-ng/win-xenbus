@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -41,18 +41,18 @@
 
 static LONG_PTR
 EventChannelOp(
-    IN  ULONG   Command,
-    IN  PVOID   Argument
+    _In_ ULONG  Command,
+    _In_ PVOID  Argument
     )
 {
     return HYPERCALL(LONG_PTR, event_channel_op, 2, Command, Argument);
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelSend(
-    IN  ULONG           LocalPort
+    _In_ ULONG          LocalPort
     )
 {
     struct evtchn_send  op;
@@ -76,12 +76,12 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelAllocateUnbound(
-    IN  USHORT                  Domain,
-    OUT ULONG                   *LocalPort
+    _In_ USHORT                 Domain,
+    _Out_ ULONG                 *LocalPort
     )
 {
     struct evtchn_alloc_unbound op;
@@ -99,7 +99,7 @@ EventChannelAllocateUnbound(
     }
 
     *LocalPort = op.port;
-    
+
     return STATUS_SUCCESS;
 
 fail1:
@@ -108,13 +108,13 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelBindInterDomain(
-    IN  USHORT                      RemoteDomain,
-    IN  ULONG                       RemotePort,
-    OUT ULONG                       *LocalPort
+    _In_ USHORT                     RemoteDomain,
+    _In_ ULONG                      RemotePort,
+    _Out_ ULONG                     *LocalPort
     )
 {
     struct evtchn_bind_interdomain  op;
@@ -132,7 +132,7 @@ EventChannelBindInterDomain(
     }
 
     *LocalPort = op.local_port;
-    
+
     return STATUS_SUCCESS;
 
 fail1:
@@ -141,13 +141,13 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelBindVirq(
-    IN  ULONG               Virq,
-    IN  unsigned int        vcpu_id,
-    OUT ULONG               *LocalPort
+    _In_ ULONG              Virq,
+    _In_ unsigned int       vcpu_id,
+    _Out_ ULONG             *LocalPort
     )
 {
     struct evtchn_bind_virq op;
@@ -165,7 +165,7 @@ EventChannelBindVirq(
     }
 
     *LocalPort = op.port;
-    
+
     return STATUS_SUCCESS;
 
 fail1:
@@ -174,13 +174,13 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelQueryInterDomain(
-    IN  ULONG               LocalPort,
-    OUT USHORT              *RemoteDomain,
-    OUT ULONG               *RemotePort
+    _In_ ULONG              LocalPort,
+    _Out_ USHORT            *RemoteDomain,
+    _Out_ ULONG             *RemotePort
     )
 {
     struct evtchn_status    op;
@@ -215,11 +215,11 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelClose(
-    IN  ULONG           LocalPort
+    _In_ ULONG          LocalPort
     )
 {
     struct evtchn_close op;
@@ -243,11 +243,11 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelExpandArray(
-    IN  PFN_NUMBER              Pfn
+    _In_ PFN_NUMBER             Pfn
     )
 {
     struct evtchn_expand_array  op;
@@ -271,12 +271,12 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelInitControl(
-    IN  PFN_NUMBER              Pfn,
-    IN  unsigned int            vcpu_id
+    _In_ PFN_NUMBER             Pfn,
+    _In_ unsigned int           vcpu_id
     )
 {
     struct evtchn_init_control  op;
@@ -302,7 +302,7 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelReset(
@@ -330,12 +330,12 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelBindVirtualCpu(
-    IN  ULONG               LocalPort,
-    IN  unsigned int        vcpu_id
+    _In_ ULONG              LocalPort,
+    _In_ unsigned int       vcpu_id
     )
 {
     struct evtchn_bind_vcpu op;
@@ -360,11 +360,11 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 EventChannelUnmask(
-    IN  ULONG               LocalPort
+    _In_ ULONG              LocalPort
     )
 {
     struct evtchn_unmask    op;

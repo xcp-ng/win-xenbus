@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -73,19 +73,19 @@
 
 static LONG_PTR
 GrantTableOp(
-    IN  ULONG   Command,
-    IN  PVOID   Argument,
-    IN  ULONG   Count
+    _In_ ULONG  Command,
+    _In_ PVOID  Argument,
+    _In_ ULONG  Count
     )
 {
     return HYPERCALL(LONG_PTR, grant_table_op, 3, Command, Argument, Count);
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableSetVersion(
-    IN  uint32_t                Version
+    _In_ uint32_t               Version
     )
 {
     struct gnttab_set_version   op;
@@ -109,11 +109,11 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableGetVersion(
-    OUT uint32_t                *Version
+    _Out_ uint32_t              *Version
     )
 {
     struct gnttab_get_version   op;
@@ -139,12 +139,12 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableCopy(
-    IN  struct gnttab_copy  op[],
-    IN  ULONG               Count
+    _In_ struct gnttab_copy op[],
+    _In_ ULONG              Count
     )
 {
     LONG_PTR                rc;
@@ -165,15 +165,15 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableMapForeignPage(
-    IN  USHORT                  Domain,
-    IN  ULONG                   GrantRef,
-    IN  PHYSICAL_ADDRESS        Address,
-    IN  BOOLEAN                 ReadOnly,
-    OUT ULONG                   *Handle
+    _In_ USHORT                 Domain,
+    _In_ ULONG                  GrantRef,
+    _In_ PHYSICAL_ADDRESS       Address,
+    _In_ BOOLEAN                ReadOnly,
+    _Out_ ULONG                 *Handle
     )
 {
     struct gnttab_map_grant_ref op;
@@ -220,12 +220,12 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableUnmapForeignPage(
-    IN  ULONG                     Handle,
-    IN  PHYSICAL_ADDRESS          Address
+    _In_ ULONG                    Handle,
+    _In_ PHYSICAL_ADDRESS         Address
     )
 {
     struct gnttab_unmap_grant_ref op;
@@ -264,12 +264,12 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 GrantTableQuerySize(
-    OUT uint32_t                *Current OPTIONAL,
-    OUT uint32_t                *Maximum OPTIONAL
+    _Out_opt_ uint32_t          *Current,
+    _Out_opt_ uint32_t          *Maximum
     )
 {
     struct gnttab_query_size    op;

@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -67,7 +67,7 @@ struct _XENBUS_DEBUG_CONTEXT {
 
 static FORCEINLINE PVOID
 __DebugAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_DEBUG_TAG);
@@ -75,7 +75,7 @@ __DebugAllocate(
 
 static FORCEINLINE VOID
 __DebugFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_DEBUG_TAG);
@@ -91,17 +91,17 @@ RtlCaptureStackBackTrace(
 
 static NTSTATUS
 DebugRegister(
-    IN  PINTERFACE              Interface,
-    IN  PCHAR                   Prefix,
-    IN  XENBUS_DEBUG_FUNCTION   Function,
-    IN  PVOID                   Argument OPTIONAL,
-    OUT PXENBUS_DEBUG_CALLBACK  *Callback
+    _In_ PINTERFACE                     Interface,
+    _In_ PCHAR                          Prefix,
+    _In_ XENBUS_DEBUG_FUNCTION          Function,
+    _In_opt_ PVOID                      Argument,
+    _Out_opt_ PXENBUS_DEBUG_CALLBACK    *Callback
     )
 {
-    PXENBUS_DEBUG_CONTEXT       Context = Interface->Context;
-    ULONG                       Length;
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    PXENBUS_DEBUG_CONTEXT               Context = Interface->Context;
+    ULONG                               Length;
+    KIRQL                               Irql;
+    NTSTATUS                            status;
 
     *Callback = __DebugAllocate(sizeof (XENBUS_DEBUG_CALLBACK));
 
@@ -109,7 +109,7 @@ DebugRegister(
     if (*Callback == NULL)
         goto fail1;
 
-    (VOID) RtlCaptureStackBackTrace(1, 1, &(*Callback)->Caller, NULL);    
+    (VOID) RtlCaptureStackBackTrace(1, 1, &(*Callback)->Caller, NULL);
 
     Length = (ULONG)__min(strlen(Prefix), MAXIMUM_PREFIX_LENGTH - 1);
     RtlCopyMemory((*Callback)->Prefix, Prefix, Length);
@@ -131,8 +131,8 @@ fail1:
 
 static VOID
 DebugPrintf(
-    IN  PINTERFACE              Interface,
-    IN  const CHAR              *Format,
+    _In_ PINTERFACE             Interface,
+    _In_ const CHAR             *Format,
     ...
     )
 {
@@ -154,8 +154,8 @@ DebugPrintf(
 
 static VOID
 DebugDeregister(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_DEBUG_CALLBACK  Callback
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_DEBUG_CALLBACK Callback
     )
 {
     PXENBUS_DEBUG_CONTEXT       Context = Interface->Context;
@@ -170,9 +170,9 @@ DebugDeregister(
 
 static VOID
 DebugCallback(
-    IN  PXENBUS_DEBUG_CONTEXT   Context,
-    IN  PXENBUS_DEBUG_CALLBACK  Callback,
-    IN  BOOLEAN                 Crashing
+    _In_ PXENBUS_DEBUG_CONTEXT  Context,
+    _In_ PXENBUS_DEBUG_CALLBACK Callback,
+    _In_ BOOLEAN                Crashing
     )
 {
     PCHAR                       Name;
@@ -216,9 +216,9 @@ DebugCallback(
 
 static VOID
 DebugTriggerLocked(
-    IN  PXENBUS_DEBUG_CONTEXT   Context,
-    IN  PXENBUS_DEBUG_CALLBACK  Callback OPTIONAL,
-    IN  BOOLEAN                 Crashing
+    _In_ PXENBUS_DEBUG_CONTEXT      Context,
+    _In_opt_ PXENBUS_DEBUG_CALLBACK Callback,
+    _In_ BOOLEAN                    Crashing
     )
 {
     if (Callback == NULL) {
@@ -238,15 +238,15 @@ DebugTriggerLocked(
         DebugCallback(Context, Callback, Crashing);
     }
 }
-    
+
 static VOID
 DebugTrigger(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_DEBUG_CALLBACK  Callback OPTIONAL
+    _In_ PINTERFACE                 Interface,
+    _In_opt_ PXENBUS_DEBUG_CALLBACK Callback
     )
 {
-    PXENBUS_DEBUG_CONTEXT       Context = Interface->Context;
-    KIRQL                       Irql;
+    PXENBUS_DEBUG_CONTEXT           Context = Interface->Context;
+    KIRQL                           Irql;
 
     Trace("====>\n");
 
@@ -257,13 +257,13 @@ DebugTrigger(
     Trace("<====\n");
 }
 
-static 
+static
 _Function_class_(KBUGCHECK_CALLBACK_ROUTINE)
 _IRQL_requires_same_
-VOID                     
+VOID
 DebugBugCheckCallback(
-    IN  PVOID               Argument,
-    IN  ULONG               Length
+    _In_ PVOID              Argument,
+    _In_ ULONG              Length
     )
 {
     PXENBUS_DEBUG_CONTEXT   Context = Argument;
@@ -319,7 +319,7 @@ fail1:
 
 static VOID
 DebugRelease(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_DEBUG_CONTEXT   Context = Interface->Context;
@@ -358,11 +358,11 @@ static struct _XENBUS_DEBUG_INTERFACE_V1 DebugInterfaceVersion1 = {
     DebugTrigger,
     DebugDeregister
 };
-                     
+
 NTSTATUS
 DebugInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_DEBUG_CONTEXT   *Context
+    _In_ PXENBUS_FDO            Fdo,
+    _Out_ PXENBUS_DEBUG_CONTEXT *Context
     )
 {
     NTSTATUS                    status;
@@ -392,16 +392,16 @@ fail1:
 
 NTSTATUS
 DebugGetInterface(
-    IN      PXENBUS_DEBUG_CONTEXT   Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_DEBUG_CONTEXT  Context,
+    _In_ ULONG                  Version,
+    _Inout_ PINTERFACE          Interface,
+    _In_ ULONG                  Size
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                    status;
 
     ASSERT(Context != NULL);
-        
+
     switch (Version) {
     case 1: {
         struct _XENBUS_DEBUG_INTERFACE_V1   *DebugInterface;
@@ -426,11 +426,11 @@ DebugGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 DebugGetReferences(
-    IN  PXENBUS_DEBUG_CONTEXT   Context
+    _In_ PXENBUS_DEBUG_CONTEXT  Context
     )
 {
     return Context->References;
@@ -438,7 +438,7 @@ DebugGetReferences(
 
 VOID
 DebugTeardown(
-    IN  PXENBUS_DEBUG_CONTEXT   Context
+    _In_ PXENBUS_DEBUG_CONTEXT  Context
     )
 {
     Trace("====>\n");

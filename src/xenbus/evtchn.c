@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -127,7 +127,7 @@ struct _XENBUS_EVTCHN_CONTEXT {
 
 static FORCEINLINE PVOID
 __EvtchnAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_EVTCHN_TAG);
@@ -135,7 +135,7 @@ __EvtchnAllocate(
 
 static FORCEINLINE VOID
 __EvtchnFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_EVTCHN_TAG);
@@ -143,10 +143,10 @@ __EvtchnFree(
 
 static NTSTATUS
 EvtchnOpenFixed(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Count,
-    IN  va_list                 Arguments
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ ULONG                  Count,
+    _In_ va_list                Arguments
     )
 {
     ULONG                       LocalPort;
@@ -166,10 +166,10 @@ EvtchnOpenFixed(
 
 static NTSTATUS
 EvtchnOpenUnbound(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Count,
-    IN  va_list                 Arguments
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ ULONG                  Count,
+    _In_ va_list                Arguments
     )
 {
     USHORT                      RemoteDomain;
@@ -202,10 +202,10 @@ fail1:
 
 static NTSTATUS
 EvtchnOpenInterDomain(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Count,
-    IN  va_list                 Arguments
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ ULONG                  Count,
+    _In_ va_list                Arguments
     )
 {
     USHORT                      RemoteDomain;
@@ -243,10 +243,10 @@ fail1:
 
 static NTSTATUS
 EvtchnOpenVirq(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Count,
-    IN  va_list                 Arguments
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ ULONG                  Count,
+    _In_ va_list                Arguments
     )
 {
     ULONG                       Index;
@@ -320,10 +320,10 @@ RtlCaptureStackBackTrace(
 
 static PXENBUS_EVTCHN_CHANNEL
 EvtchnOpen(
-    IN  PINTERFACE          Interface,
-    IN  XENBUS_EVTCHN_TYPE  Type,
-    IN  PKSERVICE_ROUTINE   Callback,
-    IN  PVOID               Argument OPTIONAL,
+    _In_ PINTERFACE         Interface,
+    _In_ XENBUS_EVTCHN_TYPE Type,
+    _In_ PKSERVICE_ROUTINE  Callback,
+    _In_opt_ PVOID          Argument,
     ...
     )
 {
@@ -344,7 +344,7 @@ EvtchnOpen(
 
     Channel->Magic = XENBUS_EVTCHN_CHANNEL_MAGIC;
 
-    (VOID) RtlCaptureStackBackTrace(1, 1, &Channel->Caller, NULL);    
+    (VOID) RtlCaptureStackBackTrace(1, 1, &Channel->Caller, NULL);
 
     Channel->Type = Type;
     Channel->Callback = Callback;
@@ -449,9 +449,9 @@ fail1:
 
 static VOID
 EvtchnReap(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 Close
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ BOOLEAN                Close
     )
 {
     ULONG                       LocalPort = Channel->LocalPort;
@@ -493,8 +493,8 @@ EvtchnReap(
 
 static BOOLEAN
 EvtchnPollCallback(
-    IN  PVOID                   Argument,
-    IN  ULONG                   LocalPort
+    _In_ PVOID                  Argument,
+    _In_ ULONG                  LocalPort
     )
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor = Argument;
@@ -527,9 +527,9 @@ done:
 
 static BOOLEAN
 EvtchnPoll(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  ULONG                   Cpu,
-    IN  PLIST_ENTRY             List
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ ULONG                  Cpu,
+    _In_opt_ PLIST_ENTRY        List
     )
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor;
@@ -609,8 +609,8 @@ EvtchnPoll(
 
 static VOID
 EvtchnFlush(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context,
-    IN  ULONG                   Cpu
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ ULONG                  Cpu
     )
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor;
@@ -663,10 +663,10 @@ _IRQL_requires_(DISPATCH_LEVEL)
 _IRQL_requires_same_
 VOID
 EvtchnDpc(
-    IN  PKDPC                   Dpc,
-    IN  PVOID                   _Context,
-    IN  PVOID                   Argument1,
-    IN  PVOID                   Argument2
+    _In_ PKDPC                  Dpc,
+    _In_ PVOID                  _Context,
+    _In_ PVOID                  Argument1,
+    _In_ PVOID                  Argument2
     )
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor = _Context;
@@ -690,8 +690,8 @@ done:
 
 static VOID
 EvtchnTrigger(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
@@ -733,10 +733,10 @@ EvtchnTrigger(
 
 static NTSTATUS
 EvtchnBind(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  USHORT                  Group,
-    IN  UCHAR                   Number
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ USHORT                 Group,
+    _In_ UCHAR                  Number
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
@@ -806,10 +806,10 @@ fail1:
 
 static BOOLEAN
 EvtchnUnmask(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InUpcall,
-    IN  BOOLEAN                 Force
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ BOOLEAN                InUpcall,
+    _In_ BOOLEAN                Force
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
@@ -888,9 +888,9 @@ done:
 
 static VOID
 EvtchnUnmaskVersion4(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InUpcall
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ BOOLEAN                InUpcall
     )
 {
     EvtchnUnmask(Interface, Channel, InUpcall, TRUE);
@@ -898,8 +898,8 @@ EvtchnUnmaskVersion4(
 
 static VOID
 EvtchnSend(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     )
 {
     UNREFERENCED_PARAMETER(Interface);
@@ -914,8 +914,8 @@ EvtchnSend(
 
 static VOID
 EvtchnSendVersion1(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     )
 {
     KIRQL                       Irql;
@@ -927,8 +927,8 @@ EvtchnSendVersion1(
 
 static VOID
 EvtchnClose(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     )
 {
     PXENBUS_EVTCHN_CONTEXT      Context = Interface->Context;
@@ -979,8 +979,8 @@ done:
 
 static ULONG
 EvtchnGetPort(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     )
 {
     UNREFERENCED_PARAMETER(Interface);
@@ -993,8 +993,8 @@ EvtchnGetPort(
 
 static ULONG
 EvtchnGetCount(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     )
 {
     UNREFERENCED_PARAMETER(Interface);
@@ -1006,10 +1006,10 @@ EvtchnGetCount(
 
 static NTSTATUS
 EvtchnWait(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Count,
-    IN  PLARGE_INTEGER          Timeout
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ ULONG                  Count,
+    _In_ PLARGE_INTEGER         Timeout
     )
 {
     KIRQL                       Irql;
@@ -1069,9 +1069,9 @@ EvtchnWait(
 
 static NTSTATUS
 EvtchnWaitVersion5(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  PLARGE_INTEGER          Timeout
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ PLARGE_INTEGER         Timeout
     )
 {
     ULONG                       Count;
@@ -1084,13 +1084,13 @@ EvtchnWaitVersion5(
                       Timeout);
 }
 
-static
-_Function_class_(KSERVICE_ROUTINE)
-__drv_requiresIRQL(HIGH_LEVEL)
-BOOLEAN
+static KSERVICE_ROUTINE EvtchnInterruptCallback;
+
+_Use_decl_annotations_
+static BOOLEAN
 EvtchnInterruptCallback(
-    IN  PKINTERRUPT             InterruptObject,
-    IN  PVOID                   Argument
+    PKINTERRUPT                 InterruptObject,
+    PVOID                       Argument
     )
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor = Argument;
@@ -1223,7 +1223,7 @@ EvtchnReset(
 
 static NTSTATUS
 EvtchnAbiAcquire(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    _In_ PXENBUS_EVTCHN_CONTEXT Context
     )
 {
     NTSTATUS                    status;
@@ -1263,7 +1263,7 @@ fail1:
 
 static VOID
 EvtchnAbiRelease(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    _In_ PXENBUS_EVTCHN_CONTEXT Context
     )
 {
     XENBUS_EVTCHN_ABI(Release, &Context->EvtchnAbi);
@@ -1273,8 +1273,8 @@ EvtchnAbiRelease(
 
 static BOOLEAN
 EvtchnIsProcessorEnabled(
-    IN  PXENBUS_EVTCHN_CONTEXT      Context,
-    IN  ULONG                       Cpu
+    _In_ PXENBUS_EVTCHN_CONTEXT     Context,
+    _In_ ULONG                      Cpu
     )
 {
     if (!XENBUS_SHARED_INFO(UpcallSupported,
@@ -1289,7 +1289,7 @@ EvtchnIsProcessorEnabled(
 
 static VOID
 EvtchnInterruptEnable(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    _In_ PXENBUS_EVTCHN_CONTEXT Context
     )
 {
     ULONG                       Cpu;
@@ -1362,7 +1362,7 @@ line:
 
 static VOID
 EvtchnInterruptDisable(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    _In_ PXENBUS_EVTCHN_CONTEXT Context
     )
 {
     ULONG                       Cpu;
@@ -1398,7 +1398,7 @@ EvtchnInterruptDisable(
 
 static VOID
 EvtchnSuspendCallbackEarly(
-    IN  PVOID               Argument
+    _In_ PVOID              Argument
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Argument;
@@ -1429,7 +1429,7 @@ EvtchnSuspendCallbackEarly(
 
 static VOID
 EvtchnSuspendCallbackLate(
-    IN  PVOID               Argument
+    _In_ PVOID              Argument
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Argument;
@@ -1446,8 +1446,8 @@ EvtchnSuspendCallbackLate(
 
 static VOID
 EvtchnDebugCallback(
-    IN  PVOID               Argument,
-    IN  BOOLEAN             Crashing
+    _In_ PVOID              Argument,
+    _In_ BOOLEAN            Crashing
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Argument;
@@ -1536,7 +1536,7 @@ EvtchnDebugCallback(
 
 static NTSTATUS
 EvtchnAcquire(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
@@ -1736,7 +1736,7 @@ fail1:
 
 VOID
 EvtchnRelease(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_EVTCHN_CONTEXT  Context = Interface->Context;
@@ -1891,14 +1891,14 @@ static struct _XENBUS_EVTCHN_INTERFACE_V9 EvtchnInterfaceVersion9 = {
 
 NTSTATUS
 EvtchnInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_EVTCHN_CONTEXT  *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Out_ PXENBUS_EVTCHN_CONTEXT    *Context
     )
 {
-    HANDLE                      ParametersKey;
-    ULONG                       UseEvtchnFifoAbi;
-    ULONG                       UseEvtchnUpcall;
-    NTSTATUS                    status;
+    HANDLE                          ParametersKey;
+    ULONG                           UseEvtchnFifoAbi;
+    ULONG                           UseEvtchnUpcall;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 
@@ -1995,13 +1995,13 @@ fail1:
 
 NTSTATUS
 EvtchnGetInterface(
-    IN      PXENBUS_EVTCHN_CONTEXT  Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_EVTCHN_CONTEXT Context,
+    _In_ ULONG                  Version,
+    _Inout_ PINTERFACE          Interface,
+    _In_ ULONG                  Size
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                    status;
 
     ASSERT(Context != NULL);
 
@@ -2097,11 +2097,11 @@ EvtchnGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 EvtchnGetReferences(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    _In_ PXENBUS_EVTCHN_CONTEXT Context
     )
 {
     return Context->References;
@@ -2109,7 +2109,7 @@ EvtchnGetReferences(
 
 VOID
 EvtchnTeardown(
-    IN  PXENBUS_EVTCHN_CONTEXT  Context
+    _In_ PXENBUS_EVTCHN_CONTEXT Context
     )
 {
     Trace("====>\n");

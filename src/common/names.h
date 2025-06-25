@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -38,7 +38,7 @@
 
 static FORCEINLINE const CHAR *
 PowerStateTypeName(
-    IN  POWER_STATE_TYPE    Type
+    _In_ POWER_STATE_TYPE   Type
     )
 {
 #define _POWER_TYPE_NAME(_Type) \
@@ -58,7 +58,7 @@ PowerStateTypeName(
 
 static FORCEINLINE const CHAR *
 SystemPowerStateName(
-    IN  SYSTEM_POWER_STATE State
+    _In_ SYSTEM_POWER_STATE State
     )
 {
 #define _POWER_SYSTEM_STATE_NAME(_State)    \
@@ -84,7 +84,7 @@ SystemPowerStateName(
 
 static FORCEINLINE const CHAR *
 DevicePowerStateName(
-    IN  DEVICE_POWER_STATE State
+    _In_ DEVICE_POWER_STATE State
     )
 {
 #define _POWER_DEVICE_STATE_NAME(_State)    \
@@ -108,7 +108,7 @@ DevicePowerStateName(
 
 static FORCEINLINE const CHAR *
 PowerActionName(
-    IN  POWER_ACTION    Type
+    _In_ POWER_ACTION   Type
     )
 {
 #define _POWER_ACTION_NAME(_Type)   \
@@ -134,7 +134,7 @@ PowerActionName(
 
 static FORCEINLINE const CHAR *
 PowerMinorFunctionName(
-    IN  ULONG   MinorFunction
+    _In_ ULONG  MinorFunction
     )
 {
 #define _POWER_MINOR_FUNCTION_NAME(_Function)   \
@@ -156,7 +156,7 @@ PowerMinorFunctionName(
 
 static FORCEINLINE const CHAR *
 PnpMinorFunctionName(
-    IN  ULONG   Function
+    _In_ ULONG  Function
     )
 {
 #define _PNP_MINOR_FUNCTION_NAME(_Function) \
@@ -199,7 +199,7 @@ PnpMinorFunctionName(
 
 static FORCEINLINE const CHAR *
 ResourceDescriptorTypeName(
-    IN  UCHAR   Type
+    _In_ UCHAR  Type
     )
 {
 #define _RESOURCE_DESCRIPTOR_TYPE_NAME(_Type)   \
@@ -228,7 +228,7 @@ ResourceDescriptorTypeName(
 
 static FORCEINLINE const CHAR *
 ResourceDescriptorShareDispositionName(
-    IN  UCHAR   Disposition
+    _In_ UCHAR  Disposition
     )
 {
 #define _RESOURCE_DESCRIPTOR_SHARE_DISPOSITION_NAME(_Disposition)  \
@@ -251,7 +251,7 @@ ResourceDescriptorShareDispositionName(
 
 static FORCEINLINE const CHAR *
 IrqDevicePolicyName(
-    IN  IRQ_DEVICE_POLICY   Policy
+    _In_ IRQ_DEVICE_POLICY  Policy
     )
 {
 #define _IRQ_DEVICE_POLICY_NAME(_Policy)    \
@@ -276,7 +276,7 @@ IrqDevicePolicyName(
 
 static FORCEINLINE const CHAR *
 IrqPriorityName(
-    IN  IRQ_PRIORITY    Priority
+    _In_ IRQ_PRIORITY   Priority
     )
 {
 #define _IRQ_PRIORITY_NAME(_Priority)   \
@@ -299,7 +299,7 @@ IrqPriorityName(
 
 static FORCEINLINE const CHAR *
 InterruptModeName(
-    IN  KINTERRUPT_MODE Mode
+    _In_ KINTERRUPT_MODE    Mode
     )
 {
 #define _INTERRUPT_MODE_NAME(_Mode) \
@@ -320,7 +320,7 @@ InterruptModeName(
 
 static FORCEINLINE const CHAR *
 DeviceUsageNotificationTypeName(
-    IN  DEVICE_USAGE_NOTIFICATION_TYPE  Type
+    _In_ DEVICE_USAGE_NOTIFICATION_TYPE Type
     )
 {
 #define _DEVICE_USAGE_TYPE_NAME(_Type)  \
@@ -342,7 +342,7 @@ DeviceUsageNotificationTypeName(
 
 static FORCEINLINE const CHAR *
 InterfaceTypeName(
-    IN  INTERFACE_TYPE  Type
+    _In_ INTERFACE_TYPE Type
     )
 {
 #define _INTERFACE_TYPE_NAME(_Type) \
@@ -380,7 +380,7 @@ InterfaceTypeName(
 
 static FORCEINLINE const CHAR *
 DmaWidthName(
-    IN  DMA_WIDTH   Width
+    _In_ DMA_WIDTH  Width
     )
 {
 #define _DMA_WIDTH_NAME(_Width) \
@@ -404,7 +404,7 @@ DmaWidthName(
 
 static FORCEINLINE const CHAR *
 DmaSpeedName(
-    IN  DMA_SPEED   Speed
+    _In_ DMA_SPEED  Speed
     )
 {
 #define _DMA_SPEED_NAME(_Speed) \
@@ -429,7 +429,7 @@ DmaSpeedName(
 
 static FORCEINLINE const CHAR *
 BusQueryIdTypeName(
-    IN  BUS_QUERY_ID_TYPE   Type
+    _In_ BUS_QUERY_ID_TYPE  Type
     )
 {
 #define _BUS_QUERY_ID_TYPE_NAME(_Type)  \
@@ -454,7 +454,7 @@ BusQueryIdTypeName(
 
 static FORCEINLINE const CHAR *
 ProcessorChangeName(
-    IN  KE_PROCESSOR_CHANGE_NOTIFY_STATE    Change
+    _In_ KE_PROCESSOR_CHANGE_NOTIFY_STATE   Change
     )
 {
 #define _PROCESSOR_CHANGE_NAME(_Change) \
@@ -476,7 +476,7 @@ ProcessorChangeName(
 
 static FORCEINLINE const CHAR *
 VirqName(
-    IN  ULONG   Type
+    _In_ ULONG  Type
     )
 {
 #define _VIRQ_NAME(_Type) \

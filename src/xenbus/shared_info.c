@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -67,7 +67,7 @@ struct _XENBUS_SHARED_INFO_CONTEXT {
 
 static FORCEINLINE PVOID
 __SharedInfoAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_SHARED_INFO_TAG);
@@ -75,7 +75,7 @@ __SharedInfoAllocate(
 
 static FORCEINLINE VOID
 __SharedInfoFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_SHARED_INFO_TAG);
@@ -83,8 +83,8 @@ __SharedInfoFree(
 
 static BOOLEAN
 SharedInfoSetBit(
-    IN  ULONG_PTR volatile  *Mask,
-    IN  ULONG               Bit
+    _In_ ULONG_PTR volatile *Mask,
+    _In_ ULONG              Bit
     )
 {
     ASSERT3U(Bit, <, sizeof (ULONG_PTR) * 8);
@@ -97,8 +97,8 @@ SharedInfoSetBit(
 
 static BOOLEAN
 SharedInfoClearBit(
-    IN  ULONG_PTR volatile  *Mask,
-    IN  ULONG               Bit
+    _In_ ULONG_PTR volatile *Mask,
+    _In_ ULONG              Bit
     )
 {
     ASSERT3U(Bit, <, sizeof (ULONG_PTR) * 8);
@@ -111,8 +111,8 @@ SharedInfoClearBit(
 
 static BOOLEAN
 SharedInfoClearBitUnlocked(
-    IN  ULONG_PTR   *Mask,
-    IN  ULONG       Bit
+    _In_ ULONG_PTR  *Mask,
+    _In_ ULONG      Bit
     )
 {
     ULONG_PTR       Old;
@@ -129,8 +129,8 @@ SharedInfoClearBitUnlocked(
 
 static BOOLEAN
 SharedInfoTestBit(
-    IN  ULONG_PTR   *Mask,
-    IN  ULONG       Bit
+    _In_ ULONG_PTR  *Mask,
+    _In_ ULONG      Bit
     )
 {
     ASSERT3U(Bit, <, sizeof (ULONG_PTR) * 8);
@@ -142,11 +142,11 @@ SharedInfoTestBit(
 
 static VOID
 SharedInfoEvtchnMaskAll(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    _In_ PXENBUS_SHARED_INFO_CONTEXT    Context
     )
 {
-    shared_info_t                   *Shared;
-    ULONG                           Port;
+    shared_info_t                       *Shared;
+    ULONG                               Port;
 
     Shared = Context->Shared;
 
@@ -163,8 +163,8 @@ SharedInfoEvtchnMaskAll(
 
 static BOOLEAN
 SharedInfoUpcallSupported(
-    IN  PINTERFACE                  Interface,
-    IN  ULONG                       Index
+    _In_ PINTERFACE                 Interface,
+    _In_ ULONG                      Index
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
@@ -177,8 +177,8 @@ SharedInfoUpcallSupported(
 
 static BOOLEAN
 SharedInfoUpcallPending(
-    IN  PINTERFACE                  Interface,
-    IN  ULONG                       Index
+    _In_ PINTERFACE                 Interface,
+    _In_ ULONG                      Index
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
@@ -202,10 +202,10 @@ SharedInfoUpcallPending(
 
 static BOOLEAN
 SharedInfoEvtchnPoll(
-    IN  PINTERFACE                  Interface,
-    IN  ULONG                       Index,
-    IN  XENBUS_SHARED_INFO_EVENT    Event,
-    IN  PVOID                       Argument OPTIONAL
+    _In_ PINTERFACE                 Interface,
+    _In_ ULONG                      Index,
+    _In_ XENBUS_SHARED_INFO_EVENT   Event,
+    _In_opt_ PVOID                  Argument
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
@@ -277,8 +277,8 @@ done:
 
 static VOID
 SharedInfoEvtchnAck(
-    IN  PINTERFACE              Interface,
-    IN  ULONG                   Port
+    _In_ PINTERFACE             Interface,
+    _In_ ULONG                  Port
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
@@ -296,8 +296,8 @@ SharedInfoEvtchnAck(
 
 static VOID
 SharedInfoEvtchnMask(
-    IN  PINTERFACE              Interface,
-    IN  ULONG                   Port
+    _In_ PINTERFACE             Interface,
+    _In_ ULONG                  Port
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
@@ -315,8 +315,8 @@ SharedInfoEvtchnMask(
 
 static BOOLEAN
 SharedInfoEvtchnUnmask(
-    IN  PINTERFACE              Interface,
-    IN  ULONG                   Port
+    _In_ PINTERFACE             Interface,
+    _In_ ULONG                  Port
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Interface->Context;
@@ -339,9 +339,9 @@ SharedInfoEvtchnUnmask(
 
 static VOID
 SharedInfoGetTime(
-    IN  PINTERFACE                  Interface,
-    OUT PLARGE_INTEGER              Time,
-    OUT PBOOLEAN                    Local
+    _In_ PINTERFACE                 Interface,
+    _Out_ PLARGE_INTEGER            Time,
+    _Out_opt_ PBOOLEAN              Local
     )
 {
 #define NS_PER_S 1000000000ull
@@ -444,7 +444,7 @@ SharedInfoGetTime(
 
 static LARGE_INTEGER
 SharedInfoGetTimeVersion2(
-    IN  PINTERFACE  Interface
+    _In_ PINTERFACE Interface
     )
 {
     LARGE_INTEGER   Time;
@@ -456,12 +456,12 @@ SharedInfoGetTimeVersion2(
 
 static VOID
 SharedInfoMap(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    _In_ PXENBUS_SHARED_INFO_CONTEXT    Context
     )
 {
-    PFN_NUMBER                      Pfn;
-    PHYSICAL_ADDRESS                Address;
-    NTSTATUS                        status;
+    PFN_NUMBER                          Pfn;
+    PHYSICAL_ADDRESS                    Address;
+    NTSTATUS                            status;
 
     Pfn = MmGetMdlPfnArray(Context->Mdl)[0];
 
@@ -478,10 +478,10 @@ SharedInfoMap(
 
 static VOID
 SharedInfoUnmap(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    _In_ PXENBUS_SHARED_INFO_CONTEXT    Context
     )
 {
-    PFN_NUMBER                      Pfn;
+    PFN_NUMBER                          Pfn;
 
     LogPrintf(LOG_LEVEL_INFO,
               "SHARED_INFO: UNMAP XENMAPSPACE_shared_info\n");
@@ -493,7 +493,7 @@ SharedInfoUnmap(
 
 static VOID
 SharedInfoSuspendCallbackEarly(
-    IN  PVOID                   Argument
+    _In_ PVOID                  Argument
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Argument;
@@ -504,8 +504,8 @@ SharedInfoSuspendCallbackEarly(
 
 static VOID
 SharedInfoDebugCallback(
-    IN  PVOID                   Argument,
-    IN  BOOLEAN                 Crashing
+    _In_ PVOID                  Argument,
+    _In_ BOOLEAN                Crashing
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT Context = Argument;
@@ -587,7 +587,7 @@ SharedInfoDebugCallback(
 
 static NTSTATUS
 SharedInfoAcquire(
-    IN  PINTERFACE                  Interface
+    _In_ PINTERFACE                 Interface
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
@@ -748,7 +748,7 @@ fail1:
 
 static VOID
 SharedInfoRelease (
-    IN  PINTERFACE                  Interface
+    _In_ PINTERFACE                 Interface
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;
@@ -828,7 +828,7 @@ static struct _XENBUS_SHARED_INFO_INTERFACE_V3 SharedInfoInterfaceVersion3 = {
     SharedInfoEvtchnUnmask,
     SharedInfoGetTime
 };
-                     
+
 static struct _XENBUS_SHARED_INFO_INTERFACE_V4 SharedInfoInterfaceVersion4 = {
     { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V4), 4, NULL, NULL, NULL },
     SharedInfoAcquire,
@@ -844,11 +844,11 @@ static struct _XENBUS_SHARED_INFO_INTERFACE_V4 SharedInfoInterfaceVersion4 = {
 
 NTSTATUS
 SharedInfoInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_SHARED_INFO_CONTEXT *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Out_ PXENBUS_SHARED_INFO_CONTEXT   *Context
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                            status;
 
     Trace("====>\n");
 
@@ -888,10 +888,10 @@ fail1:
 
 NTSTATUS
 SharedInfoGetInterface(
-    IN      PXENBUS_SHARED_INFO_CONTEXT Context,
-    IN      ULONG                       Version,
-    IN OUT  PINTERFACE                  Interface,
-    IN      ULONG                       Size
+    _In_ PXENBUS_SHARED_INFO_CONTEXT    Context,
+    _In_ ULONG                          Version,
+    _Inout_ PINTERFACE                  Interface,
+    _In_ ULONG                          Size
     )
 {
     NTSTATUS                            status;
@@ -956,11 +956,11 @@ SharedInfoGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 SharedInfoGetReferences(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    _In_ PXENBUS_SHARED_INFO_CONTEXT    Context
     )
 {
     return Context->References;
@@ -968,7 +968,7 @@ SharedInfoGetReferences(
 
 VOID
 SharedInfoTeardown(
-    IN  PXENBUS_SHARED_INFO_CONTEXT Context
+    _In_ PXENBUS_SHARED_INFO_CONTEXT    Context
     )
 {
     Trace("====>\n");

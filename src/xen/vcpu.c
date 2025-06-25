@@ -39,20 +39,20 @@
 
 static LONG_PTR
 VcpuOp(
-    IN  ULONG           Command,
-    IN  unsigned int    vcpu_id,
-    IN  PVOID           Argument
+    _In_ ULONG          Command,
+    _In_ unsigned int   vcpu_id,
+    _In_opt_ PVOID      Argument
     )
 {
     return HYPERCALL(LONG_PTR, vcpu_op, 3, Command, vcpu_id, Argument);
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 VcpuSetPeriodicTimer(
-    IN  unsigned int                vcpu_id,
-    IN  PLARGE_INTEGER              Period
+    _In_ unsigned int               vcpu_id,
+    _In_opt_ PLARGE_INTEGER         Period
     )
 {
     LONG_PTR                        rc;
@@ -81,13 +81,13 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 VcpuRegisterVcpuInfo(
-    IN  unsigned int                vcpu_id,
-    IN  PFN_NUMBER                  Pfn,
-    IN  ULONG                       Offset
+    _In_ unsigned int               vcpu_id,
+    _In_ PFN_NUMBER                 Pfn,
+    _In_ ULONG                      Offset
     )
 {
     struct vcpu_register_vcpu_info  op;

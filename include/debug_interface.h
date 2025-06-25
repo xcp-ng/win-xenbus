@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -50,20 +50,20 @@ typedef struct _XENBUS_DEBUG_CALLBACK   XENBUS_DEBUG_CALLBACK, *PXENBUS_DEBUG_CA
     \brief Acquire a reference to the DEBUG interface
 
     \param Interface The interface header
-*/  
+*/
 typedef NTSTATUS
 (*XENBUS_DEBUG_ACQUIRE)(
-    IN  PINTERFACE  Interface
+    _In_ PINTERFACE Interface
     );
 
 /*! \typedef XENBUS_DEBUG_RELEASE
     \brief Release a reference to the DEBUG interface
 
     \param Interface The interface header
-*/  
+*/
 typedef VOID
 (*XENBUS_DEBUG_RELEASE)(
-    IN  PINTERFACE  Interface
+    _In_ PINTERFACE Interface
     );
 
 /*! \typedef XENBUS_DEBUG_FUNCTION
@@ -74,11 +74,11 @@ typedef VOID
     part of pre-crash logging
 
     Debug callback functions are always invoked with IRQL == HIGH_LEVEL
-*/  
+*/
 typedef VOID
 (*XENBUS_DEBUG_FUNCTION)(
-    IN  PVOID   Argument,
-    IN  BOOLEAN Crashing
+    _In_ PVOID      Argument,
+    _In_ BOOLEAN    Crashing
     );
 
 /*! \typedef XENBUS_DEBUG_REGISTER
@@ -89,14 +89,14 @@ typedef VOID
     \param Function The callback function
     \param Argument An optional context argument passed to the callback
     \param Callback A pointer to a callback handle to be initialized
-*/  
+*/
 typedef NTSTATUS
 (*XENBUS_DEBUG_REGISTER)(
-    IN  PINTERFACE              Interface,
-    IN  PCHAR                   Prefix,
-    IN  XENBUS_DEBUG_FUNCTION   Function,
-    IN  PVOID                   Argument OPTIONAL,
-    OUT PXENBUS_DEBUG_CALLBACK  *Callback
+    _In_ PINTERFACE                 Interface,
+    _In_ PCHAR                      Prefix,
+    _In_ XENBUS_DEBUG_FUNCTION      Function,
+    _In_opt_ PVOID                  Argument,
+    _Out_ PXENBUS_DEBUG_CALLBACK    *Callback
     );
 
 /*! \typedef XENBUS_DEBUG_PRINTF
@@ -108,11 +108,11 @@ typedef NTSTATUS
 
     This method must only be invoked from the context of a debug
     callback
-*/  
+*/
 typedef VOID
 (*XENBUS_DEBUG_PRINTF)(
-    IN  PINTERFACE              Interface,
-    IN  const CHAR              *Format,
+    _In_ PINTERFACE             Interface,
+    _In_ const CHAR             *Format,
     ...
     );
 
@@ -124,8 +124,8 @@ typedef VOID
 */
 typedef VOID
 (*XENBUS_DEBUG_DEREGISTER)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_DEBUG_CALLBACK  Callback
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_DEBUG_CALLBACK Callback
     );
 
 /*! \typedef XENBUS_DEBUG_TRIGGER
@@ -137,12 +137,12 @@ typedef VOID
 */
 typedef VOID
 (*XENBUS_DEBUG_TRIGGER)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_DEBUG_CALLBACK  Callback OPTIONAL
+    _In_ PINTERFACE                 Interface,
+    _In_opt_ PXENBUS_DEBUG_CALLBACK Callback
     );
 
 // {0DF600AE-6B20-4227-BF94-03DA9A26A114}
-DEFINE_GUID(GUID_XENBUS_DEBUG_INTERFACE, 
+DEFINE_GUID(GUID_XENBUS_DEBUG_INTERFACE,
 0xdf600ae, 0x6b20, 0x4227, 0xbf, 0x94, 0x3, 0xda, 0x9a, 0x26, 0xa1, 0x14);
 
 /*! \struct _XENBUS_DEBUG_INTERFACE_V1

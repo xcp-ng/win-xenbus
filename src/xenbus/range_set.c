@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -71,7 +71,7 @@ struct _XENBUS_RANGE_SET_CONTEXT {
 
 static FORCEINLINE PVOID
 __RangeSetAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, RANGE_SET_TAG);
@@ -79,7 +79,7 @@ __RangeSetAllocate(
 
 static FORCEINLINE VOID
 __RangeSetFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, RANGE_SET_TAG);
@@ -87,7 +87,7 @@ __RangeSetFree(
 
 static FORCEINLINE BOOLEAN
 __RangeSetIsEmpty(
-    IN  PXENBUS_RANGE_SET   RangeSet
+    _In_ PXENBUS_RANGE_SET  RangeSet
     )
 {
     return IsListEmpty(&RangeSet->List);
@@ -95,8 +95,8 @@ __RangeSetIsEmpty(
 
 static VOID
 RangeSetRemove(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  BOOLEAN             After
+    _In_ PXENBUS_RANGE_SET  RangeSet,
+    _In_ BOOLEAN            After
     )
 {
     PLIST_ENTRY             Cursor;
@@ -130,7 +130,7 @@ RangeSetRemove(
 
 static VOID
 RangeSetMergeBackwards(
-    IN  PXENBUS_RANGE_SET   RangeSet
+    _In_ PXENBUS_RANGE_SET  RangeSet
     )
 {
     PLIST_ENTRY             Cursor;
@@ -156,7 +156,7 @@ RangeSetMergeBackwards(
 
 static VOID
 RangeSetMergeForwards(
-    IN  PXENBUS_RANGE_SET   RangeSet
+    _In_ PXENBUS_RANGE_SET  RangeSet
     )
 {
     PLIST_ENTRY             Cursor;
@@ -182,10 +182,10 @@ RangeSetMergeForwards(
 
 static NTSTATUS
 RangeSetPop(
-    IN  PINTERFACE          Interface,
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  ULONGLONG           Count,
-    OUT PLONGLONG           Start
+    _In_ PINTERFACE         Interface,
+    _In_ PXENBUS_RANGE_SET  RangeSet,
+    _In_ ULONGLONG          Count,
+    _Out_ PLONGLONG         Start
     )
 {
     PLIST_ENTRY             Cursor;
@@ -252,10 +252,10 @@ fail1:
 
 static NTSTATUS
 RangeSetAdd(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Start,
-    IN  LONGLONG            End,
-    IN  BOOLEAN             After
+    _In_ PXENBUS_RANGE_SET  RangeSet,
+    _In_ LONGLONG           Start,
+    _In_ LONGLONG           End,
+    _In_ BOOLEAN            After
     )
 {
 #define INSERT_AFTER(_Cursor, _New)             \
@@ -323,10 +323,10 @@ fail1:
 
 static NTSTATUS
 RangeSetGet(
-    IN  PINTERFACE          Interface,
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Start,
-    IN  ULONGLONG           Count
+    _In_ PINTERFACE         Interface,
+    _In_ PXENBUS_RANGE_SET  RangeSet,
+    _In_ LONGLONG           Start,
+    _In_ ULONGLONG          Count
     )
 {
     LONGLONG                End = Start + Count - 1;
@@ -417,14 +417,14 @@ fail2:
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    return status;    
+    return status;
 }
 
 static NTSTATUS
 RangeSetAddAfter(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Start,
-    IN  LONGLONG            End
+    _In_ PXENBUS_RANGE_SET  RangeSet,
+    _In_ LONGLONG           Start,
+    _In_ LONGLONG           End
     )
 {
     PLIST_ENTRY             Cursor;
@@ -450,7 +450,7 @@ RangeSetAddAfter(
     }
 
     RangeSet->Cursor = Cursor;
-    status = RangeSetAdd(RangeSet, Start, End, FALSE);    
+    status = RangeSetAdd(RangeSet, Start, End, FALSE);
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -459,14 +459,14 @@ RangeSetAddAfter(
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    return status;    
+    return status;
 }
 
 static NTSTATUS
 RangeSetAddBefore(
-    IN  PXENBUS_RANGE_SET   RangeSet,
-    IN  LONGLONG            Start,
-    IN  LONGLONG            End
+    _In_ PXENBUS_RANGE_SET  RangeSet,
+    _In_ LONGLONG           Start,
+    _In_ LONGLONG           End
     )
 {
     PLIST_ENTRY             Cursor;
@@ -492,7 +492,7 @@ RangeSetAddBefore(
     }
 
     RangeSet->Cursor = Cursor;
-    status = RangeSetAdd(RangeSet, Start, End, TRUE);    
+    status = RangeSetAdd(RangeSet, Start, End, TRUE);
     if (!NT_SUCCESS(status))
         goto fail1;
 
@@ -501,15 +501,15 @@ RangeSetAddBefore(
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    return status;    
+    return status;
 }
 
 static NTSTATUS
 RangeSetPut(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_RANGE_SET       RangeSet,
-    IN  LONGLONG                Start,
-    IN  ULONGLONG               Count
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_RANGE_SET      RangeSet,
+    _In_ LONGLONG               Start,
+    _In_ ULONGLONG              Count
     )
 {
     LONGLONG                    End = Start + Count - 1;
@@ -567,9 +567,9 @@ fail1:
 
 NTSTATUS
 RangeSetCreate(
-    IN  PINTERFACE              Interface,
-    IN  const CHAR              *Name,
-    OUT PXENBUS_RANGE_SET       *RangeSet
+    _In_ PINTERFACE             Interface,
+    _In_ const CHAR             *Name,
+    _Out_ PXENBUS_RANGE_SET     *RangeSet
     )
 {
     PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
@@ -619,8 +619,8 @@ fail1:
 
 VOID
 RangeSetDestroy(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_RANGE_SET       RangeSet
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_RANGE_SET      RangeSet
     )
 {
     PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
@@ -638,7 +638,7 @@ RangeSetDestroy(
         __RangeSetFree(RangeSet->Spare);
         RangeSet->Spare = NULL;
     }
-        
+
     ASSERT(__RangeSetIsEmpty(RangeSet));
     RtlZeroMemory(&RangeSet->List, sizeof (LIST_ENTRY));
     RtlZeroMemory(&RangeSet->Lock, sizeof (KSPIN_LOCK));
@@ -655,8 +655,8 @@ RangeSetDestroy(
 
 static VOID
 RangeSetDump(
-    IN  PXENBUS_RANGE_SET_CONTEXT   Context,
-    IN  PXENBUS_RANGE_SET           RangeSet
+    _In_ PXENBUS_RANGE_SET_CONTEXT  Context,
+    _In_ PXENBUS_RANGE_SET          RangeSet
     )
 {
     XENBUS_DEBUG(Printf,
@@ -700,8 +700,8 @@ RangeSetDump(
 
 static VOID
 RangeSetDebugCallback(
-    IN  PVOID                   Argument,
-    IN  BOOLEAN                 Crashing
+    _In_ PVOID                  Argument,
+    _In_ BOOLEAN                Crashing
     )
 {
     PXENBUS_RANGE_SET_CONTEXT   Context = Argument;
@@ -729,7 +729,7 @@ RangeSetDebugCallback(
 
 static NTSTATUS
 RangeSetAcquire(
-    IN  PINTERFACE              Interface
+    _In_ PINTERFACE             Interface
     )
 {
     PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
@@ -780,7 +780,7 @@ fail1:
 
 static VOID
 RangeSetRelease(
-    IN  PINTERFACE              Interface
+    _In_ PINTERFACE             Interface
     )
 {
     PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
@@ -819,11 +819,11 @@ static struct _XENBUS_RANGE_SET_INTERFACE_V1 RangeSetInterfaceVersion1 = {
     RangeSetGet,
     RangeSetDestroy
 };
-                     
+
 NTSTATUS
 RangeSetInitialize(
-    IN  PXENBUS_FDO                 Fdo,
-    OUT PXENBUS_RANGE_SET_CONTEXT   *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Out_ PXENBUS_RANGE_SET_CONTEXT *Context
     )
 {
     NTSTATUS                        status;
@@ -860,13 +860,13 @@ fail1:
 
 NTSTATUS
 RangeSetGetInterface(
-    IN      PXENBUS_RANGE_SET_CONTEXT   Context,
-    IN      ULONG                       Version,
-    IN OUT  PINTERFACE                  Interface,
-    IN      ULONG                       Size
+    _In_ PXENBUS_RANGE_SET_CONTEXT  Context,
+    _In_ ULONG                      Version,
+    _Inout_ PINTERFACE              Interface,
+    _In_ ULONG                      Size
     )
 {
-    NTSTATUS                            status;
+    NTSTATUS                        status;
 
     ASSERT(Context != NULL);
 
@@ -894,11 +894,11 @@ RangeSetGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 RangeSetGetReferences(
-    IN  PXENBUS_RANGE_SET_CONTEXT   Context
+    _In_ PXENBUS_RANGE_SET_CONTEXT  Context
     )
 {
     return Context->References;
@@ -906,7 +906,7 @@ RangeSetGetReferences(
 
 VOID
 RangeSetTeardown(
-    IN  PXENBUS_RANGE_SET_CONTEXT   Context
+    _In_ PXENBUS_RANGE_SET_CONTEXT  Context
     )
 {
     Trace("====>\n");

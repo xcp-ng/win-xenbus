@@ -56,8 +56,8 @@
 XEN_API
 NTSTATUS
 ConfigGetActive(
-    IN  const CHAR  *Key,
-    OUT PCHAR       *Value
+    _In_ const CHAR *Key,
+    _Out_ PCHAR     *Value
     )
 {
     HANDLE          ActiveKey;
@@ -126,7 +126,7 @@ fail1:
 
 static FORCEINLINE BOOLEAN
 __ConfigIsDeviceLegacy(
-    IN  PCHAR   DeviceID
+    _In_ PCHAR  DeviceID
     )
 {
     UNREFERENCED_PARAMETER(DeviceID);
@@ -188,9 +188,9 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigSetActive(
-    IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID,
-    IN  PCHAR   LocationInformation
+    _In_ PCHAR  DeviceID,
+    _In_ PCHAR  InstanceID,
+    _In_ PCHAR  LocationInformation
     )
 {
     HANDLE      ActiveKey;
@@ -273,9 +273,9 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigUpdateActive(
-    IN  PCHAR   DeviceID,
-    IN  PCHAR   InstanceID,
-    IN  PCHAR   LocationInformation
+    _In_ PCHAR  DeviceID,
+    _In_ PCHAR  InstanceID,
+    _In_ PCHAR  LocationInformation
     )
 {
     HANDLE      ActiveKey;
@@ -410,8 +410,8 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigRequestReboot(
-    IN  HANDLE      ParametersKey,
-    IN  PCHAR       Module
+    _In_ HANDLE     ParametersKey,
+    _In_ PCHAR      Module
     )
 {
     PANSI_STRING    Ansi;
@@ -489,8 +489,8 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigQuerySystemStartOption(
-    IN  PCHAR           Key,
-    OUT PANSI_STRING    *Option
+    _In_ PCHAR          Key,
+    _Out_ PANSI_STRING  *Option
     )
 {
     return RegistryQuerySystemStartOption(Key, Option);

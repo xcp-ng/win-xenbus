@@ -43,26 +43,26 @@ typedef struct _XENBUS_UNPLUG_CONTEXT  XENBUS_UNPLUG_CONTEXT, *PXENBUS_UNPLUG_CO
 
 extern NTSTATUS
 UnplugInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_UNPLUG_CONTEXT  *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Out_ PXENBUS_UNPLUG_CONTEXT    *Context
     );
 
 extern NTSTATUS
 UnplugGetInterface(
-    IN      PXENBUS_UNPLUG_CONTEXT  Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_UNPLUG_CONTEXT Context,
+    _In_ ULONG                  Version,
+    _Inout_ PINTERFACE          Interface,
+    _In_ ULONG                  Size
     );
 
 extern ULONG
 UnplugGetReferences(
-    IN  PXENBUS_UNPLUG_CONTEXT   Context
+    _In_ PXENBUS_UNPLUG_CONTEXT Context
     );
 
 extern VOID
 UnplugTeardown(
-    IN  PXENBUS_UNPLUG_CONTEXT   Context
+    _In_ PXENBUS_UNPLUG_CONTEXT Context
     );
 
 #endif  // _XENBUS_UNPLUG_H

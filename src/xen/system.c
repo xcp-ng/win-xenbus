@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -85,7 +85,7 @@ static SYSTEM_CONTEXT   SystemContext;
 
 static FORCEINLINE PVOID
 __SystemAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XEN_SYSTEM_TAG);
@@ -93,7 +93,7 @@ __SystemAllocate(
 
 static FORCEINLINE VOID
 __SystemFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XEN_SYSTEM_TAG);
@@ -101,7 +101,7 @@ __SystemFree(
 
 static FORCEINLINE const CHAR *
 __PlatformIdName(
-    IN  ULONG   PlatformId
+    _In_ ULONG  PlatformId
     )
 {
 #define PLATFORM_ID_NAME(_PlatformId)       \
@@ -122,7 +122,7 @@ __PlatformIdName(
 
 static FORCEINLINE const CHAR *
 __SuiteName(
-    IN  ULONG  SuiteBit
+    _In_ ULONG SuiteBit
     )
 {
 #define SUITE_NAME(_Suite)          \
@@ -155,7 +155,7 @@ __SuiteName(
 
 static FORCEINLINE const CHAR *
 __ProductTypeName(
-    IN  UCHAR   ProductType
+    _In_ UCHAR  ProductType
     )
 {
 #define PRODUCT_TYPE_NAME(_ProductType) \
@@ -174,7 +174,7 @@ __ProductTypeName(
 #undef  PRODUCT_TYPE_NAME
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 SystemGetVersionInformation(
     VOID
@@ -207,7 +207,7 @@ SystemGetVersionInformation(
          __PlatformIdName(VersionInformation.dwPlatformId));
 #else
 #error 'Unrecognised architecture'
-#endif    
+#endif
 
     if (VersionInformation.wServicePackMajor != 0 ||
         VersionInformation.wServicePackMinor != 0)
@@ -326,7 +326,7 @@ fail1:
 
 static UCHAR
 SystemApicIDToProcessorID(
-    IN  UCHAR   ApicID
+    _In_ UCHAR  ApicID
     )
 {
     PSYSTEM_CONTEXT Context = &SystemContext;
@@ -357,7 +357,7 @@ SystemApicIDToProcessorID(
 
 static VOID
 SystemViridianInformation(
-    IN  ULONG   Count
+    _In_ ULONG  Count
     )
 {
     ULONG       EAX;
@@ -573,7 +573,7 @@ done:
 
 static VOID
 SystemProcessorInitialize(
-    IN  ULONG           Cpu
+    _In_ ULONG          Cpu
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
@@ -617,7 +617,7 @@ SystemProcessorInitialize(
 
 static VOID
 SystemProcessorTeardown(
-    IN  ULONG           Cpu
+    _In_ ULONG          Cpu
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
@@ -633,8 +633,8 @@ SystemProcessorTeardown(
 XEN_API
 NTSTATUS
 SystemProcessorVcpuId(
-    IN  ULONG           Cpu,
-    OUT unsigned int    *vcpu_id
+    _In_ ULONG          Cpu,
+    _Out_ unsigned int  *vcpu_id
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
@@ -660,8 +660,8 @@ fail1:
 XEN_API
 NTSTATUS
 SystemProcessorVcpuInfo(
-    IN  ULONG           Cpu,
-    OUT vcpu_info_t     **Vcpu
+    _In_ ULONG          Cpu,
+    _Out_ vcpu_info_t   **Vcpu
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
@@ -693,8 +693,8 @@ fail1:
 XEN_API
 NTSTATUS
 SystemProcessorRegisterVcpuInfo(
-    IN  ULONG           Cpu,
-    IN  BOOLEAN         Force
+    _In_ ULONG          Cpu,
+    _In_ BOOLEAN        Force
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
@@ -773,7 +773,7 @@ fail1:
 
 static VOID
 SystemProcessorDeregisterVcpuInfo(
-    IN  ULONG           Cpu
+    _In_ ULONG          Cpu
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
@@ -794,10 +794,10 @@ _IRQL_requires_(DISPATCH_LEVEL)
 _IRQL_requires_same_
 VOID
 SystemProcessorDpc(
-    IN  PKDPC           Dpc,
-    IN  PVOID           _Context,
-    IN  PVOID           Argument1,
-    IN  PVOID           Argument2
+    _In_ PKDPC          Dpc,
+    _In_ PVOID          _Context,
+    _In_ PVOID          Argument1,
+    _In_ PVOID          Argument2
     )
 {
     PSYSTEM_CONTEXT     Context = &SystemContext;
@@ -843,9 +843,9 @@ static
 _Function_class_(PROCESSOR_CALLBACK_FUNCTION)
 VOID
 SystemProcessorChangeCallback(
-    IN      PVOID                               Argument,
-    IN      PKE_PROCESSOR_CHANGE_NOTIFY_CONTEXT Change,
-    IN OUT  PNTSTATUS                           Status
+    _In_ PVOID                                  Argument,
+    _In_ PKE_PROCESSOR_CHANGE_NOTIFY_CONTEXT    Change,
+    _Inout_ PNTSTATUS                           Status
     )
 {
     PSYSTEM_CONTEXT                             Context = &SystemContext;
@@ -1033,7 +1033,7 @@ SystemGetStartOptions(
     NTSTATUS        status;
 
     RtlInitUnicodeString(&Unicode, L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control");
-    
+
     status = RegistryOpenKey(NULL, &Unicode, KEY_READ, &Key);
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -1071,17 +1071,17 @@ fail1:
 
 static NTSTATUS
 SystemRegisterCallback(
-    IN  PWCHAR              Name,
-    IN  PCALLBACK_FUNCTION  Function,
-    IN  PVOID               Argument,
-    OUT PVOID               *Handle
+    _In_ PWCHAR             Name,
+    _In_ PCALLBACK_FUNCTION Function,
+    _In_opt_ PVOID          Argument,
+    _Out_ PVOID             *Handle
     )
 {
     UNICODE_STRING          Unicode;
     OBJECT_ATTRIBUTES       Attributes;
     PCALLBACK_OBJECT        Object;
     NTSTATUS                status;
-    
+
     RtlInitUnicodeString(&Unicode, Name);
 
     InitializeObjectAttributes(&Attributes,
@@ -1122,7 +1122,7 @@ fail1:
 
 static VOID
 SystemDeregisterCallback(
-    IN  PVOID   Handle
+    _In_ PVOID  Handle
     )
 {
     ExUnregisterCallback(Handle);
@@ -1130,11 +1130,12 @@ SystemDeregisterCallback(
 
 CALLBACK_FUNCTION   SystemPowerStateCallback;
 
+_Use_decl_annotations_
 VOID
 SystemPowerStateCallback(
-    IN  PVOID   _Context,
-    IN  PVOID   Argument1,
-    IN  PVOID   Argument2
+    PVOID       _Context,
+    PVOID       Argument1,
+    PVOID       Argument2
     )
 {
     ULONG_PTR   Type = (ULONG_PTR)Argument1;
@@ -1401,7 +1402,7 @@ SystemRealTimeIsUniversal(
 XEN_API
 NTSTATUS
 SystemSetWatchdog(
-    IN  ULONG       Seconds
+    _In_ ULONG      Seconds
     )
 {
     PSYSTEM_CONTEXT Context = &SystemContext;

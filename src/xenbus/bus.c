@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -54,7 +54,7 @@ typedef struct _XENBUS_BUS_CONTEXT {
 
 static FORCEINLINE PVOID
 __BusAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, BUS_TAG);
@@ -62,7 +62,7 @@ __BusAllocate(
 
 static FORCEINLINE VOID
 __BusFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, BUS_TAG);
@@ -70,7 +70,7 @@ __BusFree(
 
 static VOID
 BusReference(
-    IN  PVOID           _Context
+    _In_ PVOID          _Context
     )
 {
     PXENBUS_BUS_CONTEXT Context = _Context;
@@ -80,7 +80,7 @@ BusReference(
 
 static VOID
 BusDereference(
-    IN  PVOID           _Context
+    _In_ PVOID          _Context
     )
 {
     PXENBUS_BUS_CONTEXT Context = _Context;
@@ -89,15 +89,16 @@ BusDereference(
     InterlockedDecrement(&Context->References);
 }
 
-static
-__drv_functionClass(TRANSLATE_BUS_ADDRESS)
-BOOLEAN
+static TRANSLATE_BUS_ADDRESS BusTranslateAddress;
+
+_Use_decl_annotations_
+static BOOLEAN
 BusTranslateAddress(
-    IN      PVOID               _Context,
-    IN      PHYSICAL_ADDRESS    BusAddress,
-    IN      ULONG               Length,
-    IN OUT  PULONG              AddressSpace,
-    OUT     PPHYSICAL_ADDRESS   TranslatedAddress
+    PVOID                       _Context,
+    PHYSICAL_ADDRESS            BusAddress,
+    ULONG                       Length,
+    PULONG                      AddressSpace,
+    PPHYSICAL_ADDRESS           TranslatedAddress
     )
 {
     PXENBUS_BUS_CONTEXT         Context = _Context;
@@ -109,17 +110,18 @@ BusTranslateAddress(
                                   TranslatedAddress);
 }
 
-static
-__drv_functionClass(GET_DMA_ADAPTER)
-PDMA_ADAPTER
+static GET_DMA_ADAPTER BusGetDmaAdapter;
+
+_Use_decl_annotations_
+static PDMA_ADAPTER
 BusGetDmaAdapter(
-    IN  PVOID               _Context,
-    IN  PDEVICE_DESCRIPTION DeviceDescriptor,
-    OUT PULONG              NumberOfMapRegisters
+    PVOID                       _Context,
+    PDEVICE_DESCRIPTION         DeviceDescriptor,
+    PULONG                      NumberOfMapRegisters
     )
 {
-    PXENBUS_BUS_CONTEXT     Context = _Context;
-    XENBUS_DMA_ADAPTER_TYPE Type;
+    PXENBUS_BUS_CONTEXT         Context = _Context;
+    XENBUS_DMA_ADAPTER_TYPE     Type;
 
     if (Context->InterceptDmaAdapter != 0) {
         RTL_OSVERSIONINFOEXW    VersionInformation;
@@ -138,22 +140,23 @@ BusGetDmaAdapter(
     } else {
         Type = XENBUS_DMA_ADAPTER_NO_INTERCEPT;
     }
-    
+
     return DmaGetAdapter(Context->Pdo,
                          Type,
                          DeviceDescriptor,
                          NumberOfMapRegisters);
 }
 
-static
-__drv_functionClass(GET_SET_DEVICE_DATA)
-ULONG
+static GET_SET_DEVICE_DATA BusSetData;
+
+_Use_decl_annotations_
+static ULONG
 BusSetData(
-    IN  PVOID           _Context,
-    IN  ULONG           DataType,
-    IN  PVOID           Buffer,
-    IN  ULONG           Offset,
-    IN  ULONG           Length
+    PVOID               _Context,
+    ULONG               DataType,
+    PVOID               Buffer,
+    ULONG               Offset,
+    ULONG               Length
     )
 {
     PXENBUS_BUS_CONTEXT Context = _Context;
@@ -165,15 +168,16 @@ BusSetData(
                          Length);
 }
 
-static
-__drv_functionClass(GET_SET_DEVICE_DATA)
-ULONG
+static GET_SET_DEVICE_DATA BusGetData;
+
+_Use_decl_annotations_
+static ULONG
 BusGetData(
-    IN  PVOID           _Context,
-    IN  ULONG           DataType,
-    IN  PVOID           Buffer,
-    IN  ULONG           Offset,
-    IN  ULONG           Length
+    PVOID               _Context,
+    ULONG               DataType,
+    PVOID               Buffer,
+    ULONG               Offset,
+    ULONG               Length
     )
 {
     PXENBUS_BUS_CONTEXT Context = _Context;
@@ -187,14 +191,14 @@ BusGetData(
 
 NTSTATUS
 BusInitialize(
-    IN  PXENBUS_PDO             Pdo,
-    OUT PBUS_INTERFACE_STANDARD Interface
+    _In_ PXENBUS_PDO                Pdo,
+    _Out_ PBUS_INTERFACE_STANDARD   Interface
     )
 {
-    PXENBUS_BUS_CONTEXT         Context;
-    HANDLE                      ParametersKey;
-    ULONG                       InterceptDmaAdapter;
-    NTSTATUS                    status;
+    PXENBUS_BUS_CONTEXT             Context;
+    HANDLE                          ParametersKey;
+    ULONG                           InterceptDmaAdapter;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 
@@ -238,7 +242,7 @@ fail1:
 
 VOID
 BusTeardown(
-    IN OUT  PBUS_INTERFACE_STANDARD Interface
+    _Inout_ PBUS_INTERFACE_STANDARD Interface
     )
 {
     PXENBUS_BUS_CONTEXT             Context = Interface->Context;

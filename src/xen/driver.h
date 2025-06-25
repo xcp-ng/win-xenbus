@@ -45,13 +45,13 @@ DriverGetUnplugKey(
 
 extern PMDL
 DriverGetNamedPages(
-    IN  PCHAR   Name,
-    IN  ULONG   Count
+    _In_ PCHAR  Name,
+    _In_ ULONG  Count
     );
 
 extern VOID
 DriverPutNamedPages(
-    IN  PMDL    Mdl
+    _In_ PMDL   Mdl
     );
 
 #endif  // _XEN_DRIVER_H

@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -102,7 +102,7 @@ static LONG             SyncOwner = -1;
 
 static FORCEINLINE PVOID
 __SyncAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_SYNC_TAG);
@@ -110,7 +110,7 @@ __SyncAllocate(
 
 static FORCEINLINE VOID
 __SyncFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_SYNC_TAG);
@@ -118,7 +118,7 @@ __SyncFree(
 
 static FORCEINLINE VOID
 __SyncAcquire(
-    IN  LONG    Index
+    _In_ LONG   Index
     )
 {
     LONG        Old;
@@ -198,7 +198,7 @@ __SyncProcessorDisableInterrupts(
 
 static FORCEINLINE VOID
 __SyncProcessorRunEarly(
-    IN  ULONG       Index
+    _In_ ULONG      Index
     )
 {
     PSYNC_CONTEXT   Context = &SyncContext;
@@ -226,7 +226,7 @@ __SyncProcessorEnableInterrupts(
 
 static FORCEINLINE VOID
 __SyncProcessorRunLate(
-    IN  ULONG       Index
+    _In_ ULONG      Index
     )
 {
     PSYNC_CONTEXT   Context = &SyncContext;
@@ -257,10 +257,10 @@ __SyncWait(
 VOID
 #pragma prefast(suppress:28166) // Function does not restore IRQL
 SyncWorker(
-    IN  PKDPC           Dpc,
-    IN  PVOID           _Context,
-    IN  PVOID           Argument1,
-    IN  PVOID           Argument2
+    PKDPC               Dpc,
+    PVOID               _Context,
+    PVOID               Argument1,
+    PVOID               Argument2
     )
 {
     PSYNC_CONTEXT       Context = &SyncContext;
@@ -325,20 +325,20 @@ SyncWorker(
     InterlockedIncrement(&Context->CompletionCount);
 }
 
-__drv_maxIRQL(DISPATCH_LEVEL)
-__drv_raisesIRQL(DISPATCH_LEVEL)
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_raises_(DISPATCH_LEVEL)
 VOID
 SyncCapture(
-    IN  PVOID           Argument OPTIONAL,
-    IN  SYNC_CALLBACK   Early OPTIONAL,
-    IN  SYNC_CALLBACK   Late OPTIONAL
+    _In_opt_ PVOID          Argument,
+    _In_opt_ SYNC_CALLBACK  Early,
+    _In_opt_ SYNC_CALLBACK  Late
     )
 {
-    PSYNC_CONTEXT       Context = &SyncContext;
-    LONG                Index;
-    PROCESSOR_NUMBER    ProcNumber;
-    USHORT              Group;
-    UCHAR               Number;
+    PSYNC_CONTEXT           Context = &SyncContext;
+    LONG                    Index;
+    PROCESSOR_NUMBER        ProcNumber;
+    USHORT                  Group;
+    UCHAR                   Number;
 
     ASSERT3U(KeGetCurrentIrql(), ==, DISPATCH_LEVEL);
 
@@ -387,8 +387,8 @@ SyncCapture(
     Trace("<==== (%u:%u)\n", Group, Number);
 }
 
-__drv_requiresIRQL(DISPATCH_LEVEL)
-__drv_setsIRQL(HIGH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
+_IRQL_raises_(HIGH_LEVEL)
 VOID
 SyncDisableInterrupts(
     VOID
@@ -416,7 +416,7 @@ SyncDisableInterrupts(
     }
 }
 
-__drv_requiresIRQL(HIGH_LEVEL)
+_IRQL_requires_(HIGH_LEVEL)
 VOID
 SyncRunEarly(
     )
@@ -436,8 +436,8 @@ SyncRunEarly(
     __SyncWait();
 }
 
-__drv_requiresIRQL(HIGH_LEVEL)
-__drv_setsIRQL(DISPATCH_LEVEL)
+_IRQL_requires_(HIGH_LEVEL)
+_IRQL_raises_(DISPATCH_LEVEL)
 VOID
 SyncEnableInterrupts(
     )
@@ -459,7 +459,7 @@ SyncEnableInterrupts(
     Trace("<====\n");
 }
 
-__drv_requiresIRQL(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
 VOID
 SyncRunLate(
     )
@@ -480,7 +480,7 @@ SyncRunLate(
 }
 
 
-__drv_requiresIRQL(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
 VOID
 #pragma prefast(suppress:28167) // Function changes IRQL
 SyncRelease(

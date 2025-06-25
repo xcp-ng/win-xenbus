@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -63,7 +63,7 @@ struct _XENBUS_HASH_TABLE {
 
 static FORCEINLINE PVOID
 __HashTableAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_HASH_TABLE_TAG);
@@ -71,7 +71,7 @@ __HashTableAllocate(
 
 static FORCEINLINE VOID
 __HashTableFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_HASH_TABLE_TAG);
@@ -79,7 +79,7 @@ __HashTableFree(
 
 static ULONG
 HashTableHash(
-    IN  ULONG_PTR   Key
+    _In_ ULONG_PTR  Key
     )
 {
     PUCHAR          Array = (PUCHAR)&Key;
@@ -111,8 +111,8 @@ _IRQL_saves_
 _IRQL_raises_(HIGH_LEVEL)
 KIRQL
 __HashTableBucketLock(
-    IN  PXENBUS_HASH_TABLE_BUCKET   Bucket,
-    IN  BOOLEAN                     Writer
+    _In_ PXENBUS_HASH_TABLE_BUCKET  Bucket,
+    _In_ BOOLEAN                    Writer
     )
 {
     KIRQL                           Irql;
@@ -135,7 +135,7 @@ __HashTableBucketLock(
         // There must be no existing writer
         Old = Readers << 1;
 
-        if (Writer) 
+        if (Writer)
             Writers++;
         else
             Readers++;
@@ -162,12 +162,12 @@ __HashTableBucketLock(
     } while (FALSE)
 
 static
-__drv_requiresIRQL(HIGH_LEVEL)
+_IRQL_requires_(HIGH_LEVEL)
 VOID
 HashTableBucketUnlock(
-    IN  PXENBUS_HASH_TABLE_BUCKET   Bucket,
-    IN  BOOLEAN                     Writer,
-    IN  __drv_restoresIRQL KIRQL    Irql
+    _In_ PXENBUS_HASH_TABLE_BUCKET  Bucket,
+    _In_ BOOLEAN                    Writer,
+    _In_ _IRQL_restores_ KIRQL      Irql
     )
 {
     for (;;) {
@@ -203,9 +203,9 @@ HashTableBucketUnlock(
 
 NTSTATUS
 HashTableAdd(
-    IN  PXENBUS_HASH_TABLE      Table,
-    IN  ULONG_PTR               Key,
-    IN  ULONG_PTR               Value
+    _In_ PXENBUS_HASH_TABLE     Table,
+    _In_ ULONG_PTR              Key,
+    _In_ ULONG_PTR              Value
     )
 {
     PXENBUS_HASH_TABLE_NODE     Node;
@@ -223,7 +223,7 @@ HashTableAdd(
     Node->Value = Value;
 
     Bucket = &Table->Bucket[HashTableHash(Key)];
-    
+
     HashTableBucketLock(Bucket, TRUE, &Irql);
     InsertTailList(&Bucket->List, &Node->ListEntry);
     HashTableBucketUnlock(Bucket, TRUE, Irql);
@@ -238,8 +238,8 @@ fail1:
 
 NTSTATUS
 HashTableRemove(
-    IN  PXENBUS_HASH_TABLE      Table,
-    IN  ULONG_PTR               Key
+    _In_ PXENBUS_HASH_TABLE     Table,
+    _In_ ULONG_PTR              Key
     )
 {
     PXENBUS_HASH_TABLE_BUCKET   Bucket;
@@ -251,7 +251,7 @@ HashTableRemove(
 
     Bucket = &Table->Bucket[HashTableHash(Key)];
     Hidden = &Table->Hidden;
-    
+
     HashTableBucketLock(Bucket, TRUE, &Irql);
 
     for (ListEntry = Bucket->List.Flink;
@@ -289,9 +289,9 @@ fail1:
 
 NTSTATUS
 HashTableLookup(
-    IN  PXENBUS_HASH_TABLE      Table,
-    IN  ULONG_PTR               Key,
-    OUT PULONG_PTR              Value
+    _In_ PXENBUS_HASH_TABLE     Table,
+    _In_ ULONG_PTR              Key,
+    _Out_ PULONG_PTR            Value
     )
 {
     PXENBUS_HASH_TABLE_BUCKET   Bucket;
@@ -301,7 +301,7 @@ HashTableLookup(
     NTSTATUS                    status;
 
     Bucket = &Table->Bucket[HashTableHash(Key)];
-    
+
     HashTableBucketLock(Bucket, FALSE, &Irql);
 
     for (ListEntry = Bucket->List.Flink;
@@ -339,10 +339,10 @@ _IRQL_requires_(DISPATCH_LEVEL)
 _IRQL_requires_same_
 VOID
 HashTableDpc(
-    IN  PKDPC                   Dpc,
-    IN  PVOID                   Context,
-    IN  PVOID                   Argument1,
-    IN  PVOID                   Argument2
+    _In_ PKDPC                  Dpc,
+    _In_ PVOID                  Context,
+    _In_ PVOID                  Argument1,
+    _In_ PVOID                  Argument2
     )
 {
     PXENBUS_HASH_TABLE          Table = Context;
@@ -383,7 +383,7 @@ HashTableDpc(
 
 NTSTATUS
 HashTableCreate(
-    OUT PXENBUS_HASH_TABLE      *Table
+    _Out_ PXENBUS_HASH_TABLE    *Table
     )
 {
     ULONG                       Index;
@@ -418,7 +418,7 @@ fail1:
 
 VOID
 HashTableDestroy(
-    IN  PXENBUS_HASH_TABLE      Table
+    _In_ PXENBUS_HASH_TABLE     Table
     )
 {
     ULONG                       Index;

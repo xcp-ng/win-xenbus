@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -61,7 +61,7 @@ BugCheckTeardown(
 
 static VOID
 BugCheckDumpExceptionRecord(
-    IN  PEXCEPTION_RECORD   Exception
+    _In_ PEXCEPTION_RECORD  Exception
     )
 {
     __try {
@@ -108,7 +108,7 @@ BugCheckDumpExceptionRecord(
 #if defined(__i386__)
 static VOID
 BugCheckDumpContext(
-    IN  PCONTEXT    Context
+    _In_ PCONTEXT   Context
     )
 {
     __try {
@@ -190,7 +190,7 @@ BugCheckDumpContext(
 
 static VOID
 BugCheckStackDump(
-    IN  PCONTEXT    Context
+    _In_ PCONTEXT   Context
     )
 {
 #define PARAMETER_COUNT     3
@@ -269,7 +269,7 @@ BugCheckStackDump(
 #elif defined(__x86_64__)
 static VOID
 BugCheckDumpContext(
-    IN  PCONTEXT    Context
+    _In_ PCONTEXT   Context
     )
 {
     __try {
@@ -493,7 +493,7 @@ RtlVirtualUnwind(
 
 static VOID
 BugCheckStackDump(
-    IN  PCONTEXT    Context
+    _In_ PCONTEXT   Context
     )
 {
 #define PARAMETER_COUNT     4
@@ -506,7 +506,7 @@ BugCheckStackDump(
 
         LogPrintf(LOG_LEVEL_CRITICAL,
                   "%s|BUGCHECK: STACK:\n",
-                  __MODULE__);	
+                  __MODULE__);
 
         for (Iteration = 0; Iteration < MAXIMUM_ITERATIONS; Iteration++) {
             PRUNTIME_FUNCTION   FunctionEntry;
@@ -607,10 +607,10 @@ RtlCaptureContext(
 
 static VOID
 BugCheckIrqlNotLessOrEqual(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -658,10 +658,10 @@ BugCheckIrqlNotLessOrEqual(
 
 static VOID
 BugCheckDriverIrqlNotLessOrEqual(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -709,10 +709,10 @@ BugCheckDriverIrqlNotLessOrEqual(
 
 static VOID
 BugCheckSystemServiceException(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -732,10 +732,10 @@ BugCheckSystemServiceException(
 
 static VOID
 BugCheckSystemThreadExceptionNotHandled(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -773,10 +773,10 @@ BugCheckSystemThreadExceptionNotHandled(
 
 static VOID
 BugCheckKernelModeExceptionNotHandled(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -820,10 +820,10 @@ BugCheckKernelModeExceptionNotHandled(
 
 static VOID
 BugCheckCriticalObjectTermination(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -859,10 +859,10 @@ BugCheckCriticalObjectTermination(
 
 static VOID
 BugCheckInaccessibleBootDevice(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -887,10 +887,10 @@ BugCheckInaccessibleBootDevice(
 
 static VOID
 BugCheckDriverPowerStateFailure(
-    IN  ULONG_PTR       Parameter1,
-    IN  ULONG_PTR       Parameter2,
-    IN  ULONG_PTR       Parameter3,
-    IN  ULONG_PTR       Parameter4
+    _In_ ULONG_PTR      Parameter1,
+    _In_ ULONG_PTR      Parameter2,
+    _In_ ULONG_PTR      Parameter3,
+    _In_ ULONG_PTR      Parameter4
     )
 {
     __try {
@@ -930,7 +930,7 @@ BugCheckDriverPowerStateFailure(
 
             LogPrintf(LOG_LEVEL_CRITICAL,
                       "%s|BUGCHECK: IRP STACK:\n",
-                      __MODULE__);	
+                      __MODULE__);
 
             for (Index = 0; Index <= Irp->StackCount; Index++) {
                 PCHAR       Name;
@@ -972,7 +972,7 @@ BugCheckDriverPowerStateFailure(
                           StackLocation->Context);
 
                 StackLocation++;
-            } 
+            }
 
             break;
         }
@@ -986,10 +986,10 @@ BugCheckDriverPowerStateFailure(
 
 static VOID
 BugCheckAssertionFailure(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -1025,10 +1025,10 @@ BugCheckAssertionFailure(
 /// <param name="Parameter4">reserved.</param>
 static VOID
 BugCheckBugEFCriticalProcessDied(
-    IN  ULONG_PTR   Parameter1,
-    IN  ULONG_PTR   Parameter2,
-    IN  ULONG_PTR   Parameter3,
-    IN  ULONG_PTR   Parameter4
+    _In_ ULONG_PTR  Parameter1,
+    _In_ ULONG_PTR  Parameter2,
+    _In_ ULONG_PTR  Parameter3,
+    _In_ ULONG_PTR  Parameter4
     )
 {
     __try {
@@ -1121,10 +1121,11 @@ BugCheckDefaultHandler(
 
 KBUGCHECK_CALLBACK_ROUTINE BugCheckBugCheckCallback;
 
-VOID                     
+_Use_decl_annotations_
+VOID
 BugCheckBugCheckCallback(
-    IN  PVOID               Argument,
-    IN  ULONG               Length
+    _In_ PVOID              Argument,
+    _In_ ULONG              Length
     )
 {
     extern PULONG_PTR       KiBugCheckData;

@@ -49,7 +49,7 @@
 
 static FORCEINLINE PVOID
 __FiltersAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_FILTERS_TAG);
@@ -57,7 +57,7 @@ __FiltersAllocate(
 
 static FORCEINLINE VOID
 __FiltersFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_FILTERS_TAG);
@@ -67,9 +67,9 @@ __FiltersFree(
 
 static NTSTATUS
 FiltersInstallClass(
-    IN  const CHAR  *ClassName,
-    IN  const GUID  *ClassGuid,
-    IN  const CHAR  *DriverName
+    _In_ const CHAR *ClassName,
+    _In_ const GUID *ClassGuid,
+    _In_ const CHAR *DriverName
     )
 {
     HANDLE          ClassKey;
@@ -196,9 +196,9 @@ fail1:
 
 static NTSTATUS
 FiltersUninstallClass(
-    IN  const CHAR  *ClassName,
-    IN  const GUID  *ClassGuid,
-    IN  const CHAR  *DriverName
+    _In_ const CHAR *ClassName,
+    _In_ const GUID *ClassGuid,
+    _In_ const CHAR *DriverName
     )
 {
     HANDLE          ClassKey;

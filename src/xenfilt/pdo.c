@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -68,7 +68,7 @@ struct _XENFILT_PDO {
 
 static FORCEINLINE PVOID
 __PdoAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, PDO_TAG);
@@ -76,7 +76,7 @@ __PdoAllocate(
 
 static FORCEINLINE VOID
 __PdoFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, PDO_TAG);
@@ -84,8 +84,8 @@ __PdoFree(
 
 static FORCEINLINE VOID
 __PdoSetDevicePnpState(
-    IN  PXENFILT_PDO        Pdo,
-    IN  DEVICE_PNP_STATE    State
+    _In_ PXENFILT_PDO       Pdo,
+    _In_ DEVICE_PNP_STATE   State
     )
 {
     PXENFILT_DX             Dx = Pdo->Dx;
@@ -99,8 +99,8 @@ __PdoSetDevicePnpState(
 
 VOID
 PdoSetDevicePnpState(
-    IN  PXENFILT_PDO        Pdo,
-    IN  DEVICE_PNP_STATE    State
+    _In_ PXENFILT_PDO       Pdo,
+    _In_ DEVICE_PNP_STATE   State
     )
 {
     __PdoSetDevicePnpState(Pdo, State);
@@ -108,8 +108,8 @@ PdoSetDevicePnpState(
 
 static FORCEINLINE VOID
 __PdoRestoreDevicePnpState(
-    IN  PXENFILT_PDO        Pdo,
-    IN  DEVICE_PNP_STATE    State
+    _In_ PXENFILT_PDO       Pdo,
+    _In_ DEVICE_PNP_STATE   State
     )
 {
     PXENFILT_DX             Dx = Pdo->Dx;
@@ -120,7 +120,7 @@ __PdoRestoreDevicePnpState(
 
 static FORCEINLINE DEVICE_PNP_STATE
 __PdoGetDevicePnpState(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -130,7 +130,7 @@ __PdoGetDevicePnpState(
 
 DEVICE_PNP_STATE
 PdoGetDevicePnpState(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return __PdoGetDevicePnpState(Pdo);
@@ -138,8 +138,8 @@ PdoGetDevicePnpState(
 
 static FORCEINLINE VOID
 __PdoSetDevicePowerState(
-    IN  PXENFILT_PDO        Pdo,
-    IN  DEVICE_POWER_STATE  State
+    _In_ PXENFILT_PDO       Pdo,
+    _In_ DEVICE_POWER_STATE State
     )
 {
     PXENFILT_DX             Dx = Pdo->Dx;
@@ -149,7 +149,7 @@ __PdoSetDevicePowerState(
 
 static FORCEINLINE DEVICE_POWER_STATE
 __PdoGetDevicePowerState(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -159,8 +159,8 @@ __PdoGetDevicePowerState(
 
 static FORCEINLINE VOID
 __PdoSetSystemPowerState(
-    IN  PXENFILT_PDO        Pdo,
-    IN  SYSTEM_POWER_STATE  State
+    _In_ PXENFILT_PDO       Pdo,
+    _In_ SYSTEM_POWER_STATE State
     )
 {
     PXENFILT_DX             Dx = Pdo->Dx;
@@ -170,7 +170,7 @@ __PdoSetSystemPowerState(
 
 static FORCEINLINE SYSTEM_POWER_STATE
 __PdoGetSystemPowerState(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -180,7 +180,7 @@ __PdoGetSystemPowerState(
 
 PDEVICE_OBJECT
 PdoGetPhysicalDeviceObject(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return Pdo->PhysicalDeviceObject;
@@ -188,8 +188,8 @@ PdoGetPhysicalDeviceObject(
 
 static FORCEINLINE VOID
 __PdoSetMissing(
-    IN  PXENFILT_PDO    Pdo,
-    IN  const CHAR      *Reason
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ const CHAR     *Reason
     )
 {
     Pdo->Reason = Reason;
@@ -198,8 +198,8 @@ __PdoSetMissing(
 
 VOID
 PdoSetMissing(
-    IN  PXENFILT_PDO    Pdo,
-    IN  const CHAR      *Reason
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ const CHAR     *Reason
     )
 {
     __PdoSetMissing(Pdo, Reason);
@@ -207,7 +207,7 @@ PdoSetMissing(
 
 static FORCEINLINE BOOLEAN
 __PdoIsMissing(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return Pdo->Missing;
@@ -215,7 +215,7 @@ __PdoIsMissing(
 
 BOOLEAN
 PdoIsMissing(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return __PdoIsMissing(Pdo);
@@ -223,17 +223,17 @@ PdoIsMissing(
 
 static FORCEINLINE PDEVICE_OBJECT
 __PdoGetDeviceObject(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
 
     return Dx->DeviceObject;
 }
-    
+
 PDEVICE_OBJECT
 PdoGetDeviceObject(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return __PdoGetDeviceObject(Pdo);
@@ -241,7 +241,7 @@ PdoGetDeviceObject(
 
 static FORCEINLINE PXENFILT_FDO
 __PdoGetFdo(
-    IN  PXENFILT_PDO Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return Pdo->Fdo;
@@ -249,7 +249,7 @@ __PdoGetFdo(
 
 static NTSTATUS
 PdoSetDeviceInformation(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -328,7 +328,7 @@ fail1:
 
 static VOID
 PdoClearDeviceInformation(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -352,7 +352,7 @@ PdoClearDeviceInformation(
 
 static FORCEINLINE PCHAR
 __PdoGetDeviceID(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -363,7 +363,7 @@ __PdoGetDeviceID(
 
 static FORCEINLINE PCHAR
 __PdoGetInstanceID(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -374,7 +374,7 @@ __PdoGetInstanceID(
 
 static FORCEINLINE XENFILT_EMULATED_OBJECT_TYPE
 __PdoGetType(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return Pdo->Type;
@@ -382,7 +382,7 @@ __PdoGetType(
 
 static FORCEINLINE PCHAR
 __PdoGetLocationInformation(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -393,7 +393,7 @@ __PdoGetLocationInformation(
 
 static FORCEINLINE VOID
 __PdoSetName(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     NTSTATUS            status;
@@ -415,19 +415,20 @@ __PdoSetName(
 
 static FORCEINLINE PCHAR
 __PdoGetName(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     return Pdo->Name;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE PdoForwardIrpSynchronouslyCompletion;
+
+_Use_decl_annotations_
 static NTSTATUS
 PdoForwardIrpSynchronouslyCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PKEVENT             Event = Context;
@@ -442,8 +443,8 @@ PdoForwardIrpSynchronouslyCompletion(
 
 static NTSTATUS
 PdoForwardIrpSynchronously(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     KEVENT              Event;
@@ -478,8 +479,8 @@ PdoForwardIrpSynchronously(
 
 static NTSTATUS
 PdoStartDevice(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     POWER_STATE         PowerState;
@@ -521,8 +522,8 @@ fail1:
 
 static NTSTATUS
 PdoQueryStopDevice(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -550,8 +551,8 @@ fail1:
 
 static NTSTATUS
 PdoCancelStopDevice(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -580,8 +581,8 @@ fail1:
 
 static NTSTATUS
 PdoStopDevice(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     POWER_STATE         PowerState;
@@ -621,8 +622,8 @@ fail1:
 
 static NTSTATUS
 PdoQueryRemoveDevice(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -650,8 +651,8 @@ fail1:
 
 static NTSTATUS
 PdoCancelRemoveDevice(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -679,8 +680,8 @@ fail1:
 
 static NTSTATUS
 PdoSurpriseRemoval(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -708,8 +709,8 @@ fail1:
 
 static NTSTATUS
 PdoRemoveDevice(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PXENFILT_FDO        Fdo = __PdoGetFdo(Pdo);
@@ -773,8 +774,8 @@ fail1:
 #define DEFINE_PDO_QUERY_INTERFACE(_Interface)                      \
 static NTSTATUS                                                     \
 PdoQuery ## _Interface ## Interface(                                \
-    IN  PXENFILT_PDO    Pdo,                                        \
-    IN  PIRP            Irp                                         \
+    _In_ PXENFILT_PDO   Pdo,                                        \
+    _In_ PIRP           Irp                                         \
     )                                                               \
 {                                                                   \
     PIO_STACK_LOCATION  StackLocation;                              \
@@ -827,8 +828,8 @@ struct _INTERFACE_ENTRY PdoInterfaceTable[] = {
 
 static NTSTATUS
 PdoQueryInterface(
-    IN  PXENFILT_PDO        Pdo,
-    IN  PIRP                Irp
+    _In_ PXENFILT_PDO       Pdo,
+    _In_ PIRP               Irp
     )
 {
     PIO_STACK_LOCATION      StackLocation;
@@ -878,8 +879,8 @@ fail1:
 
 static NTSTATUS
 PdoQueryDeviceText(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -970,8 +971,8 @@ fail1:
 
 static NTSTATUS
 PdoQueryId(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1075,8 +1076,8 @@ fail1:
 
 static NTSTATUS
 PdoEject(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PXENFILT_FDO        Fdo = __PdoGetFdo(Pdo);
@@ -1099,8 +1100,8 @@ PdoEject(
 
 static NTSTATUS
 PdoDispatchPnp(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1182,13 +1183,14 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE PdoSetDevicePowerUpComplete;
+
+_Use_decl_annotations_
 static NTSTATUS
 PdoSetDevicePowerUpComplete(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PXENFILT_PDO        Pdo = (PXENFILT_PDO)Context;
@@ -1221,8 +1223,8 @@ PdoSetDevicePowerUpComplete(
 
 static FORCEINLINE NTSTATUS
 __PdoSetDevicePowerUp(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -1237,8 +1239,8 @@ __PdoSetDevicePowerUp(
 
 static NTSTATUS
 __PdoSetDevicePowerDown(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1266,8 +1268,8 @@ __PdoSetDevicePowerDown(
 
 static NTSTATUS
 PdoSetDevicePower(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1281,7 +1283,7 @@ PdoSetDevicePower(
 
     Trace("%s: ====> (%s:%s)\n",
           __PdoGetName(Pdo),
-          DevicePowerStateName(DeviceState), 
+          DevicePowerStateName(DeviceState),
           PowerActionName(PowerAction));
 
     if (DeviceState == __PdoGetDevicePowerState(Pdo)) {
@@ -1298,7 +1300,7 @@ PdoSetDevicePower(
 done:
     Trace("%s: <==== (%s:%s)(%08x)\n",
           __PdoGetName(Pdo),
-          DevicePowerStateName(DeviceState), 
+          DevicePowerStateName(DeviceState),
           PowerActionName(PowerAction),
           status);
     return status;
@@ -1306,8 +1308,8 @@ done:
 
 static FORCEINLINE NTSTATUS
 __PdoDispatchDevicePower(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1331,13 +1333,14 @@ __PdoDispatchDevicePower(
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE PdoSetSystemPowerUpComplete;
+
+_Use_decl_annotations_
 static NTSTATUS
 PdoSetSystemPowerUpComplete(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PXENFILT_PDO        Pdo = (PXENFILT_PDO)Context;
@@ -1366,8 +1369,8 @@ PdoSetSystemPowerUpComplete(
 
 static FORCEINLINE NTSTATUS
 __PdoSetSystemPowerUp(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -1382,8 +1385,8 @@ __PdoSetSystemPowerUp(
 
 static FORCEINLINE NTSTATUS
 __PdoSetSystemPowerDown(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1407,8 +1410,8 @@ __PdoSetSystemPowerDown(
 
 static NTSTATUS
 PdoSetSystemPower(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1422,7 +1425,7 @@ PdoSetSystemPower(
 
     Trace("%s: ====> (%s:%s)\n",
           __PdoGetName(Pdo),
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction));
 
     if (SystemState == __PdoGetSystemPowerState(Pdo)) {
@@ -1439,7 +1442,7 @@ PdoSetSystemPower(
 done:
     Trace("%s: <==== (%s:%s)(%08x)\n",
           __PdoGetName(Pdo),
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction),
           status);
     return status;
@@ -1447,8 +1450,8 @@ done:
 
 static FORCEINLINE NTSTATUS
 __PdoDispatchSystemPower(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1474,8 +1477,8 @@ __PdoDispatchSystemPower(
 
 static NTSTATUS
 PdoDispatchPower(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1503,8 +1506,8 @@ PdoDispatchPower(
 
     Trace("%s: ====> (%02x:%s)\n",
           __PdoGetName(Pdo),
-          MinorFunction, 
-          PowerMinorFunctionName(MinorFunction)); 
+          MinorFunction,
+          PowerMinorFunctionName(MinorFunction));
 
     switch (PowerType) {
     case DevicePowerState:
@@ -1527,7 +1530,7 @@ PdoDispatchPower(
 
     Trace("%s: <==== (%02x:%s) (%08x)\n",
           __PdoGetName(Pdo),
-          MinorFunction, 
+          MinorFunction,
           PowerMinorFunctionName(MinorFunction),
           status);
 
@@ -1545,8 +1548,8 @@ fail1:
 
 static NTSTATUS
 PdoDispatchDefault(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -1573,8 +1576,8 @@ fail1:
 
 NTSTATUS
 PdoDispatch(
-    IN  PXENFILT_PDO    Pdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1601,7 +1604,7 @@ PdoDispatch(
 
 VOID
 PdoResume(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     UNREFERENCED_PARAMETER(Pdo);
@@ -1609,7 +1612,7 @@ PdoResume(
 
 VOID
 PdoSuspend(
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     UNREFERENCED_PARAMETER(Pdo);
@@ -1617,18 +1620,18 @@ PdoSuspend(
 
 NTSTATUS
 PdoCreate(
-    PXENFILT_FDO                    Fdo,
-    PDEVICE_OBJECT                  PhysicalDeviceObject,
-    XENFILT_EMULATED_OBJECT_TYPE    Type
+    _In_ PXENFILT_FDO                   Fdo,
+    _In_ PDEVICE_OBJECT                 PhysicalDeviceObject,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
     )
 {
-    PDEVICE_OBJECT                  LowerDeviceObject;
-    ULONG                           DeviceType;
-    PDEVICE_OBJECT                  FilterDeviceObject;
-    PXENFILT_DX                     Dx;
-    PXENFILT_PDO                    Pdo;
-    PCHAR                           CompatibleIDs;
-    NTSTATUS                        status;
+    PDEVICE_OBJECT                      LowerDeviceObject;
+    ULONG                               DeviceType;
+    PDEVICE_OBJECT                      FilterDeviceObject;
+    PXENFILT_DX                         Dx;
+    PXENFILT_PDO                        Pdo;
+    PCHAR                               CompatibleIDs;
+    NTSTATUS                            status;
 
     ASSERT(Type != XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN);
 
@@ -1757,7 +1760,7 @@ fail1:
 
 VOID
 PdoDestroy(
-    IN  PXENFILT_PDO            Pdo
+    _In_ PXENFILT_PDO           Pdo
     )
 {
     PDEVICE_OBJECT              LowerDeviceObject = Pdo->LowerDeviceObject;

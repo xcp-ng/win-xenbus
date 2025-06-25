@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -54,27 +54,27 @@ typedef enum _XENBUS_EVTCHN_TYPE {
 
 /*! \typedef XENBUS_EVTCHN_CHANNEL
     \brief Event channel handle
-*/  
+*/
 typedef struct _XENBUS_EVTCHN_CHANNEL XENBUS_EVTCHN_CHANNEL, *PXENBUS_EVTCHN_CHANNEL;
 
 /*! \typedef XENBUS_EVTCHN_ACQUIRE
     \brief Acquire a reference to the EVTCHN interface
 
     \param Interface The interface header
-*/  
+*/
 typedef NTSTATUS
 (*XENBUS_EVTCHN_ACQUIRE)(
-    IN  PINTERFACE  Interface
+    _In_ PINTERFACE Interface
     );
 
 /*! \typedef XENBUS_EVTCHN_RELEASE
     \brief Release a reference to the EVTCHN interface
 
     \param Interface The interface header
-*/  
+*/
 typedef VOID
 (*XENBUS_EVTCHN_RELEASE)(
-    IN  PINTERFACE  Interface
+    _In_ PINTERFACE Interface
     );
 
 /*! \typedef XENBUS_EVTCHN_OPEN
@@ -105,13 +105,13 @@ typedef VOID
     \param Number The relative number of the CPU that should handle the VIRQ
 
     \return Event channel handle
-*/  
+*/
 typedef PXENBUS_EVTCHN_CHANNEL
 (*XENBUS_EVTCHN_OPEN)(
-    IN  PINTERFACE          Interface,
-    IN  XENBUS_EVTCHN_TYPE  Type,
-    IN  PKSERVICE_ROUTINE   Function,
-    IN  PVOID               Argument OPTIONAL,
+    _In_ PINTERFACE         Interface,
+    _In_ XENBUS_EVTCHN_TYPE Type,
+    _In_ PKSERVICE_ROUTINE  Function,
+    _In_opt_ PVOID          Argument,
     ...
     );
 
@@ -125,17 +125,17 @@ typedef PXENBUS_EVTCHN_CHANNEL
 */
 typedef NTSTATUS
 (*XENBUS_EVTCHN_BIND)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  USHORT                  Group,
-    IN  UCHAR                   Number
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ USHORT                 Group,
+    _In_ UCHAR                  Number
     );
 
 typedef VOID
 (*XENBUS_EVTCHN_UNMASK_V4)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InCallback
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ BOOLEAN                InCallback
     );
 
 /*! \typedef XENBUS_EVTCHN_UNMASK
@@ -148,16 +148,16 @@ typedef VOID
 */
 typedef BOOLEAN
 (*XENBUS_EVTCHN_UNMASK)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  BOOLEAN                 InCallback,
-    IN  BOOLEAN                 Force
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ BOOLEAN                InCallback,
+    _In_ BOOLEAN                Force
     );
 
 typedef VOID
 (*XENBUS_EVTCHN_SEND_V1)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     );
 
 /*! \typedef XENBUS_EVTCHN_SEND
@@ -168,11 +168,11 @@ typedef VOID
 
     \param Interface The interface header
     \param Channel The channel handle
-*/  
+*/
 typedef VOID
 (*XENBUS_EVTCHN_SEND)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     );
 
 /*! \typedef XENBUS_EVTCHN_TRIGGER
@@ -180,11 +180,11 @@ typedef VOID
 
     \param Interface The interface header
     \param Channel The channel handle
-*/  
+*/
 typedef VOID
 (*XENBUS_EVTCHN_TRIGGER)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     );
 
 /*! \typedef XENBUS_EVTCHN_GET_COUNT
@@ -196,15 +196,15 @@ typedef VOID
 */
 typedef ULONG
 (*XENBUS_EVTCHN_GET_COUNT)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     );
 
 typedef NTSTATUS
 (*XENBUS_EVTCHN_WAIT_V5)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  PLARGE_INTEGER          Timeout OPTIONAL
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_opt_ PLARGE_INTEGER     Timeout
     );
 
 /*! \typedef XENBUS_EVTCHN_WAIT
@@ -217,10 +217,10 @@ typedef NTSTATUS
 */
 typedef NTSTATUS
 (*XENBUS_EVTCHN_WAIT)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel,
-    IN  ULONG                   Count,
-    IN  PLARGE_INTEGER          Timeout OPTIONAL
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
+    _In_ ULONG                  Count,
+    _In_opt_ PLARGE_INTEGER     Timeout
     );
 
 /*! \typedef XENBUS_EVTCHN_GET_PORT
@@ -229,11 +229,11 @@ typedef NTSTATUS
     \param Interface The interface header
     \param Channel The channel handle
     \return The port number
-*/  
+*/
 typedef ULONG
 (*XENBUS_EVTCHN_GET_PORT)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     );
 
 /*! \typedef XENBUS_EVTCHN_CLOSE
@@ -241,15 +241,15 @@ typedef ULONG
 
     \param Interface The interface header
     \param Channel The channel handle
-*/  
+*/
 typedef VOID
 (*XENBUS_EVTCHN_CLOSE)(
-    IN  PINTERFACE              Interface,
-    IN  PXENBUS_EVTCHN_CHANNEL  Channel
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_EVTCHN_CHANNEL Channel
     );
 
 // {BE2440AC-1098-4150-AF4D-452FADCEF923}
-DEFINE_GUID(GUID_XENBUS_EVTCHN_INTERFACE, 
+DEFINE_GUID(GUID_XENBUS_EVTCHN_INTERFACE,
 0xbe2440ac, 0x1098, 0x4150, 0xaf, 0x4d, 0x45, 0x2f, 0xad, 0xce, 0xf9, 0x23);
 
 /*! \struct _XENBUS_EVTCHN_INTERFACE_V5

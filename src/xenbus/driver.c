@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -63,7 +63,7 @@ static XENBUS_DRIVER    Driver;
 
 static FORCEINLINE PVOID
 __DriverAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_DRIVER_TAG);
@@ -71,7 +71,7 @@ __DriverAllocate(
 
 static FORCEINLINE VOID
 __DriverFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_DRIVER_TAG);
@@ -79,7 +79,7 @@ __DriverFree(
 
 static FORCEINLINE VOID
 __DriverSetDriverObject(
-    IN  PDRIVER_OBJECT  DriverObject
+    _In_opt_ PDRIVER_OBJECT DriverObject
     )
 {
     Driver.DriverObject = DriverObject;
@@ -103,7 +103,7 @@ DriverGetDriverObject(
 
 static FORCEINLINE VOID
 __DriverSetParametersKey(
-    IN  HANDLE  Key
+    _In_opt_ HANDLE Key
     )
 {
     Driver.ParametersKey = Key;
@@ -127,7 +127,7 @@ DriverGetParametersKey(
 
 static FORCEINLINE VOID
 __DriverSetConsoleLogLevel(
-    IN  LOG_LEVEL   LogLevel
+    _In_ LOG_LEVEL  LogLevel
     )
 {
     Driver.ConsoleLogLevel = LogLevel;
@@ -183,12 +183,12 @@ DriverReleaseMutex(
 
 VOID
 DriverAddFunctionDeviceObject(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PDEVICE_OBJECT  DeviceObject;
-    PXENBUS_DX      Dx;
-    ULONG           References;
+    PDEVICE_OBJECT      DeviceObject;
+    PXENBUS_DX          Dx;
+    ULONG               References;
 
     DeviceObject = FdoGetDeviceObject(Fdo);
     Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
@@ -203,12 +203,12 @@ DriverAddFunctionDeviceObject(
 
 VOID
 DriverRemoveFunctionDeviceObject(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PDEVICE_OBJECT  DeviceObject;
-    PXENBUS_DX      Dx;
-    ULONG           References;
+    PDEVICE_OBJECT      DeviceObject;
+    PXENBUS_DX          Dx;
+    ULONG               References;
 
     DeviceObject = FdoGetDeviceObject(Fdo);
     Dx = (PXENBUS_DX)DeviceObject->DeviceExtension;
@@ -226,7 +226,7 @@ DRIVER_UNLOAD       DriverUnload;
 
 VOID
 DriverUnload(
-    IN  PDRIVER_OBJECT  DriverObject
+    _In_ PDRIVER_OBJECT DriverObject
     )
 {
     HANDLE              ParametersKey;
@@ -272,8 +272,8 @@ DRIVER_ADD_DEVICE   DriverAddDevice;
 NTSTATUS
 #pragma prefast(suppress:28152) // Does not clear DO_DEVICE_INITIALIZING
 DriverAddDevice(
-    IN  PDRIVER_OBJECT  DriverObject,
-    IN  PDEVICE_OBJECT  DeviceObject
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PDEVICE_OBJECT DeviceObject
     )
 {
     NTSTATUS            status;
@@ -302,10 +302,11 @@ fail1:
 
 DRIVER_DISPATCH DriverDispatch;
 
-NTSTATUS 
+_Use_decl_annotations_
+NTSTATUS
 DriverDispatch(
-    IN PDEVICE_OBJECT   DeviceObject,
-    IN PIRP             Irp
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp
     )
 {
     PXENBUS_DX          Dx;
@@ -361,14 +362,14 @@ DRIVER_INITIALIZE   DriverEntry;
 
 NTSTATUS
 DriverEntry(
-    IN  PDRIVER_OBJECT  DriverObject,
-    IN  PUNICODE_STRING RegistryPath
+    _In_ PDRIVER_OBJECT     DriverObject,
+    _In_ PUNICODE_STRING    RegistryPath
     )
 {
-    HANDLE              ParametersKey;
-    ULONG               Index;
-    LOG_LEVEL           LogLevel;
-    NTSTATUS            status;
+    HANDLE                  ParametersKey;
+    ULONG                   Index;
+    LOG_LEVEL               LogLevel;
+    NTSTATUS                status;
 
     ASSERT3P(__DriverGetDriverObject(), ==, NULL);
 

@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -110,7 +110,7 @@ struct _XENBUS_CACHE_CONTEXT {
 
 static FORCEINLINE PVOID
 __CacheAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, CACHE_TAG);
@@ -118,45 +118,45 @@ __CacheAllocate(
 
 static FORCEINLINE VOID
 __CacheFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, CACHE_TAG);
 }
 
 static FORCEINLINE VOID
-__drv_requiresIRQL(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
 __CacheAcquireLock(
-    IN  PXENBUS_CACHE   Cache
+    _In_ PXENBUS_CACHE  Cache
     )
 {
     Cache->AcquireLock(Cache->Argument);
 }
 
 static FORCEINLINE VOID
-__drv_requiresIRQL(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
 __CacheReleaseLock(
-    IN  PXENBUS_CACHE   Cache
+    _In_ PXENBUS_CACHE  Cache
     )
 {
     Cache->ReleaseLock(Cache->Argument);
 }
 
 static FORCEINLINE NTSTATUS
-__drv_requiresIRQL(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
 __CacheCtor(
-    IN  PXENBUS_CACHE   Cache,
-    IN  PVOID           Object
+    _In_ PXENBUS_CACHE  Cache,
+    _In_ PVOID          Object
     )
 {
     return Cache->Ctor(Cache->Argument, Object);
 }
 
 static FORCEINLINE VOID
-__drv_requiresIRQL(DISPATCH_LEVEL)
+_IRQL_requires_(DISPATCH_LEVEL)
 __CacheDtor(
-    IN  PXENBUS_CACHE   Cache,
-    IN  PVOID           Object
+    _In_ PXENBUS_CACHE  Cache,
+    _In_ PVOID          Object
     )
 {
     Cache->Dtor(Cache->Argument, Object);
@@ -164,7 +164,7 @@ __CacheDtor(
 
 static PVOID
 CacheGetObjectFromMagazine(
-    IN  PXENBUS_CACHE_MAGAZINE  Magazine
+    _In_ PXENBUS_CACHE_MAGAZINE Magazine
     )
 {
     ULONG                       Index;
@@ -185,8 +185,8 @@ CacheGetObjectFromMagazine(
 
 static NTSTATUS
 CachePutObjectToMagazine(
-    IN  PXENBUS_CACHE_MAGAZINE  Magazine,
-    IN  PVOID                   Object
+    _In_ PXENBUS_CACHE_MAGAZINE Magazine,
+    _In_ PVOID                  Object
     )
 {
     ULONG                       Index;
@@ -203,7 +203,7 @@ CachePutObjectToMagazine(
 
 static PXENBUS_CACHE_MASK
 CacheMaskCreate(
-    IN  ULONG           Size
+    _In_ ULONG          Size
     )
 {
     ULONG               NumberOfBytes;
@@ -226,7 +226,7 @@ fail1:
 
 static VOID
 CacheMaskDestroy(
-    IN  PXENBUS_CACHE_MASK  Mask
+    _In_ PXENBUS_CACHE_MASK Mask
     )
 {
     ASSERT(Mask->Count == 0);
@@ -235,8 +235,8 @@ CacheMaskDestroy(
 
 static FORCEINLINE VOID
 __CacheMaskSet(
-    IN  PXENBUS_CACHE_MASK  Mask,
-    IN  ULONG               Bit
+    _In_ PXENBUS_CACHE_MASK Mask,
+    _In_ ULONG              Bit
     )
 {
     ULONG                   Index = Bit / BITS_PER_ULONG;
@@ -252,8 +252,8 @@ __CacheMaskSet(
 
 static FORCEINLINE BOOLEAN
 __CacheMaskTest(
-    IN  PXENBUS_CACHE_MASK  Mask,
-    IN  ULONG               Bit
+    _In_ PXENBUS_CACHE_MASK Mask,
+    _In_ ULONG              Bit
     )
 {
     ULONG                   Index = Bit / BITS_PER_ULONG;
@@ -266,8 +266,8 @@ __CacheMaskTest(
 
 static FORCEINLINE VOID
 __CacheMaskClear(
-    IN  PXENBUS_CACHE_MASK  Mask,
-    IN  ULONG               Bit
+    _In_ PXENBUS_CACHE_MASK Mask,
+    _In_ ULONG              Bit
     )
 {
     ULONG                   Index = Bit / BITS_PER_ULONG;
@@ -283,7 +283,7 @@ __CacheMaskClear(
 
 static ULONG
 CacheMaskSize(
-    IN  PXENBUS_CACHE_MASK  Mask
+    _In_ PXENBUS_CACHE_MASK Mask
     )
 {
     return Mask->Size;
@@ -291,7 +291,7 @@ CacheMaskSize(
 
 static ULONG
 CacheMaskCount(
-    IN  PXENBUS_CACHE_MASK  Mask
+    _In_ PXENBUS_CACHE_MASK Mask
     )
 {
     return Mask->Count;
@@ -299,8 +299,8 @@ CacheMaskCount(
 
 static VOID
 CacheInsertSlab(
-    IN  PXENBUS_CACHE       Cache,
-    IN  PXENBUS_CACHE_SLAB  New
+    _In_ PXENBUS_CACHE      Cache,
+    _In_ PXENBUS_CACHE_SLAB New
     )
 {
 #define INSERT_BEFORE(_ListEntry, _New)             \
@@ -353,7 +353,7 @@ done:
 #if DBG
 static VOID
 CacheAudit(
-    IN  PXENBUS_CACHE   Cache
+    _In_ PXENBUS_CACHE  Cache
     )
 {
     ULONG               Count = ULONG_MAX;
@@ -396,7 +396,7 @@ CacheAudit(
 // Must be called with lock held
 static NTSTATUS
 CacheCreateSlab(
-    IN  PXENBUS_CACHE   Cache
+    _In_ PXENBUS_CACHE  Cache
     )
 {
     PXENBUS_CACHE_SLAB  Slab;
@@ -468,8 +468,8 @@ fail1:
 // Must be called with lock held
 static VOID
 CacheDestroySlab(
-    IN  PXENBUS_CACHE       Cache,
-    IN  PXENBUS_CACHE_SLAB  Slab
+    _In_ PXENBUS_CACHE      Cache,
+    _In_ PXENBUS_CACHE_SLAB Slab
     )
 {
     LONG                    Index;
@@ -511,7 +511,7 @@ CacheDestroySlab(
 // Must be called with lock held
 static PVOID
 CacheGetObjectFromSlab(
-    IN  PXENBUS_CACHE_SLAB  Slab
+    _In_ PXENBUS_CACHE_SLAB Slab
     )
 {
     PXENBUS_CACHE           Cache;
@@ -570,8 +570,8 @@ fail1:
 // Must be called with lock held
 static VOID
 CachePutObjectToSlab(
-    IN  PXENBUS_CACHE_SLAB  Slab,
-    IN  PVOID               Object
+    _In_ PXENBUS_CACHE_SLAB Slab,
+    _In_ PVOID              Object
     )
 {
     PXENBUS_CACHE           Cache;
@@ -587,9 +587,9 @@ CachePutObjectToSlab(
 
 static PVOID
 CacheGet(
-    IN  PINTERFACE          Interface,
-    IN  PXENBUS_CACHE       Cache,
-    IN  BOOLEAN             Locked
+    _In_ PINTERFACE         Interface,
+    _In_ PXENBUS_CACHE      Cache,
+    _In_ BOOLEAN            Locked
     )
 {
     KIRQL                   Irql;
@@ -664,10 +664,10 @@ done:
 
 static VOID
 CachePut(
-    IN  PINTERFACE          Interface,
-    IN  PXENBUS_CACHE       Cache,
-    IN  PVOID               Object,
-    IN  BOOLEAN             Locked
+    _In_ PINTERFACE         Interface,
+    _In_ PXENBUS_CACHE      Cache,
+    _In_ PVOID              Object,
+    _In_ BOOLEAN            Locked
     )
 {
     KIRQL                   Irql;
@@ -722,8 +722,8 @@ done:
 
 static NTSTATUS
 CacheFill(
-    IN  PXENBUS_CACHE   Cache,
-    IN  ULONG           Count
+    _In_ PXENBUS_CACHE  Cache,
+    _In_ ULONG          Count
     )
 {
     KIRQL               Irql;
@@ -749,8 +749,8 @@ CacheFill(
 
 static VOID
 CacheSpill(
-    IN  PXENBUS_CACHE   Cache,
-    IN  ULONG           Count
+    _In_ PXENBUS_CACHE  Cache,
+    _In_ ULONG          Count
     )
 {
     KIRQL               Irql;
@@ -794,7 +794,7 @@ done:
 
 static FORCEINLINE VOID
 __CacheFlushMagazines(
-    IN  PXENBUS_CACHE   Cache
+    _In_ PXENBUS_CACHE  Cache
     )
 {
     KIRQL               Irql;
@@ -823,17 +823,17 @@ __CacheFlushMagazines(
 
 static NTSTATUS
 CacheCreate(
-    IN  PINTERFACE          Interface,
-    IN  const CHAR          *Name,
-    IN  ULONG               Size,
-    IN  ULONG               Reservation,
-    IN  ULONG               Cap,
-    IN  NTSTATUS            (*Ctor)(PVOID, PVOID),
-    IN  VOID                (*Dtor)(PVOID, PVOID),
-    IN  VOID                (*AcquireLock)(PVOID),
-    IN  VOID                (*ReleaseLock)(PVOID),
-    IN  PVOID               Argument,
-    OUT PXENBUS_CACHE       *Cache
+    _In_ PINTERFACE         Interface,
+    _In_ const CHAR         *Name,
+    _In_ ULONG              Size,
+    _In_ ULONG              Reservation,
+    _In_ ULONG              Cap,
+    _In_ NTSTATUS           (*Ctor)(PVOID, PVOID),
+    _In_ VOID               (*Dtor)(PVOID, PVOID),
+    _In_ VOID               (*AcquireLock)(PVOID),
+    _In_ VOID               (*ReleaseLock)(PVOID),
+    _In_ PVOID              Argument,
+    _Out_ PXENBUS_CACHE     *Cache
     )
 {
     PXENBUS_CACHE_CONTEXT   Context = Interface->Context;
@@ -933,28 +933,28 @@ fail2:
     Error("fail2\n");
 
     RtlZeroMemory((*Cache)->Name, sizeof ((*Cache)->Name));
-    
+
     ASSERT(IsZeroMemory(*Cache, sizeof (XENBUS_CACHE)));
     __CacheFree(*Cache);
 
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    return status;    
+    return status;
 }
 
 static NTSTATUS
 CacheCreateVersion1(
-    IN  PINTERFACE          Interface,
-    IN  const CHAR          *Name,
-    IN  ULONG               Size,
-    IN  ULONG               Reservation,
-    IN  NTSTATUS            (*Ctor)(PVOID, PVOID),
-    IN  VOID                (*Dtor)(PVOID, PVOID),
-    IN  VOID                (*AcquireLock)(PVOID),
-    IN  VOID                (*ReleaseLock)(PVOID),
-    IN  PVOID               Argument,
-    OUT PXENBUS_CACHE       *Cache
+    _In_ PINTERFACE         Interface,
+    _In_ const CHAR         *Name,
+    _In_ ULONG              Size,
+    _In_ ULONG              Reservation,
+    _In_ NTSTATUS           (*Ctor)(PVOID, PVOID),
+    _In_ VOID               (*Dtor)(PVOID, PVOID),
+    _In_ VOID               (*AcquireLock)(PVOID),
+    _In_ VOID               (*ReleaseLock)(PVOID),
+    _In_ PVOID              Argument,
+    _Out_ PXENBUS_CACHE     *Cache
     )
 {
     return CacheCreate(Interface,
@@ -972,8 +972,8 @@ CacheCreateVersion1(
 
 static VOID
 CacheDestroy(
-    IN  PINTERFACE          Interface,
-    IN  PXENBUS_CACHE       Cache
+    _In_ PINTERFACE         Interface,
+    _In_ PXENBUS_CACHE      Cache
     )
 {
     PXENBUS_CACHE_CONTEXT   Context = Interface->Context;
@@ -1027,8 +1027,8 @@ CacheDestroy(
 
 static VOID
 CacheDebugCallback(
-    IN  PVOID               Argument,
-    IN  BOOLEAN             Crashing
+    _In_ PVOID              Argument,
+    _In_ BOOLEAN            Crashing
     )
 {
     PXENBUS_CACHE_CONTEXT   Context = Argument;
@@ -1072,8 +1072,8 @@ CacheDebugCallback(
 
 static NTSTATUS
 CacheMonitor(
-    IN  PXENBUS_THREAD      Self,
-    IN  PVOID               _Context
+    _In_ PXENBUS_THREAD     Self,
+    _In_ PVOID              _Context
     )
 {
     PXENBUS_CACHE_CONTEXT   Context = _Context;
@@ -1181,7 +1181,7 @@ fail1:
 
 VOID
 CacheRelease(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_CACHE_CONTEXT   Context = Interface->Context;
@@ -1229,11 +1229,11 @@ static struct _XENBUS_CACHE_INTERFACE_V2 CacheInterfaceVersion2 = {
     CachePut,
     CacheDestroy
 };
-                     
+
 NTSTATUS
 CacheInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_CACHE_CONTEXT   *Context
+    _In_ PXENBUS_FDO            Fdo,
+    _Out_ PXENBUS_CACHE_CONTEXT *Context
     )
 {
     NTSTATUS                    status;
@@ -1283,10 +1283,10 @@ fail1:
 
 NTSTATUS
 CacheGetInterface(
-    IN      PXENBUS_CACHE_CONTEXT   Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_CACHE_CONTEXT      Context,
+    _In_ ULONG                      Version,
+    _Inout_ PINTERFACE              Interface,
+    _In_ ULONG                      Size
     )
 {
     NTSTATUS                        status;
@@ -1334,11 +1334,11 @@ CacheGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 CacheGetReferences(
-    IN  PXENBUS_CACHE_CONTEXT   Context
+    _In_ PXENBUS_CACHE_CONTEXT  Context
     )
 {
     return Context->References;
@@ -1346,7 +1346,7 @@ CacheGetReferences(
 
 VOID
 CacheTeardown(
-    IN  PXENBUS_CACHE_CONTEXT   Context
+    _In_ PXENBUS_CACHE_CONTEXT  Context
     )
 {
     Trace("====>\n");

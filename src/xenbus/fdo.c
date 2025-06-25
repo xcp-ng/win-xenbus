@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source 1and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source 1and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the23 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the23
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -173,7 +173,7 @@ struct _XENBUS_FDO {
 
 static FORCEINLINE PVOID
 __FdoAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_FDO_TAG);
@@ -181,7 +181,7 @@ __FdoAllocate(
 
 static FORCEINLINE VOID
 __FdoFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_FDO_TAG);
@@ -189,8 +189,8 @@ __FdoFree(
 
 static FORCEINLINE VOID
 __FdoSetDevicePnpState(
-    IN  PXENBUS_FDO         Fdo,
-    IN  DEVICE_PNP_STATE    State
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ DEVICE_PNP_STATE   State
     )
 {
     PXENBUS_DX              Dx = Fdo->Dx;
@@ -204,8 +204,8 @@ __FdoSetDevicePnpState(
 
 static FORCEINLINE VOID
 __FdoRestoreDevicePnpState(
-    IN  PXENBUS_FDO         Fdo,
-    IN  DEVICE_PNP_STATE    State
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ DEVICE_PNP_STATE   State
     )
 {
     PXENBUS_DX              Dx = Fdo->Dx;
@@ -216,28 +216,28 @@ __FdoRestoreDevicePnpState(
 
 static FORCEINLINE DEVICE_PNP_STATE
 __FdoGetDevicePnpState(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_DX      Dx = Fdo->Dx;
+    PXENBUS_DX          Dx = Fdo->Dx;
 
     return Dx->DevicePnpState;
 }
 
 static FORCEINLINE DEVICE_PNP_STATE
 __FdoGetPreviousDevicePnpState(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_DX      Dx = Fdo->Dx;
+    PXENBUS_DX          Dx = Fdo->Dx;
 
     return Dx->PreviousDevicePnpState;
 }
 
 static FORCEINLINE VOID
 __FdoSetDevicePowerState(
-    IN  PXENBUS_FDO         Fdo,
-    IN  DEVICE_POWER_STATE  State
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ DEVICE_POWER_STATE State
     )
 {
     PXENBUS_DX              Dx = Fdo->Dx;
@@ -247,18 +247,18 @@ __FdoSetDevicePowerState(
 
 static FORCEINLINE DEVICE_POWER_STATE
 __FdoGetDevicePowerState(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_DX      Dx = Fdo->Dx;
+    PXENBUS_DX          Dx = Fdo->Dx;
 
     return Dx->DevicePowerState;
 }
 
 static FORCEINLINE VOID
 __FdoSetSystemPowerState(
-    IN  PXENBUS_FDO         Fdo,
-    IN  SYSTEM_POWER_STATE  State
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ SYSTEM_POWER_STATE State
     )
 {
     PXENBUS_DX              Dx = Fdo->Dx;
@@ -268,27 +268,27 @@ __FdoSetSystemPowerState(
 
 static FORCEINLINE SYSTEM_POWER_STATE
 __FdoGetSystemPowerState(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_DX      Dx = Fdo->Dx;
+    PXENBUS_DX          Dx = Fdo->Dx;
 
     return Dx->SystemPowerState;
 }
 
 static FORCEINLINE PDEVICE_OBJECT
 __FdoGetDeviceObject(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_DX      Dx = Fdo->Dx;
+    PXENBUS_DX          Dx = Fdo->Dx;
 
     return Dx->DeviceObject;
 }
 
 PDEVICE_OBJECT
 FdoGetDeviceObject(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     return __FdoGetDeviceObject(Fdo);
@@ -296,7 +296,7 @@ FdoGetDeviceObject(
 
 static FORCEINLINE PDEVICE_OBJECT
 __FdoGetPhysicalDeviceObject(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     return Fdo->PhysicalDeviceObject;
@@ -304,16 +304,16 @@ __FdoGetPhysicalDeviceObject(
 
 PDEVICE_OBJECT
 FdoGetPhysicalDeviceObject(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     return __FdoGetPhysicalDeviceObject(Fdo);
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 FdoAcquireLowerBusInterface(
-    IN  PXENBUS_FDO         Fdo
+    _In_ PXENBUS_FDO        Fdo
     )
 {
     PBUS_INTERFACE_STANDARD BusInterface;
@@ -396,7 +396,7 @@ fail1:
 
 static VOID
 FdoReleaseLowerBusInterface(
-    IN  PXENBUS_FDO         Fdo
+    _In_ PXENBUS_FDO        Fdo
     )
 {
     PBUS_INTERFACE_STANDARD BusInterface;
@@ -415,12 +415,12 @@ FdoReleaseLowerBusInterface(
 
 PDMA_ADAPTER
 FdoGetDmaAdapter(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PDEVICE_DESCRIPTION DeviceDescriptor,
-    OUT PULONG              NumberOfMapRegisters
+    _In_ PXENBUS_FDO            Fdo,
+    _In_ PDEVICE_DESCRIPTION    DeviceDescriptor,
+    _Out_ PULONG                NumberOfMapRegisters
     )
 {
-    PBUS_INTERFACE_STANDARD BusInterface;
+    PBUS_INTERFACE_STANDARD     BusInterface;
 
     BusInterface = Fdo->LowerBusInterface;
     ASSERT(BusInterface != NULL);
@@ -432,14 +432,14 @@ FdoGetDmaAdapter(
 
 BOOLEAN
 FdoTranslateBusAddress(
-    IN      PXENBUS_FDO         Fdo,
-    IN      PHYSICAL_ADDRESS    BusAddress,
-    IN      ULONG               Length,
-    IN OUT  PULONG              AddressSpace,
-    OUT     PPHYSICAL_ADDRESS   TranslatedAddress
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ PHYSICAL_ADDRESS   BusAddress,
+    _In_ ULONG              Length,
+    _Inout_ PULONG          AddressSpace,
+    _Out_ PPHYSICAL_ADDRESS TranslatedAddress
     )
 {
-    PBUS_INTERFACE_STANDARD     BusInterface;
+    PBUS_INTERFACE_STANDARD BusInterface;
 
     BusInterface = Fdo->LowerBusInterface;
     ASSERT(BusInterface != NULL);
@@ -453,11 +453,11 @@ FdoTranslateBusAddress(
 
 ULONG
 FdoSetBusData(
-    IN  PXENBUS_FDO         Fdo,
-    IN  ULONG               DataType,
-    IN  PVOID               Buffer,
-    IN  ULONG               Offset,
-    IN  ULONG               Length
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ ULONG              DataType,
+    _In_ PVOID              Buffer,
+    _In_ ULONG              Offset,
+    _In_ ULONG              Length
     )
 {
     PBUS_INTERFACE_STANDARD BusInterface;
@@ -474,11 +474,11 @@ FdoSetBusData(
 
 ULONG
 FdoGetBusData(
-    IN  PXENBUS_FDO         Fdo,
-    IN  ULONG               DataType,
-    IN  PVOID               Buffer,
-    IN  ULONG               Offset,
-    IN  ULONG               Length
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ ULONG              DataType,
+    _In_ PVOID              Buffer,
+    _In_ ULONG              Offset,
+    _In_ ULONG              Length
     )
 {
     PBUS_INTERFACE_STANDARD BusInterface;
@@ -495,12 +495,12 @@ FdoGetBusData(
 
 static FORCEINLINE NTSTATUS
 __FdoSetVendorName(
-    IN  PXENBUS_FDO Fdo,
-    IN  USHORT      VendorID,
-    IN  USHORT      DeviceID
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ USHORT         VendorID,
+    _In_ USHORT         DeviceID
     )
 {
-    NTSTATUS        status;
+    NTSTATUS            status;
 
     status = STATUS_NOT_SUPPORTED;
     if (VendorID != 'XS')
@@ -523,7 +523,7 @@ fail1:
 
 static FORCEINLINE PCHAR
 __FdoGetVendorName(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     return Fdo->VendorName;
@@ -531,7 +531,7 @@ __FdoGetVendorName(
 
 PCHAR
 FdoGetVendorName(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     return __FdoGetVendorName(Fdo);
@@ -539,11 +539,11 @@ FdoGetVendorName(
 
 static FORCEINLINE VOID
 __FdoSetName(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_DX      Dx = Fdo->Dx;
-    NTSTATUS        status;
+    PXENBUS_DX          Dx = Fdo->Dx;
+    NTSTATUS            status;
 
     status = RtlStringCbPrintfA(Dx->Name,
                                 MAXNAMELEN,
@@ -554,7 +554,7 @@ __FdoSetName(
 
 static FORCEINLINE PCHAR
 __FdoGetName(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     PXENBUS_DX      Dx = Fdo->Dx;
@@ -564,18 +564,18 @@ __FdoGetName(
 
 PCHAR
 FdoGetName(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     return __FdoGetName(Fdo);
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 FdoQueryId(
-    IN  PXENBUS_FDO         Fdo,
-    IN  BUS_QUERY_ID_TYPE   Type,
-    OUT PCHAR               *Id
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ BUS_QUERY_ID_TYPE  Type,
+    _Out_ PCHAR             *Id
     )
 {
     KEVENT                  Event;
@@ -653,12 +653,12 @@ fail1:
     return status;
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 FdoQueryDeviceText(
-    IN  PXENBUS_FDO         Fdo,
-    IN  DEVICE_TEXT_TYPE    Type,
-    OUT PCHAR               *Text
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ DEVICE_TEXT_TYPE   Type,
+    _Out_ PCHAR             *Text
     )
 {
     KEVENT                  Event;
@@ -738,14 +738,14 @@ fail1:
 
 static NTSTATUS
 FdoSetActive(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PCHAR           DeviceID;
-    PCHAR           InstanceID;
-    PCHAR           ActiveDeviceID;
-    PCHAR           LocationInformation;
-    NTSTATUS        status;
+    PCHAR               DeviceID;
+    PCHAR               InstanceID;
+    PCHAR               ActiveDeviceID;
+    PCHAR               LocationInformation;
+    NTSTATUS            status;
 
     status = FdoQueryId(Fdo,
                         BusQueryDeviceID,
@@ -803,7 +803,7 @@ fail1:
 
 static VOID
 FdoClearActive(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     (VOID) ConfigClearActive();
@@ -813,7 +813,7 @@ FdoClearActive(
 
 static FORCEINLINE BOOLEAN
 __FdoIsActive(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     return Fdo->Active;
@@ -822,7 +822,7 @@ __FdoIsActive(
 #define DEFINE_FDO_GET_CONTEXT(_Interface, _Type)               \
 static FORCEINLINE _Type                                        \
 __FdoGet ## _Interface ## Context(                              \
-    IN  PXENBUS_FDO Fdo                                         \
+    _In_ PXENBUS_FDO    Fdo                                     \
     )                                                           \
 {                                                               \
     return Fdo-> ## _Interface ## Context;                      \
@@ -830,7 +830,7 @@ __FdoGet ## _Interface ## Context(                              \
                                                                 \
 _Type                                                           \
 FdoGet ## _Interface ## Context(                                \
-    IN  PXENBUS_FDO Fdo                                         \
+    _In_ PXENBUS_FDO    Fdo                                     \
     )                                                           \
 {                                                               \
     return __FdoGet ## _Interface ## Context(Fdo);              \
@@ -848,13 +848,14 @@ DEFINE_FDO_GET_CONTEXT(Gnttab, PXENBUS_GNTTAB_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Unplug, PXENBUS_UNPLUG_CONTEXT)
 DEFINE_FDO_GET_CONTEXT(Balloon, PXENBUS_BALLOON_CONTEXT)
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoDelegateIrpCompletion;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoDelegateIrpCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PKEVENT             Event = Context;
@@ -869,8 +870,8 @@ FdoDelegateIrpCompletion(
 
 NTSTATUS
 FdoDelegateIrp(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PDEVICE_OBJECT      DeviceObject;
@@ -933,13 +934,14 @@ done:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoForwardIrpSynchronouslyCompletion;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoForwardIrpSynchronouslyCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PKEVENT             Event = Context;
@@ -954,12 +956,12 @@ FdoForwardIrpSynchronouslyCompletion(
 
 static NTSTATUS
 FdoForwardIrpSynchronously(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
-    KEVENT          Event;
-    NTSTATUS        status;
+    KEVENT              Event;
+    NTSTATUS            status;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
@@ -990,8 +992,8 @@ FdoForwardIrpSynchronously(
 
 VOID
 FdoAddPhysicalDeviceObject(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PXENBUS_PDO     Pdo
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PXENBUS_PDO    Pdo
     )
 {
     PDEVICE_OBJECT      DeviceObject;
@@ -1011,8 +1013,8 @@ FdoAddPhysicalDeviceObject(
 
 VOID
 FdoRemovePhysicalDeviceObject(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PXENBUS_PDO     Pdo
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PXENBUS_PDO    Pdo
     )
 {
     PDEVICE_OBJECT      DeviceObject;
@@ -1035,7 +1037,7 @@ FdoRemovePhysicalDeviceObject(
 
 static FORCEINLINE VOID
 __FdoAcquireMutex(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     AcquireMutex(&Fdo->Mutex);
@@ -1043,7 +1045,7 @@ __FdoAcquireMutex(
 
 VOID
 FdoAcquireMutex(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     __FdoAcquireMutex(Fdo);
@@ -1051,7 +1053,7 @@ FdoAcquireMutex(
 
 static FORCEINLINE VOID
 __FdoReleaseMutex(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     ReleaseMutex(&Fdo->Mutex);
@@ -1059,7 +1061,7 @@ __FdoReleaseMutex(
 
 VOID
 FdoReleaseMutex(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     __FdoReleaseMutex(Fdo);
@@ -1073,8 +1075,8 @@ FdoReleaseMutex(
 
 static BOOLEAN
 FdoEnumerate(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PANSI_STRING    Classes
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PANSI_STRING   Classes
     )
 {
     BOOLEAN             NeedInvalidate;
@@ -1169,7 +1171,7 @@ done:
 
 static PANSI_STRING
 FdoMultiSzToUpcaseAnsi(
-    IN  PCHAR       Buffer
+    _In_ PCHAR      Buffer
     )
 {
     PANSI_STRING    Ansi;
@@ -1234,37 +1236,37 @@ fail1:
 
 static VOID
 FdoFreeAnsi(
-    IN  PANSI_STRING    Ansi
+    _In_ PANSI_STRING   Ansi
     )
 {
     ULONG               Index;
 
     for (Index = 0; Ansi[Index].Buffer != NULL; Index++)
         __FdoFree(Ansi[Index].Buffer);
-        
+
     __FdoFree(Ansi);
 }
 
 static PANSI_STRING
 FdoCombineAnsi(
-    IN  PANSI_STRING    AnsiA,
-    IN  PANSI_STRING    AnsiB
+    _In_opt_ PANSI_STRING   AnsiA,
+    _In_opt_ PANSI_STRING   AnsiB
     )
 {
-    LONG                Count;
-    ULONG               Index;
-    PANSI_STRING        Ansi;
-    NTSTATUS            status;
+    LONG                    Count;
+    ULONG                   Index;
+    PANSI_STRING            Ansi;
+    NTSTATUS                status;
 
     Count = 0;
 
     for (Index = 0;
-         AnsiA != NULL && AnsiA[Index].Buffer != NULL; 
+         AnsiA != NULL && AnsiA[Index].Buffer != NULL;
          Index++)
         Count++;
 
     for (Index = 0;
-         AnsiB != NULL && AnsiB[Index].Buffer != NULL; 
+         AnsiB != NULL && AnsiB[Index].Buffer != NULL;
          Index++)
         Count++;
 
@@ -1277,7 +1279,7 @@ FdoCombineAnsi(
     Count = 0;
 
     for (Index = 0;
-         AnsiA != NULL && AnsiA[Index].Buffer != NULL; 
+         AnsiA != NULL && AnsiA[Index].Buffer != NULL;
          Index++) {
         USHORT  Length;
 
@@ -1297,7 +1299,7 @@ FdoCombineAnsi(
     }
 
     for (Index = 0;
-         AnsiB != NULL && AnsiB[Index].Buffer != NULL; 
+         AnsiB != NULL && AnsiB[Index].Buffer != NULL;
          Index++) {
         USHORT  Length;
 
@@ -1324,7 +1326,7 @@ fail3:
 fail2:
     Error("fail2\n");
 
-    while (--Count >= 0) 
+    while (--Count >= 0)
         __FdoFree(Ansi[Count].Buffer);
 
     __FdoFree(Ansi);
@@ -1337,8 +1339,8 @@ fail1:
 
 static NTSTATUS
 FdoScan(
-    IN  PXENBUS_THREAD  Self,
-    IN  PVOID           Context
+    _In_ PXENBUS_THREAD Self,
+    _In_ PVOID          Context
     )
 {
     PXENBUS_FDO         Fdo = Context;
@@ -1425,7 +1427,7 @@ FdoScan(
         }
 
         // NULL out anything in the Classes list that not in the
-        // SupportedClasses list    
+        // SupportedClasses list
         for (Index = 0; Classes[Index].Buffer != NULL; Index++) {
             PANSI_STRING    Class = &Classes[Index];
             ULONG           Entry;
@@ -1457,7 +1459,7 @@ FdoScan(
 
         if (NeedInvalidate) {
             NeedInvalidate = FALSE;
-            IoInvalidateDeviceRelations(__FdoGetPhysicalDeviceObject(Fdo), 
+            IoInvalidateDeviceRelations(__FdoGetPhysicalDeviceObject(Fdo),
                                         BusRelations);
         }
 
@@ -1473,7 +1475,7 @@ loop:
 
 static FORCEINLINE NTSTATUS
 __FdoSuspendSetActive(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     if (!TryAcquireMutex(&Fdo->BalloonSuspendMutex))
@@ -1489,7 +1491,7 @@ fail1:
 
 static FORCEINLINE VOID
 __FdoSuspendClearActive(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     ReleaseMutex(&Fdo->BalloonSuspendMutex);
@@ -1506,8 +1508,8 @@ __FdoSuspendClearActive(
 
 static NTSTATUS
 FdoSuspend(
-    IN  PXENBUS_THREAD  Self,
-    IN  PVOID           Context
+    _In_ PXENBUS_THREAD Self,
+    _In_ PVOID          Context
     )
 {
     PXENBUS_FDO         Fdo = Context;
@@ -1557,7 +1559,7 @@ FdoSuspend(
                               &Buffer);
         if (NT_SUCCESS(status)) {
             Suspend = (strcmp(Buffer, "suspend") == 0) ? TRUE : FALSE;
-                
+
             XENBUS_STORE(Free,
                          &Fdo->StoreInterface,
                          Buffer);
@@ -1604,7 +1606,7 @@ loop:
 
 static FORCEINLINE NTSTATUS
 __FdoBalloonSetActive(
-    IN  PXENBUS_FDO         Fdo
+    _In_ PXENBUS_FDO        Fdo
     )
 {
     if (!TryAcquireMutex(&Fdo->BalloonSuspendMutex))
@@ -1628,7 +1630,7 @@ fail1:
 
 static FORCEINLINE VOID
 __FdoBalloonClearActive(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     (VOID) XENBUS_STORE(Printf,
@@ -1654,8 +1656,8 @@ __FdoBalloonClearActive(
 
 static NTSTATUS
 FdoBalloon(
-    IN  PXENBUS_THREAD  Self,
-    IN  PVOID           Context
+    _In_ PXENBUS_THREAD Self,
+    _In_ PVOID          Context
     )
 {
     PXENBUS_FDO         Fdo = Context;
@@ -1691,7 +1693,7 @@ FdoBalloon(
                                      &Timeout :
                                      NULL);
         KeClearEvent(Event);
-        
+
         Trace("awake\n");
 
         if (ThreadIsAlerted(Self))
@@ -1819,8 +1821,8 @@ loop:
 
 static VOID
 FdoDumpIoResourceDescriptor(
-    IN  PXENBUS_FDO             Fdo,
-    IN  PIO_RESOURCE_DESCRIPTOR Descriptor
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ PIO_RESOURCE_DESCRIPTOR    Descriptor
     )
 {
     Trace("%s: %s\n",
@@ -1868,8 +1870,8 @@ FdoDumpIoResourceDescriptor(
 
 static VOID
 FdoDumpIoResourceList(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PIO_RESOURCE_LIST   List
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ PIO_RESOURCE_LIST  List
     )
 {
     ULONG                   Index;
@@ -1887,8 +1889,8 @@ FdoDumpIoResourceList(
 
 static NTSTATUS
 FdoFilterResourceRequirements(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  PIRP                        Irp
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ PIRP                       Irp
     )
 {
     PIO_RESOURCE_REQUIREMENTS_LIST  Old;
@@ -1991,9 +1993,9 @@ fail1:
 
 static VOID
 FdoDumpCmPartialResourceDescriptor(
-    IN  PXENBUS_FDO                     Fdo,
-    IN  BOOLEAN                         Translated,
-    IN  PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor
+    _In_ PXENBUS_FDO                        Fdo,
+    _In_ BOOLEAN                            Translated,
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR    Descriptor
     )
 {
     Trace("%s: %s: %s SharedDisposition=%s Flags=%04x\n",
@@ -2002,7 +2004,7 @@ FdoDumpCmPartialResourceDescriptor(
           ResourceDescriptorTypeName(Descriptor->Type),
           ResourceDescriptorShareDispositionName(Descriptor->ShareDisposition),
           Descriptor->Flags);
-    
+
     switch (Descriptor->Type) {
     case CmResourceTypeMemory:
         Trace("%s: %s: Start = %08x.%08x Length = %08x\n",
@@ -2043,9 +2045,9 @@ FdoDumpCmPartialResourceDescriptor(
 
 static VOID
 FdoDumpCmPartialResourceList(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  BOOLEAN                     Translated,
-    IN  PCM_PARTIAL_RESOURCE_LIST   List
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ BOOLEAN                    Translated,
+    _In_ PCM_PARTIAL_RESOURCE_LIST  List
     )
 {
     ULONG                           Index;
@@ -2071,9 +2073,9 @@ FdoDumpCmPartialResourceList(
 
 static VOID
 FdoDumpCmFullResourceDescriptor(
-    IN  PXENBUS_FDO                     Fdo,
-    IN  BOOLEAN                         Translated,
-    IN  PCM_FULL_RESOURCE_DESCRIPTOR    Descriptor
+    _In_ PXENBUS_FDO                    Fdo,
+    _In_ BOOLEAN                        Translated,
+    _In_ PCM_FULL_RESOURCE_DESCRIPTOR   Descriptor
     )
 {
     Trace("%s: %s: InterfaceType = %s BusNumber = %d\n",
@@ -2087,9 +2089,9 @@ FdoDumpCmFullResourceDescriptor(
 
 static VOID
 FdoDumpCmResourceList(
-    IN  PXENBUS_FDO         Fdo,
-    IN  BOOLEAN             Translated,
-    IN  PCM_RESOURCE_LIST   List
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ BOOLEAN            Translated,
+    _In_ PCM_RESOURCE_LIST  List
     )
 {
     FdoDumpCmFullResourceDescriptor(Fdo, Translated, &List->List[0]);
@@ -2100,8 +2102,8 @@ _IRQL_saves_
 _IRQL_raises_(HIGH_LEVEL)
 KIRQL
 FdoAcquireInterruptLock(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PXENBUS_INTERRUPT   Interrupt
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ PXENBUS_INTERRUPT  Interrupt
     )
 {
     UNREFERENCED_PARAMETER(Fdo);
@@ -2112,9 +2114,9 @@ FdoAcquireInterruptLock(
 _IRQL_requires_(HIGH_LEVEL)
 VOID
 FdoReleaseInterruptLock(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  PXENBUS_INTERRUPT           Interrupt,
-    IN  __drv_restoresIRQL KIRQL    Irql
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ PXENBUS_INTERRUPT          Interrupt,
+    _In_ _IRQL_restores_ KIRQL      Irql
     )
 {
     UNREFERENCED_PARAMETER(Fdo);
@@ -2124,11 +2126,11 @@ FdoReleaseInterruptLock(
 
 static
 _Function_class_(KSERVICE_ROUTINE)
-__drv_requiresIRQL(HIGH_LEVEL)
+_IRQL_requires_(HIGH_LEVEL)
 BOOLEAN
 FdoInterruptCallback(
-    IN  PKINTERRUPT             InterruptObject,
-    IN  PVOID                   Context
+    _In_ PKINTERRUPT            InterruptObject,
+    _In_ PVOID                  Context
     )
 {
     PXENBUS_INTERRUPT           Interrupt = Context;
@@ -2148,16 +2150,16 @@ FdoInterruptCallback(
 
 static NTSTATUS
 FdoConnectInterrupt(
-    IN  PXENBUS_FDO                     Fdo,
-    IN  PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw,
-    IN  PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated,
-    OUT PXENBUS_INTERRUPT               *Interrupt
+    _In_ PXENBUS_FDO                        Fdo,
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR    Raw,
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR    Translated,
+    _Out_ PXENBUS_INTERRUPT                 *Interrupt
     )
 {
-    IO_CONNECT_INTERRUPT_PARAMETERS     Connect;
-    BOOLEAN                             Found;
-    ULONG                               Number;
-    NTSTATUS                            status;
+    IO_CONNECT_INTERRUPT_PARAMETERS         Connect;
+    BOOLEAN                                 Found;
+    ULONG                                   Number;
+    NTSTATUS                                status;
 
     Trace("====>\n");
 
@@ -2246,8 +2248,8 @@ fail1:
 
 static VOID
 FdoDisconnectInterrupt(
-    IN  PXENBUS_FDO                     Fdo,
-    IN  PXENBUS_INTERRUPT               Interrupt
+    _In_ PXENBUS_FDO                    Fdo,
+    _In_ PXENBUS_INTERRUPT              Interrupt
     )
 {
     IO_DISCONNECT_INTERRUPT_PARAMETERS  Disconnect;
@@ -2286,7 +2288,7 @@ FdoDisconnectInterrupt(
 
 static NTSTATUS
 FdoCreateInterrupt(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     ULONG               Index;
@@ -2334,12 +2336,12 @@ fail1:
 
 PXENBUS_INTERRUPT
 FdoAllocateInterrupt(
-    IN  PXENBUS_FDO         Fdo,
-    IN  KINTERRUPT_MODE     InterruptMode,
-    IN  USHORT              Group,
-    IN  UCHAR               Number,
-    IN  KSERVICE_ROUTINE    Callback,
-    IN  PVOID               Argument OPTIONAL
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ KINTERRUPT_MODE    InterruptMode,
+    _In_ USHORT             Group,
+    _In_ UCHAR              Number,
+    _In_ KSERVICE_ROUTINE   Callback,
+    _In_opt_ PVOID          Argument
     )
 {
     PLIST_ENTRY             ListEntry;
@@ -2374,8 +2376,8 @@ fail1:
 
 UCHAR
 FdoGetInterruptVector(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PXENBUS_INTERRUPT   Interrupt
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ PXENBUS_INTERRUPT  Interrupt
     )
 {
     UNREFERENCED_PARAMETER(Fdo);
@@ -2385,8 +2387,8 @@ FdoGetInterruptVector(
 
 ULONG
 FdoGetInterruptLine(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PXENBUS_INTERRUPT   Interrupt
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ PXENBUS_INTERRUPT  Interrupt
     )
 {
     UNREFERENCED_PARAMETER(Fdo);
@@ -2396,8 +2398,8 @@ FdoGetInterruptLine(
 
 VOID
 FdoFreeInterrupt(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PXENBUS_INTERRUPT   Interrupt
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ PXENBUS_INTERRUPT  Interrupt
     )
 {
     KIRQL                   Irql;
@@ -2410,7 +2412,7 @@ FdoFreeInterrupt(
 
 static VOID
 FdoDestroyInterrupt(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     while (!IsListEmpty(&Fdo->InterruptList)) {
@@ -2439,17 +2441,17 @@ FdoDestroyInterrupt(
 
 static FORCEINLINE BOOLEAN
 __FdoMatchDistribution(
-    IN  PXENBUS_FDO Fdo,
-    IN  PCHAR       Buffer
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PCHAR          Buffer
     )
 {
-    PCHAR           Vendor;
-    PCHAR           Product;
-    PCHAR           Context;
-    const CHAR      *Text;
-    BOOLEAN         Match;
-    ULONG           Index;
-    NTSTATUS        status;
+    PCHAR               Vendor;
+    PCHAR               Product;
+    PCHAR               Context;
+    const CHAR          *Text;
+    BOOLEAN             Match;
+    ULONG               Index;
+    NTSTATUS            status;
 
     UNREFERENCED_PARAMETER(Fdo);
 
@@ -2499,13 +2501,13 @@ fail1:
 
 static VOID
 FdoClearDistribution(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PCHAR           Buffer;
-    PANSI_STRING    Distributions;
-    ULONG           Index;
-    NTSTATUS        status;
+    PCHAR               Buffer;
+    PANSI_STRING        Distributions;
+    ULONG               Index;
+    NTSTATUS            status;
 
     Trace("====>\n");
 
@@ -2562,14 +2564,14 @@ done:
 
 static NTSTATUS
 FdoSetDistribution(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    ULONG           Index;
-    CHAR            Distribution[MAXNAMELEN];
-    CHAR            Vendor[MAXNAMELEN];
-    const CHAR      *Product;
-    NTSTATUS        status;
+    ULONG               Index;
+    CHAR                Distribution[MAXNAMELEN];
+    CHAR                Vendor[MAXNAMELEN];
+    const CHAR          *Product;
+    NTSTATUS            status;
 
     Trace("====>\n");
 
@@ -2660,9 +2662,9 @@ CHAR FdoOutBuffer[FDO_OUT_BUFFER_SIZE];
 
 static VOID
 FdoOutputBuffer(
-    IN  PVOID   Argument,
-    IN  PCHAR   Buffer,
-    IN  ULONG   Length
+    _In_ PVOID  Argument,
+    _In_ PCHAR  Buffer,
+    _In_ ULONG  Length
     )
 {
     PXENBUS_FDO Fdo = Argument;
@@ -2694,7 +2696,7 @@ FdoOutputBuffer(
 
 static FORCEINLINE BOOLEAN
 __FdoVirqPatWatchdog(
-    IN  PXENBUS_VIRQ    Virq
+    _In_ PXENBUS_VIRQ   Virq
     )
 {
     PXENBUS_FDO         Fdo = Virq->Fdo;
@@ -2731,18 +2733,17 @@ out:
     return Pat;
 }
 
-static
-_Function_class_(KSERVICE_ROUTINE)
-_IRQL_requires_(HIGH_LEVEL)
-_IRQL_requires_same_
-BOOLEAN
+static KSERVICE_ROUTINE FdoVirqCallback;
+
+_Use_decl_annotations_
+static BOOLEAN
 FdoVirqCallback(
-    IN  PKINTERRUPT InterruptObject,
-    IN  PVOID       Argument
+    PKINTERRUPT         InterruptObject,
+    PVOID               Argument
     )
 {
-    PXENBUS_VIRQ    Virq = Argument;
-    PXENBUS_FDO     Fdo;
+    PXENBUS_VIRQ        Virq = Argument;
+    PXENBUS_FDO         Fdo;
 
     UNREFERENCED_PARAMETER(InterruptObject);
 
@@ -2771,7 +2772,7 @@ FdoVirqCallback(
 
 static FORCEINLINE VOID
 __FdoVirqDestroy(
-    IN  PXENBUS_VIRQ    Virq
+    _In_ PXENBUS_VIRQ   Virq
     )
 {
     PXENBUS_FDO         Fdo = Virq->Fdo;
@@ -2797,10 +2798,10 @@ __FdoVirqDestroy(
 
 static FORCEINLINE NTSTATUS
 __FdoVirqCreate(
-    IN  PXENBUS_FDO     Fdo,
-    IN  ULONG           Type,
-    IN  ULONG           Cpu,
-    OUT PXENBUS_VIRQ    *Virq
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ ULONG          Type,
+    _In_ ULONG          Cpu,
+    _Out_ PXENBUS_VIRQ  *Virq
     )
 {
     PROCESSOR_NUMBER    ProcNumber;
@@ -2878,7 +2879,7 @@ fail1:
 
 static VOID
 FdoVirqTeardown(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     if (Fdo->Watchdog != 0)
@@ -2904,14 +2905,14 @@ FdoVirqTeardown(
 
 static NTSTATUS
 FdoVirqInitialize(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_VIRQ    Virq;
-    ULONG           Count;
-    ULONG           Index;
-    ULONG           Timer;
-    NTSTATUS        status;
+    PXENBUS_VIRQ        Virq;
+    ULONG               Count;
+    ULONG               Index;
+    ULONG               Timer;
+    NTSTATUS            status;
 
     InitializeListHead(&Fdo->VirqList);
     InitializeHighLock(&Fdo->VirqLock);
@@ -2959,10 +2960,10 @@ fail1:
 
 static FORCEINLINE NTSTATUS
 __FdoD3ToD0(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    NTSTATUS        status;
+    NTSTATUS            status;
 
     Trace("====>\n");
 
@@ -3071,7 +3072,7 @@ fail1:
 
 static FORCEINLINE VOID
 __FdoD0ToD3(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     Trace("====>\n");
@@ -3121,7 +3122,7 @@ __FdoD0ToD3(
 
 static VOID
 FdoSuspendCallbackLate(
-    IN  PVOID   Argument
+    _In_ PVOID  Argument
     )
 {
     PXENBUS_FDO Fdo = Argument;
@@ -3135,7 +3136,7 @@ FdoSuspendCallbackLate(
 
 static NTSTATUS
 FdoPciHoleCreate(
-    IN  PXENBUS_FDO                 Fdo
+    _In_ PXENBUS_FDO                Fdo
     )
 {
     PXENBUS_PCI_HOLE                Hole = &Fdo->PciHole;
@@ -3216,7 +3217,7 @@ fail1:
 
 static VOID
 FdoPciHoleDestroy(
-    IN  PXENBUS_FDO     Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     PXENBUS_PCI_HOLE    Hole = &Fdo->PciHole;
@@ -3245,8 +3246,8 @@ FdoPciHoleDestroy(
 
 static PMDL
 FdoPciHoleAllocate(
-    IN  PXENBUS_FDO         Fdo,
-    IN  ULONG               Count
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ ULONG              Count
     )
 {
     PXENBUS_PCI_HOLE        Hole = &Fdo->PciHole;
@@ -3309,8 +3310,8 @@ fail1:
 
 static VOID
 FdoPciHoleFree(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PMDL            Mdl
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PMDL           Mdl
     )
 {
     PXENBUS_PCI_HOLE    Hole = &Fdo->PciHole;
@@ -3350,8 +3351,8 @@ FdoPciHoleFree(
 
 static PMDL
 FdoMemoryHoleAllocate(
-    IN  PXENBUS_FDO     Fdo,
-    IN  ULONG           Count
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ ULONG          Count
     )
 {
     PMDL                Mdl;
@@ -3387,8 +3388,8 @@ fail1:
 
 static VOID
 FdoMemoryHoleFree(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PMDL            Mdl
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PMDL           Mdl
     )
 {
     ULONG               Count;
@@ -3407,8 +3408,8 @@ FdoMemoryHoleFree(
 
 PMDL
 FdoHoleAllocate(
-    IN  PXENBUS_FDO Fdo,
-    IN  ULONG       Count
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ ULONG      Count
     )
 {
     return (Fdo->UseMemoryHole != 0) ?
@@ -3418,8 +3419,8 @@ FdoHoleAllocate(
 
 VOID
 FdoHoleFree(
-    IN  PXENBUS_FDO Fdo,
-    IN  PMDL        Mdl
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PMDL       Mdl
     )
 {
     if (Fdo->UseMemoryHole != 0)
@@ -3431,11 +3432,11 @@ FdoHoleFree(
 
 static VOID
 FdoDebugCallback(
-    IN  PVOID   Argument,
-    IN  BOOLEAN Crashing
+    _In_ PVOID      Argument,
+    _In_ BOOLEAN    Crashing
     )
 {
-    PXENBUS_FDO Fdo = Argument;
+    PXENBUS_FDO     Fdo = Argument;
 
     UNREFERENCED_PARAMETER(Crashing);
 
@@ -3472,7 +3473,7 @@ FdoDebugCallback(
 // This function must not touch pageable code or data
 static NTSTATUS
 FdoD3ToD0(
-    IN  PXENBUS_FDO             Fdo
+    _In_ PXENBUS_FDO            Fdo
     )
 {
     POWER_STATE                 PowerState;
@@ -3643,12 +3644,12 @@ fail1:
 // This function must not touch pageable code or data
 static VOID
 FdoD0ToD3(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    POWER_STATE     PowerState;
-    PLIST_ENTRY     ListEntry;
-    KIRQL           Irql;
+    POWER_STATE         PowerState;
+    PLIST_ENTRY         ListEntry;
+    KIRQL               Irql;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
     ASSERT3U(__FdoGetDevicePowerState(Fdo), ==, PowerDeviceD0);
@@ -3756,10 +3757,10 @@ not_active:
 // This function must not touch pageable code or data
 static VOID
 FdoS4ToS3(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    KIRQL           Irql;
+    KIRQL               Irql;
 
     Trace("====>\n");
 
@@ -3788,7 +3789,7 @@ not_active:
 // This function must not touch pageable code or data
 static VOID
 FdoS3ToS4(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     Trace("====>\n");
@@ -3815,8 +3816,8 @@ not_active:
 
 static VOID
 FdoFilterCmPartialResourceList(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  PCM_PARTIAL_RESOURCE_LIST   List
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ PCM_PARTIAL_RESOURCE_LIST  List
     )
 {
     ULONG                           Index;
@@ -3841,11 +3842,11 @@ FdoFilterCmPartialResourceList(
 #define BALLOON_WARN_TIMEOUT        10
 #define BALLOON_BUGCHECK_TIMEOUT    1200
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 FdoStartDevice(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  PIRP                        Irp
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ PIRP                       Irp
     )
 {
     PIO_STACK_LOCATION              StackLocation;
@@ -3995,7 +3996,7 @@ fail8:
 
     if (!__FdoIsActive(Fdo))
         goto fail4;
-    
+
     if (Fdo->BalloonInterface.Interface.Context != NULL) {
         ThreadAlert(Fdo->BalloonThread);
         ThreadJoin(Fdo->BalloonThread);
@@ -4056,8 +4057,8 @@ fail1:
 
 static NTSTATUS
 FdoQueryStopDevice(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP       Irp
     )
 {
     NTSTATUS        status;
@@ -4087,11 +4088,11 @@ fail1:
 
 static NTSTATUS
 FdoCancelStopDevice(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
-    NTSTATUS        status;
+    NTSTATUS            status;
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
 
@@ -4105,11 +4106,11 @@ FdoCancelStopDevice(
 
 static NTSTATUS
 FdoStopDevice(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
-    NTSTATUS        status;
+    NTSTATUS            status;
 
     if (__FdoGetDevicePowerState(Fdo) == PowerDeviceD0)
         FdoD0ToD3(Fdo);
@@ -4159,11 +4160,11 @@ not_active:
 
 static NTSTATUS
 FdoQueryRemoveDevice(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
-    NTSTATUS        status;
+    NTSTATUS            status;
 
     status = STATUS_UNSUCCESSFUL;
     if (Fdo->BalloonInterface.Interface.Context != NULL &&
@@ -4190,11 +4191,11 @@ fail1:
 
 static NTSTATUS
 FdoCancelRemoveDevice(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
-    NTSTATUS        status;
+    NTSTATUS            status;
 
     __FdoRestoreDevicePnpState(Fdo, RemovePending);
 
@@ -4208,12 +4209,12 @@ FdoCancelRemoveDevice(
 
 static NTSTATUS
 FdoSurpriseRemoval(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
-    PLIST_ENTRY     ListEntry;
-    NTSTATUS        status;
+    PLIST_ENTRY         ListEntry;
+    NTSTATUS            status;
 
     __FdoSetDevicePnpState(Fdo, SurpriseRemovePending);
 
@@ -4241,11 +4242,11 @@ FdoSurpriseRemoval(
     return status;
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 FdoRemoveDevice(
-    IN  PXENBUS_FDO                     Fdo,
-    IN  PIRP                            Irp
+    _In_ PXENBUS_FDO                    Fdo,
+    _In_ PIRP                           Irp
     )
 {
     PLIST_ENTRY                         ListEntry;
@@ -4359,11 +4360,11 @@ done:
 
 #define SCAN_PAUSE  10
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 FdoQueryDeviceRelations(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -4500,8 +4501,8 @@ fail1:
 
 static NTSTATUS
 FdoQueryCapabilities(
-    IN  PXENBUS_FDO         Fdo,
-    IN  PIRP                Irp
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ PIRP               Irp
     )
 {
     PIO_STACK_LOCATION      StackLocation;
@@ -4542,8 +4543,8 @@ fail1:
 
 static NTSTATUS
 FdoDeviceUsageNotification(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  PIRP                        Irp
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ PIRP                       Irp
     )
 {
     PIO_STACK_LOCATION              StackLocation;
@@ -4574,7 +4575,7 @@ FdoDeviceUsageNotification(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    NotDisableable = FALSE;    
+    NotDisableable = FALSE;
     for (Type = 0; Type <= DeviceUsageTypeDumpFile; Type++) {
         if (Fdo->Usage[Type] != 0) {
             NotDisableable = TRUE;
@@ -4586,7 +4587,7 @@ FdoDeviceUsageNotification(
 
     if (Fdo->NotDisableable != NotDisableable) {
         Fdo->NotDisableable = NotDisableable;
-    
+
         IoInvalidateDeviceState(__FdoGetPhysicalDeviceObject(Fdo));
     }
 
@@ -4602,8 +4603,8 @@ fail1:
 
 static NTSTATUS
 FdoQueryPnpDeviceState(
-    IN  PXENBUS_FDO                 Fdo,
-    IN  PIRP                        Irp
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ PIRP                       Irp
     )
 {
     ULONG_PTR                       State;
@@ -4633,8 +4634,8 @@ done:
 
 static NTSTATUS
 FdoDispatchPnp(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -4645,8 +4646,8 @@ FdoDispatchPnp(
     MinorFunction = StackLocation->MinorFunction;
 
     Trace("====> (%02x:%s)\n",
-          MinorFunction, 
-          PnpMinorFunctionName(MinorFunction)); 
+          MinorFunction,
+          PnpMinorFunctionName(MinorFunction));
 
     switch (StackLocation->MinorFunction) {
     case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
@@ -4708,19 +4709,20 @@ FdoDispatchPnp(
     }
 
     Trace("<==== (%02x:%s)(%08x)\n",
-          MinorFunction, 
+          MinorFunction,
           PnpMinorFunctionName(MinorFunction),
-          status); 
+          status);
 
     return status;
 }
 
-__drv_functionClass(IO_WORKITEM_ROUTINE)
-__drv_sameIRQL
+static IO_WORKITEM_ROUTINE FdoSetDevcePowerUpWorker;
+
+_Use_decl_annotations_
 static VOID
 FdoSetDevcePowerUpWorker(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PVOID           Context
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID      Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
@@ -4737,13 +4739,14 @@ FdoSetDevcePowerUpWorker(
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoSetDevicePowerUpComplete;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoSetDevicePowerUpComplete(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
@@ -4773,8 +4776,8 @@ FdoSetDevicePowerUpComplete(
 
 static NTSTATUS
 FdoSetDevicePowerUp(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     IoMarkIrpPending(Irp);
@@ -4789,12 +4792,13 @@ FdoSetDevicePowerUp(
     return STATUS_PENDING;
 }
 
-__drv_functionClass(IO_WORKITEM_ROUTINE)
-__drv_sameIRQL
+static IO_WORKITEM_ROUTINE FdoSetDevicePowerDownWorker;
+
+_Use_decl_annotations_
 static VOID
 FdoSetDevicePowerDownWorker(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PVOID           Context
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID      Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO)Context;
@@ -4813,8 +4817,8 @@ FdoSetDevicePowerDownWorker(
 
 static NTSTATUS
 FdoSetDevicePowerDown(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -4856,8 +4860,8 @@ done:
 
 static NTSTATUS
 FdoSetDevicePower(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -4870,7 +4874,7 @@ FdoSetDevicePower(
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
     Trace("====> (%s:%s)\n",
-          DevicePowerStateName(DeviceState), 
+          DevicePowerStateName(DeviceState),
           PowerActionName(PowerAction));
 
     if (DeviceState == __FdoGetDevicePowerState(Fdo)) {
@@ -4886,21 +4890,22 @@ FdoSetDevicePower(
 
 done:
     Trace("<==== (%s:%s)(%08x)\n",
-          DevicePowerStateName(DeviceState), 
+          DevicePowerStateName(DeviceState),
           PowerActionName(PowerAction),
           status);
     return status;
 }
 
-__drv_functionClass(REQUEST_POWER_COMPLETE)
-__drv_sameIRQL
+static REQUEST_POWER_COMPLETE FdoRequestDevicePowerUpComplete;
+
+_Use_decl_annotations_
 static VOID
 FdoRequestDevicePowerUpComplete(
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  UCHAR               MinorFunction,
-    IN  POWER_STATE         PowerState,
-    IN  PVOID               Context,
-    IN  PIO_STATUS_BLOCK    IoStatus
+    _In_ PDEVICE_OBJECT     DeviceObject,
+    _In_ UCHAR              MinorFunction,
+    _In_ POWER_STATE        PowerState,
+    _In_opt_ PVOID          Context,
+    _In_ PIO_STATUS_BLOCK   IoStatus
     )
 {
     PIRP                    Irp = (PIRP) Context;
@@ -4913,12 +4918,13 @@ FdoRequestDevicePowerUpComplete(
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
-__drv_functionClass(IO_WORKITEM_ROUTINE)
-__drv_sameIRQL
+static IO_WORKITEM_ROUTINE FdoSetSystemPowerUpWorker;
+
+_Use_decl_annotations_
 static VOID
 FdoSetSystemPowerUpWorker(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PVOID           Context
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID      Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO)Context;
@@ -4964,13 +4970,14 @@ fail1:
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoSetSystemPowerUpComplete;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoSetSystemPowerUpComplete(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
@@ -5024,8 +5031,8 @@ fail1:
 
 static NTSTATUS
 FdoSetSystemPowerUp(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -5038,12 +5045,13 @@ FdoSetSystemPowerUp(
     return IoCallDriver(Fdo->LowerDeviceObject, Irp);
 }
 
-__drv_functionClass(IO_WORKITEM_ROUTINE)
-__drv_sameIRQL
+static IO_WORKITEM_ROUTINE FdoSetSystemPowerDownWorker;
+
+_Use_decl_annotations_
 static VOID
 FdoSetSystemPowerDownWorker(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PVOID           Context
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID      Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO)Context;
@@ -5067,15 +5075,16 @@ FdoSetSystemPowerDownWorker(
     IoCallDriver(Fdo->LowerDeviceObject, Irp);
 }
 
-__drv_functionClass(REQUEST_POWER_COMPLETE)
-__drv_sameIRQL
+static REQUEST_POWER_COMPLETE FdoRequestDevicePowerDownComplete;
+
+_Use_decl_annotations_
 static VOID
 FdoRequestDevicePowerDownComplete(
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  UCHAR               MinorFunction,
-    IN  POWER_STATE         PowerState,
-    IN  PVOID               Context,
-    IN  PIO_STATUS_BLOCK    IoStatus
+    _In_ PDEVICE_OBJECT     DeviceObject,
+    _In_ UCHAR              MinorFunction,
+    _In_ POWER_STATE        PowerState,
+    _In_opt_ PVOID          Context,
+    _In_ PIO_STATUS_BLOCK   IoStatus
     )
 {
     PIRP                    Irp = (PIRP) Context;
@@ -5124,8 +5133,8 @@ fail1:
 
 static NTSTATUS
 FdoSetSystemPowerDown(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5166,8 +5175,8 @@ fail1:
 
 static NTSTATUS
 FdoSetSystemPower(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5205,15 +5214,16 @@ done:
     return status;
 }
 
-__drv_functionClass(REQUEST_POWER_COMPLETE)
-__drv_sameIRQL
+static REQUEST_POWER_COMPLETE FdoRequestQuerySystemPowerUpComplete;
+
+_Use_decl_annotations_
 static VOID
 FdoRequestQuerySystemPowerUpComplete(
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  UCHAR               MinorFunction,
-    IN  POWER_STATE         PowerState,
-    IN  PVOID               Context,
-    IN  PIO_STATUS_BLOCK    IoStatus
+    _In_ PDEVICE_OBJECT     DeviceObject,
+    _In_ UCHAR              MinorFunction,
+    _In_ POWER_STATE        PowerState,
+    _In_opt_ PVOID          Context,
+    _In_ PIO_STATUS_BLOCK   IoStatus
     )
 {
     PIRP                    Irp = (PIRP) Context;
@@ -5227,13 +5237,14 @@ FdoRequestQuerySystemPowerUpComplete(
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoQuerySystemPowerUpComplete;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoQuerySystemPowerUpComplete(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
@@ -5268,8 +5279,8 @@ fail1:
 
 static NTSTATUS
 FdoQuerySystemPowerUp(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     IoMarkIrpPending(Irp);
@@ -5283,15 +5294,16 @@ FdoQuerySystemPowerUp(
     return IoCallDriver(Fdo->LowerDeviceObject, Irp);
 }
 
-__drv_functionClass(REQUEST_POWER_COMPLETE)
-__drv_sameIRQL
+static REQUEST_POWER_COMPLETE FdoRequestQuerySystemPowerDownComplete;
+
+_Use_decl_annotations_
 static VOID
 FdoRequestQuerySystemPowerDownComplete(
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  UCHAR               MinorFunction,
-    IN  POWER_STATE         PowerState,
-    IN  PVOID               Context,
-    IN  PIO_STATUS_BLOCK    IoStatus
+    _In_ PDEVICE_OBJECT     DeviceObject,
+    _In_ UCHAR              MinorFunction,
+    _In_ POWER_STATE        PowerState,
+    _In_opt_ PVOID          Context,
+    _In_ PIO_STATUS_BLOCK   IoStatus
     )
 {
     PIRP                    Irp = (PIRP) Context;
@@ -5320,8 +5332,8 @@ fail1:
 
 static NTSTATUS
 FdoQuerySystemPowerDown(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5359,8 +5371,8 @@ fail1:
 
 static NTSTATUS
 FdoQuerySystemPower(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5373,7 +5385,7 @@ FdoQuerySystemPower(
     PowerAction = StackLocation->Parameters.Power.ShutdownType;
 
     Trace("====> (%s:%s)\n",
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction));
 
     if (SystemState == __FdoGetSystemPowerState(Fdo)) {
@@ -5389,7 +5401,7 @@ FdoQuerySystemPower(
 
 done:
     Trace("<==== (%s:%s)(%08x)\n",
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction),
           status);
 
@@ -5398,8 +5410,8 @@ done:
 
 static NTSTATUS
 FdoDispatchDevicePower(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5423,8 +5435,8 @@ FdoDispatchDevicePower(
 
 static NTSTATUS
 FdoDispatchSystemPower(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5452,8 +5464,8 @@ FdoDispatchSystemPower(
 
 static NTSTATUS
 FdoDispatchPower(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5486,11 +5498,11 @@ FdoDispatchPower(
 
 static NTSTATUS
 FdoDispatchDefault(
-    IN  PXENBUS_FDO Fdo,
-    IN  PIRP        Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
-    NTSTATUS        status;
+    NTSTATUS            status;
 
     IoSkipCurrentIrpStackLocation(Irp);
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
@@ -5500,8 +5512,8 @@ FdoDispatchDefault(
 
 NTSTATUS
 FdoDispatch(
-    IN  PXENBUS_FDO     Fdo,
-    IN  PIRP            Irp
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -5526,15 +5538,15 @@ FdoDispatch(
     return status;
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static NTSTATUS
 FdoQueryInterface(
-    IN  PXENBUS_FDO     Fdo,
-    IN  const GUID      *Guid,
-    IN  ULONG           Version,
-    OUT PINTERFACE      Interface,
-    IN  ULONG           Size,
-    IN  BOOLEAN         Optional
+    _In_ PXENBUS_FDO    Fdo,
+    _In_ const GUID     *Guid,
+    _In_ ULONG          Version,
+    _Out_ PINTERFACE    Interface,
+    _In_ ULONG          Size,
+    _In_ BOOLEAN        Optional
     )
 {
     KEVENT              Event;
@@ -5567,7 +5579,7 @@ FdoQueryInterface(
     StackLocation->Parameters.QueryInterface.Size = (USHORT)Size;
     StackLocation->Parameters.QueryInterface.Version = (USHORT)Version;
     StackLocation->Parameters.QueryInterface.Interface = Interface;
-    
+
     Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
 
     status = IoCallDriver(Fdo->LowerDeviceObject, Irp);
@@ -5615,14 +5627,14 @@ fail1:
 
 static NTSTATUS
 FdoBalloonInitialize(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    CHAR            Key[] = "XEN:BALLOON=";
-    PANSI_STRING    Option;
-    PCHAR           Value;
-    BOOLEAN         Enabled;
-    NTSTATUS        status;
+    CHAR                Key[] = "XEN:BALLOON=";
+    PANSI_STRING        Option;
+    PCHAR               Value;
+    BOOLEAN             Enabled;
+    NTSTATUS            status;
 
     Enabled = TRUE;
 
@@ -5647,7 +5659,7 @@ done:
 
 static VOID
 FdoBalloonTeardown(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
     if (Fdo->BalloonContext == NULL)
@@ -5659,13 +5671,13 @@ FdoBalloonTeardown(
 
 static VOID
 FdoSetWatchdog(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    CHAR            Key[] = "XEN:WATCHDOG=";
-    PANSI_STRING    Option;
-    ULONG           Value;
-    NTSTATUS        status;
+    CHAR                Key[] = "XEN:WATCHDOG=";
+    PANSI_STRING        Option;
+    ULONG               Value;
+    NTSTATUS            status;
 
     status = ConfigQuerySystemStartOption(Key, &Option);
     if (!NT_SUCCESS(status))
@@ -5690,7 +5702,7 @@ FdoSetWatchdog(
 
 NTSTATUS
 FdoCreate(
-    IN  PDEVICE_OBJECT          PhysicalDeviceObject
+    _In_ PDEVICE_OBJECT         PhysicalDeviceObject
     )
 {
     PDEVICE_OBJECT              FunctionDeviceObject;
@@ -6009,11 +6021,11 @@ fail1:
 
 VOID
 FdoDestroy(
-    IN  PXENBUS_FDO Fdo
+    _In_ PXENBUS_FDO    Fdo
     )
 {
-    PXENBUS_DX      Dx = Fdo->Dx;
-    PDEVICE_OBJECT  FunctionDeviceObject = Dx->DeviceObject;
+    PXENBUS_DX          Dx = Fdo->Dx;
+    PDEVICE_OBJECT      FunctionDeviceObject = Dx->DeviceObject;
 
     ASSERT(IsListEmpty(&Fdo->List));
     ASSERT3U(Fdo->References, ==, 0);

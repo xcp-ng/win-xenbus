@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -63,7 +63,7 @@ struct _XENBUS_SUSPEND_CONTEXT {
 
 static FORCEINLINE PVOID
 __SuspendAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_SUSPEND_TAG);
@@ -71,7 +71,7 @@ __SuspendAllocate(
 
 static FORCEINLINE VOID
 __SuspendFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_SUSPEND_TAG);
@@ -79,11 +79,11 @@ __SuspendFree(
 
 static NTSTATUS
 SuspendRegister(
-    IN  PINTERFACE                      Interface,
-    IN  XENBUS_SUSPEND_CALLBACK_TYPE    Type,
-    IN  VOID                            (*Function)(PVOID),
-    IN  PVOID                           Argument OPTIONAL,
-    OUT PXENBUS_SUSPEND_CALLBACK        *Callback
+    _In_ PINTERFACE                     Interface,
+    _In_ XENBUS_SUSPEND_CALLBACK_TYPE   Type,
+    _In_ VOID                           (*Function)(PVOID),
+    _In_opt_ PVOID                      Argument,
+    _Out_ PXENBUS_SUSPEND_CALLBACK      *Callback
     )
 {
     PXENBUS_SUSPEND_CONTEXT             Context = Interface->Context;
@@ -127,8 +127,8 @@ fail1:
 
 static VOID
 SuspendDeregister(
-    IN  PINTERFACE                  Interface,
-    IN  PXENBUS_SUSPEND_CALLBACK    Callback
+    _In_ PINTERFACE                 Interface,
+    _In_ PXENBUS_SUSPEND_CALLBACK   Callback
     )
 {
     PXENBUS_SUSPEND_CONTEXT         Context = Interface->Context;
@@ -143,7 +143,7 @@ SuspendDeregister(
 
 static FORCEINLINE VOID
 __SuspendLogTimers(
-    IN  const CHAR  *Prefix
+    _In_ const CHAR *Prefix
     )
 {
     LARGE_INTEGER   SystemTime;
@@ -183,8 +183,8 @@ __SuspendLogTimers(
 
 static VOID
 SuspendEarly(
-    IN  PVOID               Argument,
-    IN  ULONG               Cpu
+    _In_ PVOID              Argument,
+    _In_ ULONG              Cpu
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Argument;
@@ -223,8 +223,8 @@ SuspendEarly(
 
 static VOID
 SuspendLate(
-    IN  PVOID               Argument,
-    IN  ULONG               Cpu
+    _In_ PVOID              Argument,
+    _In_ ULONG              Cpu
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Argument;
@@ -253,7 +253,7 @@ SuspendLate(
 NTSTATUS
 #pragma prefast(suppress:28167) // Function changes IRQL
 SuspendTrigger(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
@@ -298,7 +298,7 @@ SuspendTrigger(
 
 static ULONG
 SuspendGetCount(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
@@ -313,8 +313,8 @@ SuspendGetCount(
 
 static VOID
 SuspendDebugCallback(
-    IN  PVOID               Argument,
-    IN  BOOLEAN             Crashing
+    _In_ PVOID              Argument,
+    _In_ BOOLEAN            Crashing
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Argument;
@@ -384,7 +384,7 @@ SuspendDebugCallback(
 
 static NTSTATUS
 SuspendAcquire(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
@@ -435,7 +435,7 @@ fail1:
 
 static VOID
 SuspendRelease(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
@@ -476,14 +476,14 @@ static struct _XENBUS_SUSPEND_INTERFACE_V1 SuspendInterfaceVersion1 = {
     SuspendTrigger,
     SuspendGetCount
 };
-                     
+
 NTSTATUS
 SuspendInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_SUSPEND_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Out_ PXENBUS_SUSPEND_CONTEXT   *Context
     )
 {
-    NTSTATUS                    status;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 
@@ -517,10 +517,10 @@ fail1:
 
 NTSTATUS
 SuspendGetInterface(
-    IN      PXENBUS_SUSPEND_CONTEXT Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_SUSPEND_CONTEXT    Context,
+    _In_ ULONG                      Version,
+    _Inout_ PINTERFACE              Interface,
+    _In_ ULONG                      Size
     )
 {
     NTSTATUS                        status;
@@ -551,11 +551,11 @@ SuspendGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 SuspendGetReferences(
-    IN  PXENBUS_SUSPEND_CONTEXT Context
+    _In_ PXENBUS_SUSPEND_CONTEXT    Context
     )
 {
     return Context->References;
@@ -563,7 +563,7 @@ SuspendGetReferences(
 
 VOID
 SuspendTeardown(
-    IN  PXENBUS_SUSPEND_CONTEXT Context
+    _In_ PXENBUS_SUSPEND_CONTEXT    Context
     )
 {
     Trace("====>\n");

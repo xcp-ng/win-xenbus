@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -71,7 +71,7 @@ struct _XENFILT_FDO {
 
 static FORCEINLINE PVOID
 __FdoAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, FDO_TAG);
@@ -79,7 +79,7 @@ __FdoAllocate(
 
 static FORCEINLINE VOID
 __FdoFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, FDO_TAG);
@@ -87,8 +87,8 @@ __FdoFree(
 
 static FORCEINLINE VOID
 __FdoSetDevicePnpState(
-    IN  PXENFILT_FDO        Fdo,
-    IN  DEVICE_PNP_STATE    State
+    _In_ PXENFILT_FDO       Fdo,
+    _In_ DEVICE_PNP_STATE   State
     )
 {
     PXENFILT_DX             Dx = Fdo->Dx;
@@ -102,8 +102,8 @@ __FdoSetDevicePnpState(
 
 static FORCEINLINE VOID
 __FdoRestoreDevicePnpState(
-    IN  PXENFILT_FDO        Fdo,
-    IN  DEVICE_PNP_STATE    State
+    _In_ PXENFILT_FDO       Fdo,
+    _In_ DEVICE_PNP_STATE   State
     )
 {
     PXENFILT_DX             Dx = Fdo->Dx;
@@ -114,7 +114,7 @@ __FdoRestoreDevicePnpState(
 
 static FORCEINLINE DEVICE_PNP_STATE
 __FdoGetDevicePnpState(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -124,7 +124,7 @@ __FdoGetDevicePnpState(
 
 static FORCEINLINE DEVICE_PNP_STATE
 __FdoGetPreviousDevicePnpState(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -134,8 +134,8 @@ __FdoGetPreviousDevicePnpState(
 
 static FORCEINLINE VOID
 __FdoSetDevicePowerState(
-    IN  PXENFILT_FDO        Fdo,
-    IN  DEVICE_POWER_STATE  State
+    _In_ PXENFILT_FDO       Fdo,
+    _In_ DEVICE_POWER_STATE State
     )
 {
     PXENFILT_DX             Dx = Fdo->Dx;
@@ -145,7 +145,7 @@ __FdoSetDevicePowerState(
 
 static FORCEINLINE DEVICE_POWER_STATE
 __FdoGetDevicePowerState(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -155,8 +155,8 @@ __FdoGetDevicePowerState(
 
 static FORCEINLINE VOID
 __FdoSetSystemPowerState(
-    IN  PXENFILT_FDO        Fdo,
-    IN  SYSTEM_POWER_STATE  State
+    _In_ PXENFILT_FDO       Fdo,
+    _In_ SYSTEM_POWER_STATE State
     )
 {
     PXENFILT_DX              Dx = Fdo->Dx;
@@ -166,7 +166,7 @@ __FdoSetSystemPowerState(
 
 static FORCEINLINE SYSTEM_POWER_STATE
 __FdoGetSystemPowerState(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -176,17 +176,17 @@ __FdoGetSystemPowerState(
 
 static FORCEINLINE PDEVICE_OBJECT
 __FdoGetDeviceObject(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
 
     return Dx->DeviceObject;
 }
-    
+
 PDEVICE_OBJECT
 FdoGetDeviceObject(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     return __FdoGetDeviceObject(Fdo);
@@ -194,7 +194,7 @@ FdoGetDeviceObject(
 
 static FORCEINLINE PDEVICE_OBJECT
 __FdoGetPhysicalDeviceObject(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     return Fdo->PhysicalDeviceObject;
@@ -202,7 +202,7 @@ __FdoGetPhysicalDeviceObject(
 
 PDEVICE_OBJECT
 FdoGetPhysicalDeviceObject(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     return __FdoGetPhysicalDeviceObject(Fdo);
@@ -210,7 +210,7 @@ FdoGetPhysicalDeviceObject(
 
 static FORCEINLINE NTSTATUS
 __FdoSetDeviceID(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -223,7 +223,7 @@ __FdoSetDeviceID(
 
 static FORCEINLINE PCHAR
 __FdoGetDeviceID(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -233,7 +233,7 @@ __FdoGetDeviceID(
 
 static FORCEINLINE VOID
 __FdoClearDeviceID(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -244,7 +244,7 @@ __FdoClearDeviceID(
 
 static FORCEINLINE NTSTATUS
 __FdoSetInstanceID(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -256,7 +256,7 @@ __FdoSetInstanceID(
 
 static FORCEINLINE PCHAR
 __FdoGetInstanceID(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -266,7 +266,7 @@ __FdoGetInstanceID(
 
 static FORCEINLINE VOID
 __FdoClearInstanceID(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PXENFILT_DX         Dx = Fdo->Dx;
@@ -277,7 +277,7 @@ __FdoClearInstanceID(
 
 static FORCEINLINE VOID
 __FdoSetName(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     NTSTATUS            status;
@@ -292,7 +292,7 @@ __FdoSetName(
 
 static FORCEINLINE PCHAR
 __FdoGetName(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     return Fdo->Name;
@@ -300,8 +300,8 @@ __FdoGetName(
 
 VOID
 FdoAddPhysicalDeviceObject(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PDEVICE_OBJECT      DeviceObject;
@@ -320,8 +320,8 @@ FdoAddPhysicalDeviceObject(
 
 VOID
 FdoRemovePhysicalDeviceObject(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PXENFILT_PDO    Pdo
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PXENFILT_PDO   Pdo
     )
 {
     PDEVICE_OBJECT      DeviceObject;
@@ -340,7 +340,7 @@ FdoRemovePhysicalDeviceObject(
 
 static FORCEINLINE VOID
 __FdoAcquireMutex(
-    IN  PXENFILT_FDO     Fdo
+    _In_ PXENFILT_FDO    Fdo
     )
 {
     AcquireMutex(&Fdo->Mutex);
@@ -348,7 +348,7 @@ __FdoAcquireMutex(
 
 VOID
 FdoAcquireMutex(
-    IN  PXENFILT_FDO     Fdo
+    _In_ PXENFILT_FDO    Fdo
     )
 {
     __FdoAcquireMutex(Fdo);
@@ -356,7 +356,7 @@ FdoAcquireMutex(
 
 static FORCEINLINE VOID
 __FdoReleaseMutex(
-    IN  PXENFILT_FDO     Fdo
+    _In_ PXENFILT_FDO    Fdo
     )
 {
     ReleaseMutex(&Fdo->Mutex);
@@ -364,7 +364,7 @@ __FdoReleaseMutex(
 
 VOID
 FdoReleaseMutex(
-    IN  PXENFILT_FDO     Fdo
+    _In_ PXENFILT_FDO    Fdo
     )
 {
     __FdoReleaseMutex(Fdo);
@@ -378,7 +378,7 @@ FdoReleaseMutex(
 
 static FORCEINLINE VOID
 __FdoSetEnumerated(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     Fdo->Enumerated = TRUE;
@@ -388,7 +388,7 @@ __FdoSetEnumerated(
 
 BOOLEAN
 FdoHasEnumerated(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     return Fdo->Enumerated;
@@ -396,8 +396,8 @@ FdoHasEnumerated(
 
 static VOID
 FdoEnumerate(
-    IN  PXENFILT_FDO        Fdo,
-    IN  PDEVICE_RELATIONS   Relations
+    _In_ PXENFILT_FDO       Fdo,
+    _In_ PDEVICE_RELATIONS  Relations
     )
 {
     PDEVICE_OBJECT          *PhysicalDeviceObject;
@@ -466,7 +466,7 @@ FdoEnumerate(
             ObDereferenceObject(PhysicalDeviceObject[Index]);
         }
     }
-    
+
     __FdoSetEnumerated(Fdo);
 
     __FdoFree(PhysicalDeviceObject);
@@ -476,13 +476,14 @@ fail1:
     Error("fail1 (%08x)\n", status);
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoForwardIrpSynchronouslyCompletion;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoForwardIrpSynchronouslyCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PKEVENT             Event = Context;
@@ -497,8 +498,8 @@ FdoForwardIrpSynchronouslyCompletion(
 
 static NTSTATUS
 FdoForwardIrpSynchronously(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     KEVENT              Event;
@@ -533,8 +534,8 @@ FdoForwardIrpSynchronously(
 
 static NTSTATUS
 FdoStartDevice(
-    IN  PXENFILT_FDO            Fdo,
-    IN  PIRP                    Irp
+    _In_ PXENFILT_FDO           Fdo,
+    _In_ PIRP                   Irp
     )
 {
     POWER_STATE                 PowerState;
@@ -579,8 +580,8 @@ fail1:
 
 static NTSTATUS
 FdoQueryStopDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -608,8 +609,8 @@ fail1:
 
 static NTSTATUS
 FdoCancelStopDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -638,8 +639,8 @@ fail1:
 
 static NTSTATUS
 FdoStopDevice(
-    IN  PXENFILT_FDO            Fdo,
-    IN  PIRP                    Irp
+    _In_ PXENFILT_FDO           Fdo,
+    _In_ PIRP                   Irp
     )
 {
     NTSTATUS                    status;
@@ -678,8 +679,8 @@ fail1:
 
 static NTSTATUS
 FdoQueryRemoveDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -707,8 +708,8 @@ fail1:
 
 static NTSTATUS
 FdoCancelRemoveDevice(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -736,8 +737,8 @@ fail1:
 
 static NTSTATUS
 FdoSurpriseRemoval(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -765,8 +766,8 @@ fail1:
 
 static NTSTATUS
 FdoRemoveDevice(
-    IN  PXENFILT_FDO            Fdo,
-    IN  PIRP                    Irp
+    _In_ PXENFILT_FDO           Fdo,
+    _In_ PIRP                   Irp
     )
 {
     PLIST_ENTRY                 ListEntry;
@@ -840,13 +841,14 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoQueryDeviceRelationsCompletion;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoQueryDeviceRelationsCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PKEVENT             Event = Context;
@@ -861,8 +863,8 @@ FdoQueryDeviceRelationsCompletion(
 
 static NTSTATUS
 FdoQueryDeviceRelations(
-    IN  PXENFILT_FDO        Fdo,
-    IN  PIRP                Irp
+    _In_ PXENFILT_FDO       Fdo,
+    _In_ PIRP               Irp
     )
 {
     KEVENT                  Event;
@@ -1002,8 +1004,8 @@ fail1:
 
 static NTSTATUS
 FdoDispatchPnp(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1073,13 +1075,14 @@ fail1:
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoSetDevicePowerUpComplete;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoSetDevicePowerUpComplete(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PXENFILT_FDO        Fdo = (PXENFILT_FDO)Context;
@@ -1112,8 +1115,8 @@ FdoSetDevicePowerUpComplete(
 
 static FORCEINLINE NTSTATUS
 __FdoSetDevicePowerUp(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -1129,8 +1132,8 @@ __FdoSetDevicePowerUp(
 
 static NTSTATUS
 __FdoSetDevicePowerDown(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1158,8 +1161,8 @@ __FdoSetDevicePowerDown(
 
 static NTSTATUS
 FdoSetDevicePower(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1173,7 +1176,7 @@ FdoSetDevicePower(
 
     Trace("%s: ====> (%s:%s)\n",
           __FdoGetName(Fdo),
-          DevicePowerStateName(DeviceState), 
+          DevicePowerStateName(DeviceState),
           PowerActionName(PowerAction));
 
     if (DeviceState == __FdoGetDevicePowerState(Fdo)) {
@@ -1190,7 +1193,7 @@ FdoSetDevicePower(
 done:
     Trace("%s: <==== (%s:%s)(%08x)\n",
           __FdoGetName(Fdo),
-          DevicePowerStateName(DeviceState), 
+          DevicePowerStateName(DeviceState),
           PowerActionName(PowerAction),
           status);
     return status;
@@ -1198,8 +1201,8 @@ done:
 
 static FORCEINLINE NTSTATUS
 __FdoDispatchDevicePower(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1223,13 +1226,14 @@ __FdoDispatchDevicePower(
     return status;
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE FdoSetSystemPowerUpComplete;
+
+_Use_decl_annotations_
 static NTSTATUS
 FdoSetSystemPowerUpComplete(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PXENFILT_FDO        Fdo = (PXENFILT_FDO)Context;
@@ -1258,8 +1262,8 @@ FdoSetSystemPowerUpComplete(
 
 static FORCEINLINE NTSTATUS
 __FdoSetSystemPowerUp(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -1274,8 +1278,8 @@ __FdoSetSystemPowerUp(
 
 static FORCEINLINE NTSTATUS
 __FdoSetSystemPowerDown(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1299,8 +1303,8 @@ __FdoSetSystemPowerDown(
 
 static NTSTATUS
 FdoSetSystemPower(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1314,7 +1318,7 @@ FdoSetSystemPower(
 
     Trace("%s: ====> (%s:%s)\n",
           __FdoGetName(Fdo),
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction));
 
     if (SystemState == __FdoGetSystemPowerState(Fdo)) {
@@ -1331,7 +1335,7 @@ FdoSetSystemPower(
 done:
     Trace("%s: <==== (%s:%s)(%08x)\n",
           __FdoGetName(Fdo),
-          SystemPowerStateName(SystemState), 
+          SystemPowerStateName(SystemState),
           PowerActionName(PowerAction),
           status);
     return status;
@@ -1339,8 +1343,8 @@ done:
 
 static FORCEINLINE NTSTATUS
 __FdoDispatchSystemPower(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1366,8 +1370,8 @@ __FdoDispatchSystemPower(
 
 static NTSTATUS
 FdoDispatchPower(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1395,8 +1399,8 @@ FdoDispatchPower(
 
     Trace("%s: ====> (%02x:%s)\n",
           __FdoGetName(Fdo),
-          MinorFunction, 
-          PowerMinorFunctionName(MinorFunction)); 
+          MinorFunction,
+          PowerMinorFunctionName(MinorFunction));
 
     switch (PowerType) {
     case DevicePowerState:
@@ -1419,7 +1423,7 @@ FdoDispatchPower(
 
     Trace("%s: <==== (%02x:%s) (%08x)\n",
           __FdoGetName(Fdo),
-          MinorFunction, 
+          MinorFunction,
           PowerMinorFunctionName(MinorFunction),
           status);
 
@@ -1437,8 +1441,8 @@ fail1:
 
 static NTSTATUS
 FdoDispatchDefault(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     NTSTATUS            status;
@@ -1465,8 +1469,8 @@ fail1:
 
 NTSTATUS
 FdoDispatch(
-    IN  PXENFILT_FDO    Fdo,
-    IN  PIRP            Irp
+    _In_ PXENFILT_FDO   Fdo,
+    _In_ PIRP           Irp
     )
 {
     PIO_STACK_LOCATION  StackLocation;
@@ -1493,8 +1497,8 @@ FdoDispatch(
 
 NTSTATUS
 FdoCreate(
-    IN  PDEVICE_OBJECT                  PhysicalDeviceObject,
-    IN  XENFILT_EMULATED_OBJECT_TYPE    Type
+    _In_ PDEVICE_OBJECT                 PhysicalDeviceObject,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
     )
 {
     PDEVICE_OBJECT                      LowerDeviceObject;
@@ -1615,7 +1619,7 @@ fail1:
 
 VOID
 FdoDestroy(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PDEVICE_OBJECT      LowerDeviceObject = Fdo->LowerDeviceObject;

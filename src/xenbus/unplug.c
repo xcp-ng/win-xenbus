@@ -54,7 +54,7 @@ struct _XENBUS_UNPLUG_CONTEXT {
 
 static FORCEINLINE PVOID
 __UnplugAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_UNPLUG_TAG);
@@ -62,18 +62,18 @@ __UnplugAllocate(
 
 static FORCEINLINE VOID
 __UnplugFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_UNPLUG_TAG);
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static VOID
 UnplugRequest(
-    IN  PINTERFACE                  Interface,
-    IN  XENBUS_UNPLUG_DEVICE_TYPE   Type,
-    IN  BOOLEAN                     Make
+    _In_ PINTERFACE                 Interface,
+    _In_ XENBUS_UNPLUG_DEVICE_TYPE  Type,
+    _In_ BOOLEAN                    Make
     )
 {
     PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
@@ -111,11 +111,11 @@ UnplugRequest(
     ReleaseMutex(&Context->Mutex);
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static BOOLEAN
 UnplugIsRequested(
-    IN  PINTERFACE                  Interface,
-    IN  XENBUS_UNPLUG_DEVICE_TYPE   Type
+    _In_ PINTERFACE                 Interface,
+    _In_ XENBUS_UNPLUG_DEVICE_TYPE  Type
     )
 {
     PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
@@ -145,10 +145,10 @@ UnplugIsRequested(
     return Requested;
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static BOOLEAN
 UnplugBootEmulated(
-    IN  PINTERFACE                  Interface
+    _In_ PINTERFACE                 Interface
     )
 {
     PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
@@ -183,11 +183,11 @@ done:
     return BootEmulated;
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static VOID
 UnplugReboot(
-    IN  PINTERFACE                  Interface,
-    IN  PCHAR                       Module
+    _In_ PINTERFACE                 Interface,
+    _In_ PCHAR                      Module
     )
 {
     PXENBUS_UNPLUG_CONTEXT          Context = Interface->Context;
@@ -205,7 +205,7 @@ UnplugReboot(
 
 static NTSTATUS
 UnplugAcquire(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_UNPLUG_CONTEXT  Context = Interface->Context;
@@ -226,7 +226,7 @@ done:
 
 static VOID
 UnplugRelease(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_UNPLUG_CONTEXT  Context = Interface->Context;
@@ -270,11 +270,11 @@ static struct _XENBUS_UNPLUG_INTERFACE_V3 UnplugInterfaceVersion3 = {
 
 NTSTATUS
 UnplugInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_UNPLUG_CONTEXT  *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Out_ PXENBUS_UNPLUG_CONTEXT    *Context
     )
 {
-    NTSTATUS                    status;
+    NTSTATUS                        status;
 
     UNREFERENCED_PARAMETER(Fdo);
 
@@ -301,13 +301,13 @@ fail1:
 
 NTSTATUS
 UnplugGetInterface(
-    IN      PXENBUS_UNPLUG_CONTEXT  Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_UNPLUG_CONTEXT Context,
+    _In_ ULONG                  Version,
+    _Inout_ PINTERFACE          Interface,
+    _In_ ULONG                  Size
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                    status;
 
     ASSERT(Context != NULL);
 
@@ -373,7 +373,7 @@ UnplugGetInterface(
 
 ULONG
 UnplugGetReferences(
-    IN  PXENBUS_UNPLUG_CONTEXT  Context
+    _In_ PXENBUS_UNPLUG_CONTEXT Context
     )
 {
     return Context->References;
@@ -381,7 +381,7 @@ UnplugGetReferences(
 
 VOID
 UnplugTeardown(
-    IN  PXENBUS_UNPLUG_CONTEXT  Context
+    _In_ PXENBUS_UNPLUG_CONTEXT Context
     )
 {
     Trace("====>\n");

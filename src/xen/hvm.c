@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -41,19 +41,19 @@
 
 static LONG_PTR
 HvmOp(
-    IN  ULONG   Command,
-    IN  PVOID   Argument
+    _In_ ULONG  Command,
+    _In_ PVOID  Argument
     )
 {
     return HYPERCALL(LONG_PTR, hvm_op, 2, Command, Argument);
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 HvmSetParam(
-    IN  ULONG               Parameter,
-    IN  ULONGLONG           Value
+    _In_ ULONG              Parameter,
+    _In_ ULONGLONG          Value
     )
 {
     struct xen_hvm_param    op;
@@ -65,7 +65,7 @@ HvmSetParam(
     op.value = Value;
 
     rc = HvmOp(HVMOP_set_param, &op);
-    
+
     if (rc < 0) {
         ERRNO_TO_STATUS(-rc, status);
         goto fail1;
@@ -78,13 +78,13 @@ fail1:
 
     return status;
 }
-    
-__checkReturn
+
+_Check_return_
 XEN_API
 NTSTATUS
 HvmGetParam(
-    IN  ULONG               Parameter,
-    OUT PULONGLONG          Value
+    _In_ ULONG              Parameter,
+    _Out_ PULONGLONG        Value
     )
 {
     struct xen_hvm_param    op;
@@ -96,7 +96,7 @@ HvmGetParam(
     op.value = 0xFEEDFACE;
 
     rc = HvmOp(HVMOP_get_param, &op);
-    
+
     if (rc < 0) {
         ERRNO_TO_STATUS(-rc, status);
         goto fail1;
@@ -113,11 +113,11 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 HvmPagetableDying(
-    IN  PHYSICAL_ADDRESS            Address
+    _In_ PHYSICAL_ADDRESS           Address
     )
 {
     struct xen_hvm_pagetable_dying  op;
@@ -128,7 +128,7 @@ HvmPagetableDying(
     op.gpa = Address.QuadPart;
 
     rc = HvmOp(HVMOP_pagetable_dying, &op);
-    
+
     if (rc < 0) {
         ERRNO_TO_STATUS(-rc, status);
         goto fail1;
@@ -140,12 +140,12 @@ fail1:
     return status;
 }
 
-__checkReturn
+_Check_return_
 XEN_API
 NTSTATUS
 HvmSetEvtchnUpcallVector(
-    IN  unsigned int                    vcpu_id,
-    IN  UCHAR                           Vector
+    _In_ unsigned int                   vcpu_id,
+    _In_ UCHAR                          Vector
     )
 {
     struct xen_hvm_evtchn_upcall_vector op;

@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -58,7 +58,7 @@ typedef struct _XENBUS_EVTCHN_FIFO_CONTEXT {
 
 static FORCEINLINE PVOID
 __EvtchnFifoAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_EVTCHN_FIFO_TAG);
@@ -66,7 +66,7 @@ __EvtchnFifoAllocate(
 
 static FORCEINLINE VOID
 __EvtchnFifoFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_EVTCHN_FIFO_TAG);
@@ -74,13 +74,13 @@ __EvtchnFifoFree(
 
 static event_word_t *
 EvtchnFifoEventWord(
-    IN  PXENBUS_EVTCHN_FIFO_CONTEXT Context,
-    IN  ULONG                       Port
+    _In_ PXENBUS_EVTCHN_FIFO_CONTEXT    Context,
+    _In_ ULONG                          Port
     )
 {
-    ULONG                           Index;
-    PMDL                            Mdl;
-    event_word_t                    *EventWord;
+    ULONG                               Index;
+    PMDL                                Mdl;
+    event_word_t                        *EventWord;
 
     Index = Port / EVENT_WORDS_PER_PAGE;
     ASSERT3U(Index, <, Context->EventPageCount);
@@ -98,8 +98,8 @@ EvtchnFifoEventWord(
 
 static FORCEINLINE BOOLEAN
 __EvtchnFifoTestFlag(
-    IN  event_word_t    *EventWord,
-    IN  ULONG           Flag
+    _In_ event_word_t   *EventWord,
+    _In_ ULONG          Flag
     )
 {
     KeMemoryBarrier();
@@ -108,8 +108,8 @@ __EvtchnFifoTestFlag(
 
 static FORCEINLINE BOOLEAN
 __EvtchnFifoTestAndSetFlag(
-    IN  event_word_t    *EventWord,
-    IN  ULONG           Flag
+    _In_ event_word_t   *EventWord,
+    _In_ ULONG          Flag
     )
 {
     return (InterlockedBitTestAndSet((LONG *)EventWord, Flag) != 0) ? TRUE : FALSE;
@@ -117,8 +117,8 @@ __EvtchnFifoTestAndSetFlag(
 
 static FORCEINLINE BOOLEAN
 __EvtchnFifoTestAndClearFlag(
-    IN  event_word_t    *EventWord,
-    IN  ULONG           Flag
+    _In_ event_word_t   *EventWord,
+    _In_ ULONG          Flag
     )
 {
     return (InterlockedBitTestAndReset((LONG *)EventWord, Flag) != 0) ? TRUE : FALSE;
@@ -126,8 +126,8 @@ __EvtchnFifoTestAndClearFlag(
 
 static FORCEINLINE VOID
 __EvtchnFifoSetFlag(
-    IN  event_word_t    *EventWord,
-    IN  ULONG           Flag
+    _In_ event_word_t   *EventWord,
+    _In_ ULONG          Flag
     )
 {
     (VOID) InterlockedBitTestAndSet((LONG *)EventWord, Flag);
@@ -135,8 +135,8 @@ __EvtchnFifoSetFlag(
 
 static FORCEINLINE VOID
 __EvtchnFifoClearFlag(
-    IN  event_word_t    *EventWord,
-    IN  ULONG           Flag
+    _In_ event_word_t   *EventWord,
+    _In_ ULONG          Flag
     )
 {
     (VOID) InterlockedBitTestAndReset((LONG *)EventWord, Flag);
@@ -144,7 +144,7 @@ __EvtchnFifoClearFlag(
 
 static FORCEINLINE ULONG
 __EvtchnFifoUnlink(
-    IN  event_word_t    *EventWord
+    _In_ event_word_t   *EventWord
     )
 {
     LONG                Old;
@@ -162,17 +162,17 @@ __EvtchnFifoUnlink(
 
 static NTSTATUS
 EvtchnFifoExpand(
-    IN  PXENBUS_EVTCHN_FIFO_CONTEXT Context,
-    IN  ULONG                       Port
+    _In_ PXENBUS_EVTCHN_FIFO_CONTEXT    Context,
+    _In_ ULONG                          Port
     )
 {
-    LONG                            Index;
-    ULONG                           EventPageCount;
-    PMDL                            *EventPageMdl;
-    PMDL                            Mdl;
-    ULONG                           Start;
-    ULONG                           End;
-    NTSTATUS                        status;
+    LONG                                Index;
+    ULONG                               EventPageCount;
+    PMDL                                *EventPageMdl;
+    PMDL                                Mdl;
+    ULONG                               Start;
+    ULONG                               End;
+    NTSTATUS                            status;
 
     Index = Port / EVENT_WORDS_PER_PAGE;
     ASSERT3U(Index, >=, (LONG)Context->EventPageCount);
@@ -259,10 +259,10 @@ fail1:
 
 static VOID
 EvtchnFifoContract(
-    IN  PXENBUS_EVTCHN_FIFO_CONTEXT Context
+    _In_ PXENBUS_EVTCHN_FIFO_CONTEXT    Context
     )
 {
-    LONG                            Index;
+    LONG                                Index;
 
     Index = Context->EventPageCount;
     while (--Index >= 0) {
@@ -282,14 +282,14 @@ EvtchnFifoContract(
 
 static BOOLEAN
 EvtchnFifoIsProcessorEnabled(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Index
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context,
+    _In_ ULONG                      Index
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
     unsigned int                    vcpu_id;
     NTSTATUS                        status;
-    
+
     status = SystemProcessorVcpuId(Index, &vcpu_id);
     if (!NT_SUCCESS(status))
         return FALSE;
@@ -299,18 +299,18 @@ EvtchnFifoIsProcessorEnabled(
 
 static BOOLEAN
 EvtchnFifoPollPriority(
-    IN  PXENBUS_EVTCHN_FIFO_CONTEXT Context,
-    IN  unsigned int                vcpu_id,
-    IN  ULONG                       Priority,
-    IN  PULONG                      Ready,
-    IN  XENBUS_EVTCHN_ABI_EVENT     Event,
-    IN  PVOID                       Argument
+    _In_ PXENBUS_EVTCHN_FIFO_CONTEXT    Context,
+    _In_ unsigned int                   vcpu_id,
+    _In_ ULONG                          Priority,
+    _In_ PULONG                         Ready,
+    _In_ XENBUS_EVTCHN_ABI_EVENT        Event,
+    _In_ PVOID                          Argument
     )
 {
-    ULONG                           Head;
-    ULONG                           Port;
-    event_word_t                    *EventWord;
-    BOOLEAN                         DoneSomething;
+    ULONG                               Head;
+    ULONG                               Port;
+    event_word_t                        *EventWord;
+    BOOLEAN                             DoneSomething;
 
     Head = Context->Head[vcpu_id][Priority];
 
@@ -348,10 +348,10 @@ EvtchnFifoPollPriority(
 
 static BOOLEAN
 EvtchnFifoPoll(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Index,
-    IN  XENBUS_EVTCHN_ABI_EVENT     Event,
-    IN  PVOID                       Argument
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context,
+    _In_ ULONG                      Index,
+    _In_ XENBUS_EVTCHN_ABI_EVENT    Event,
+    _In_ PVOID                      Argument
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -394,8 +394,8 @@ done:
 
 static NTSTATUS
 EvtchnFifoPortEnable(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Port
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context,
+    _In_ ULONG                      Port
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -425,8 +425,8 @@ fail1:
 
 static VOID
 EvtchnFifoPortAck(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Port
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context,
+    _In_ ULONG                      Port
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -438,8 +438,8 @@ EvtchnFifoPortAck(
 
 static VOID
 EvtchnFifoPortMask(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Port
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context,
+    _In_ ULONG                      Port
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -451,8 +451,8 @@ EvtchnFifoPortMask(
 
 static BOOLEAN
 EvtchnFifoPortUnmask(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Port
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context,
+    _In_ ULONG                      Port
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -474,8 +474,8 @@ EvtchnFifoPortUnmask(
 
 static VOID
 EvtchnFifoPortDisable(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context,
-    IN  ULONG                       Port
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context,
+    _In_ ULONG                      Port
     )
 {
     EvtchnFifoPortMask(_Context, Port);
@@ -483,7 +483,7 @@ EvtchnFifoPortDisable(
 
 static NTSTATUS
 EvtchnFifoAcquire(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -585,7 +585,7 @@ fail1:
 
 VOID
 EvtchnFifoRelease(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT  _Context
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT _Context
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT     Context = (PVOID)_Context;
@@ -637,8 +637,8 @@ static XENBUS_EVTCHN_ABI EvtchnAbiFifo = {
 
 NTSTATUS
 EvtchnFifoInitialize(
-    IN  PXENBUS_FDO                     Fdo,
-    OUT PXENBUS_EVTCHN_ABI_CONTEXT      *_Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Out_ PXENBUS_EVTCHN_ABI_CONTEXT    *_Context
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT    Context;
@@ -670,8 +670,8 @@ fail1:
 
 VOID
 EvtchnFifoGetAbi(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context,
-    OUT PXENBUS_EVTCHN_ABI              Abi)
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT     _Context,
+    _Out_ PXENBUS_EVTCHN_ABI            Abi)
 {
     *Abi = EvtchnAbiFifo;
 
@@ -680,7 +680,7 @@ EvtchnFifoGetAbi(
 
 VOID
 EvtchnFifoTeardown(
-    IN  PXENBUS_EVTCHN_ABI_CONTEXT      _Context
+    _In_ PXENBUS_EVTCHN_ABI_CONTEXT     _Context
     )
 {
     PXENBUS_EVTCHN_FIFO_CONTEXT    Context = (PVOID)_Context;

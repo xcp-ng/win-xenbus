@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -70,7 +70,7 @@ struct _XENBUS_BALLOON_CONTEXT {
 
 static FORCEINLINE PVOID
 __BalloonAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENBUS_BALLOON_TAG);
@@ -78,7 +78,7 @@ __BalloonAllocate(
 
 static FORCEINLINE VOID
 __BalloonFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENBUS_BALLOON_TAG);
@@ -94,13 +94,13 @@ __BalloonFree(
 
 static VOID
 BalloonHeapPushDown(
-    IN  PPFN_NUMBER Heap,
-    IN  ULONG       Start,
-    IN  ULONG       Count
+    _In_ PPFN_NUMBER    Heap,
+    _In_ ULONG          Start,
+    _In_ ULONG          Count
     )
 {
-    ULONG           LeftChild;
-    ULONG           RightChild;
+    ULONG               LeftChild;
+    ULONG               RightChild;
 
 again:
     LeftChild = Start * 2 + 1;
@@ -160,11 +160,11 @@ again:
 // Turn an array of PFNs into a max heap (largest node at root)
 static VOID
 BalloonCreateHeap(
-    IN  PPFN_NUMBER PfnArray,
-    IN  ULONG       Count
+    _In_ PPFN_NUMBER    PfnArray,
+    _In_ ULONG          Count
     )
 {
-    LONG            Index = (LONG)Count;
+    LONG                Index = (LONG)Count;
 
     while (--Index >= 0)
         BalloonHeapPushDown(PfnArray, (ULONG)Index, Count);
@@ -172,13 +172,13 @@ BalloonCreateHeap(
 
 static VOID
 BalloonSort(
-    IN  PXENBUS_BALLOON_CONTEXT Context,
-    IN  ULONG                   Count
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONG                      Count
     )
 {
-    PPFN_NUMBER                 PfnArray;
-    ULONG                       Unsorted;
-    ULONG                       Index;
+    PPFN_NUMBER                     PfnArray;
+    ULONG                           Unsorted;
+    ULONG                           Index;
 
     PfnArray = Context->PfnArray;
 
@@ -194,10 +194,10 @@ BalloonSort(
         ASSERT3U(PfnArray[Index], <, PfnArray[Index + 1]);
 }
 
-__drv_requiresIRQL(PASSIVE_LEVEL)
+_IRQL_requires_(PASSIVE_LEVEL)
 static PMDL
 BalloonAllocatePagesForMdl(
-    IN  ULONG       Count
+    _In_ ULONG      Count
     )
 {
     LARGE_INTEGER   LowAddress;
@@ -212,7 +212,7 @@ BalloonAllocatePagesForMdl(
     HighAddress.QuadPart = ~0ull;
     SkipBytes.QuadPart = 0ull;
     TotalBytes = (SIZE_T)Count << PAGE_SHIFT;
-    
+
     Mdl = MmAllocatePagesForMdlEx(LowAddress,
                                   HighAddress,
                                   SkipBytes,
@@ -236,8 +236,8 @@ done:
 
 static VOID
 BalloonFreePagesFromMdl(
-    IN  PMDL        Mdl,
-    IN  BOOLEAN     Check
+    _In_ PMDL       Mdl,
+    _In_ BOOLEAN    Check
     )
 {
     volatile UCHAR  *Mapping;
@@ -251,7 +251,7 @@ BalloonFreePagesFromMdl(
 
     // Sanity check:
     //
-    // Make sure that things written to the page really do stick. 
+    // Make sure that things written to the page really do stick.
     // If the page is still ballooned out at the hypervisor level
     // then writes will be discarded and reads will give back
     // all 1s.
@@ -321,9 +321,9 @@ done:
 
 static ULONG
 BalloonAllocatePfnArray(
-    IN      PXENBUS_BALLOON_CONTEXT Context,
-    IN      ULONG                   Requested,
-    IN OUT  PBOOLEAN                Slow
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONG                      Requested,
+    _Inout_ PBOOLEAN                Slow
     )
 {
     LARGE_INTEGER                   Start;
@@ -371,15 +371,15 @@ done:
 
 static ULONG
 BalloonPopulatePhysmap(
-    IN  ULONG       Requested,
-    IN  PPFN_NUMBER PfnArray
+    _In_ ULONG          Requested,
+    _In_ PPFN_NUMBER    PfnArray
     )
 {
-    LARGE_INTEGER   Start;
-    LARGE_INTEGER   End;
-    ULONGLONG       TimeDelta;
-    ULONGLONG       Rate;
-    ULONG           Count;
+    LARGE_INTEGER       Start;
+    LARGE_INTEGER       End;
+    ULONGLONG           TimeDelta;
+    ULONGLONG           Rate;
+    ULONG               Count;
 
     ASSERT(Requested != 0);
 
@@ -398,8 +398,8 @@ BalloonPopulatePhysmap(
 
 static ULONG
 BalloonPopulatePfnArray(
-    IN      PXENBUS_BALLOON_CONTEXT Context,
-    IN      ULONG                   Requested
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONG                      Requested
     )
 {
     LARGE_INTEGER                   Start;
@@ -458,15 +458,15 @@ BalloonPopulatePfnArray(
 
 static ULONG
 BalloonDecreaseReservation(
-    IN  ULONG       Requested,
-    IN  PPFN_NUMBER PfnArray
+    _In_ ULONG          Requested,
+    _In_ PPFN_NUMBER    PfnArray
     )
 {
-    LARGE_INTEGER   Start;
-    LARGE_INTEGER   End;
-    ULONGLONG       TimeDelta;
-    ULONGLONG       Rate;
-    ULONG           Count;
+    LARGE_INTEGER       Start;
+    LARGE_INTEGER       End;
+    ULONGLONG           TimeDelta;
+    ULONGLONG           Rate;
+    ULONG               Count;
 
     ASSERT(Requested != 0);
 
@@ -485,8 +485,8 @@ BalloonDecreaseReservation(
 
 static ULONG
 BalloonReleasePfnArray(
-    IN      PXENBUS_BALLOON_CONTEXT Context,
-    IN      ULONG                   Requested
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONG                      Requested
     )
 {
     LARGE_INTEGER                   Start;
@@ -549,9 +549,9 @@ done:
 
 static ULONG
 BalloonFreePfnArray(
-    IN      PXENBUS_BALLOON_CONTEXT Context,
-    IN      ULONG                   Requested,
-    IN      BOOLEAN                 Check
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONG                      Requested,
+    _In_ BOOLEAN                    Check
     )
 {
     LARGE_INTEGER                   Start;
@@ -612,11 +612,11 @@ done:
 
 static BOOLEAN
 BalloonLowMemory(
-    IN  PXENBUS_BALLOON_CONTEXT Context
+    _In_ PXENBUS_BALLOON_CONTEXT    Context
     )
 {
-    LARGE_INTEGER               Timeout;
-    NTSTATUS                    status;
+    LARGE_INTEGER                   Timeout;
+    NTSTATUS                        status;
 
     Timeout.QuadPart = 0;
 
@@ -631,15 +631,15 @@ BalloonLowMemory(
 
 static NTSTATUS
 BalloonDeflate(
-    IN  PXENBUS_BALLOON_CONTEXT Context,
-    IN  ULONGLONG               Requested
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONGLONG                  Requested
     )
 {
-    LARGE_INTEGER               Start;
-    LARGE_INTEGER               End;
-    ULONGLONG                   Count;
-    ULONGLONG                   TimeDelta;
-    NTSTATUS                    status;
+    LARGE_INTEGER                   Start;
+    LARGE_INTEGER                   End;
+    ULONGLONG                       Count;
+    ULONGLONG                       TimeDelta;
+    NTSTATUS                        status;
 
     status = STATUS_UNSUCCESSFUL;
     if (Context->FIST.Deflation)
@@ -680,15 +680,15 @@ done:
 
 static NTSTATUS
 BalloonInflate(
-    IN  PXENBUS_BALLOON_CONTEXT Context,
-    IN  ULONGLONG               Requested
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONGLONG                  Requested
     )
 {
-    LARGE_INTEGER               Start;
-    LARGE_INTEGER               End;
-    ULONGLONG                   Count;
-    ULONGLONG                   TimeDelta;
-    NTSTATUS                    status;
+    LARGE_INTEGER                   Start;
+    LARGE_INTEGER                   End;
+    ULONGLONG                       Count;
+    ULONGLONG                       TimeDelta;
+    NTSTATUS                        status;
 
     status = STATUS_UNSUCCESSFUL;
     if (Context->FIST.Inflation)
@@ -747,11 +747,11 @@ done:
 
 static VOID
 BalloonGetFISTEntries(
-    IN  PXENBUS_BALLOON_CONTEXT Context
+    _In_ PXENBUS_BALLOON_CONTEXT    Context
     )
 {
-    PCHAR                       Buffer;
-    NTSTATUS                    status;
+    PCHAR                           Buffer;
+    NTSTATUS                        status;
 
     status = XENBUS_STORE(Read,
                           &Context->StoreInterface,
@@ -787,14 +787,14 @@ BalloonGetFISTEntries(
 
     if (Context->FIST.Inflation)
         Warning("inflation disallowed\n");
-        
+
     if (Context->FIST.Deflation)
         Warning("deflation disallowed\n");
 }
 
 static FORCEINLINE PCHAR
 __BalloonStatus(
-    IN  NTSTATUS    status
+    _In_ NTSTATUS   status
     )
 {
     switch (status) {
@@ -815,8 +815,8 @@ __BalloonStatus(
 
 NTSTATUS
 BalloonAdjust(
-    IN  PINTERFACE          Interface,
-    IN  ULONGLONG           Size
+    _In_ PINTERFACE         Interface,
+    _In_ ULONGLONG          Size
     )
 {
     PXENBUS_BALLOON_CONTEXT Context = Interface->Context;
@@ -846,7 +846,7 @@ BalloonAdjust(
 
 ULONGLONG
 BalloonGetSize(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_BALLOON_CONTEXT Context = Interface->Context;
@@ -856,7 +856,7 @@ BalloonGetSize(
 
 static NTSTATUS
 BalloonAcquire(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_BALLOON_CONTEXT Context = Interface->Context;
@@ -917,7 +917,7 @@ fail1:
 
 static VOID
 BalloonRelease(
-    IN  PINTERFACE          Interface
+    _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_BALLOON_CONTEXT Context = Interface->Context;
@@ -957,15 +957,15 @@ static struct _XENBUS_BALLOON_INTERFACE_V1 BalloonInterfaceVersion1 = {
     BalloonAdjust,
     BalloonGetSize
 };
-                     
+
 NTSTATUS
 BalloonInitialize(
-    IN  PXENBUS_FDO             Fdo,
-    OUT PXENBUS_BALLOON_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Out_ PXENBUS_BALLOON_CONTEXT   *Context
     )
 {
-    UNICODE_STRING              Unicode;
-    NTSTATUS                    status;
+    UNICODE_STRING                  Unicode;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 
@@ -1022,10 +1022,10 @@ fail1:
 
 NTSTATUS
 BalloonGetInterface(
-    IN      PXENBUS_BALLOON_CONTEXT Context,
-    IN      ULONG                   Version,
-    IN OUT  PINTERFACE              Interface,
-    IN      ULONG                   Size
+    _In_ PXENBUS_BALLOON_CONTEXT    Context,
+    _In_ ULONG                      Version,
+    _Inout_ PINTERFACE              Interface,
+    _In_ ULONG                      Size
     )
 {
     NTSTATUS                        status;
@@ -1056,11 +1056,11 @@ BalloonGetInterface(
     }
 
     return status;
-}   
+}
 
 ULONG
 BalloonGetReferences(
-    IN  PXENBUS_BALLOON_CONTEXT Context
+    _In_ PXENBUS_BALLOON_CONTEXT    Context
     )
 {
     return Context->References;
@@ -1068,7 +1068,7 @@ BalloonGetReferences(
 
 VOID
 BalloonTeardown(
-    IN  PXENBUS_BALLOON_CONTEXT Context
+    _In_ PXENBUS_BALLOON_CONTEXT    Context
     )
 {
     Trace("====>\n");

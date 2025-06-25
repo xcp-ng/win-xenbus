@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -51,20 +51,20 @@ typedef struct _XENBUS_CACHE    XENBUS_CACHE, *PXENBUS_CACHE;
     \brief Acquire a reference to the CACHE interface
 
     \param Interface The interface header
-*/  
+*/
 typedef NTSTATUS
 (*XENBUS_CACHE_ACQUIRE)(
-    IN  PINTERFACE  Interface
+    _In_ PINTERFACE Interface
     );
 
 /*! \typedef XENBUS_CACHE_RELEASE
     \brief Release a reference to the CACHE interface
 
     \param Interface The interface header
-*/  
+*/
 typedef VOID
 (*XENBUS_CACHE_RELEASE)(
-    IN  PINTERFACE  Interface
+    _In_ PINTERFACE Interface
     );
 
 /*! \typedef XENBUS_CACHE_CTOR
@@ -79,8 +79,8 @@ typedef VOID
 */
 typedef NTSTATUS
 (*XENBUS_CACHE_CTOR)(
-    IN  PVOID   Argument,
-    IN  PVOID   Object
+    _In_ PVOID  Argument,
+    _In_ PVOID  Object
     );
 
 /*! \typedef XENBUS_CACHE_DTOR
@@ -94,8 +94,8 @@ typedef NTSTATUS
 */
 typedef VOID
 (*XENBUS_CACHE_DTOR)(
-    IN  PVOID   Argument,
-    IN  PVOID   Object
+    _In_ PVOID  Argument,
+    _In_ PVOID  Object
     );
 
 /*! \typedef XENBUS_CACHE_ACQUIRE_LOCK
@@ -108,7 +108,7 @@ typedef VOID
 */
 typedef VOID
 (*XENBUS_CACHE_ACQUIRE_LOCK)(
-    IN  PVOID   Argument
+    _In_ PVOID  Argument
     );
 
 /*! \typedef XENBUS_CACHE_RELEASE_LOCK
@@ -121,21 +121,21 @@ typedef VOID
 */
 typedef VOID
 (*XENBUS_CACHE_RELEASE_LOCK)(
-    IN  PVOID   Argument
+    _In_ PVOID  Argument
     );
 
 typedef NTSTATUS
 (*XENBUS_CACHE_CREATE_V1)(
-    IN  PINTERFACE                  Interface,
-    IN  const CHAR                  *Name,
-    IN  ULONG                       Size,
-    IN  ULONG                       Reservation,
-    IN  XENBUS_CACHE_CTOR           Ctor,
-    IN  XENBUS_CACHE_DTOR           Dtor,
-    IN  XENBUS_CACHE_ACQUIRE_LOCK   AcquireLock,
-    IN  XENBUS_CACHE_RELEASE_LOCK   ReleaseLock,
-    IN  PVOID                       Argument OPTIONAL,
-    OUT PXENBUS_CACHE               *Cache
+    _In_ PINTERFACE                 Interface,
+    _In_ const CHAR                 *Name,
+    _In_ ULONG                      Size,
+    _In_ ULONG                      Reservation,
+    _In_ XENBUS_CACHE_CTOR          Ctor,
+    _In_ XENBUS_CACHE_DTOR          Dtor,
+    _In_ XENBUS_CACHE_ACQUIRE_LOCK  AcquireLock,
+    _In_ XENBUS_CACHE_RELEASE_LOCK  ReleaseLock,
+    _In_opt_ PVOID                  Argument,
+    _Out_ PXENBUS_CACHE             *Cache
     );
 
 /*! \typedef XENBUS_CACHE_CREATE
@@ -155,20 +155,20 @@ typedef NTSTATUS
 
     If a non-zero \a Reservation is specified then this method will fail
     unless that number of objects can be immediately created.
-*/  
+*/
 typedef NTSTATUS
 (*XENBUS_CACHE_CREATE)(
-    IN  PINTERFACE                  Interface,
-    IN  const CHAR                  *Name,
-    IN  ULONG                       Size,
-    IN  ULONG                       Reservation,
-    IN  ULONG                       Cap,
-    IN  XENBUS_CACHE_CTOR           Ctor,
-    IN  XENBUS_CACHE_DTOR           Dtor,
-    IN  XENBUS_CACHE_ACQUIRE_LOCK   AcquireLock,
-    IN  XENBUS_CACHE_RELEASE_LOCK   ReleaseLock,
-    IN  PVOID                       Argument OPTIONAL,
-    OUT PXENBUS_CACHE               *Cache
+    _In_ PINTERFACE                 Interface,
+    _In_ const CHAR                 *Name,
+    _In_ ULONG                      Size,
+    _In_ ULONG                      Reservation,
+    _In_ ULONG                      Cap,
+    _In_ XENBUS_CACHE_CTOR          Ctor,
+    _In_ XENBUS_CACHE_DTOR          Dtor,
+    _In_ XENBUS_CACHE_ACQUIRE_LOCK  AcquireLock,
+    _In_ XENBUS_CACHE_RELEASE_LOCK  ReleaseLock,
+    _In_opt_ PVOID                  Argument,
+    _Out_ PXENBUS_CACHE             *Cache
     );
 
 /*! \typedef XENBUS_CACHE_GET
@@ -181,9 +181,9 @@ typedef NTSTATUS
 */
 typedef PVOID
 (*XENBUS_CACHE_GET)(
-    IN  PINTERFACE      Interface,
-    IN  PXENBUS_CACHE   Cache,
-    IN  BOOLEAN         Locked
+    _In_ PINTERFACE     Interface,
+    _In_ PXENBUS_CACHE  Cache,
+    _In_ BOOLEAN        Locked
     );
 
 /*! \typedef XENBUS_CACHE_PUT
@@ -196,10 +196,10 @@ typedef PVOID
 */
 typedef VOID
 (*XENBUS_CACHE_PUT)(
-    IN  PINTERFACE      Interface,
-    IN  PXENBUS_CACHE   Cache,
-    IN  PVOID           Object,
-    IN  BOOLEAN         Locked
+    _In_ PINTERFACE     Interface,
+    _In_ PXENBUS_CACHE  Cache,
+    _In_ PVOID          Object,
+    _In_ BOOLEAN        Locked
     );
 
 /*! \typedef XENBUS_CACHE_DESTROY
@@ -212,12 +212,12 @@ typedef VOID
 */
 typedef VOID
 (*XENBUS_CACHE_DESTROY)(
-    IN  PINTERFACE      Interface,
-    IN  PXENBUS_CACHE   Cache
+    _In_ PINTERFACE     Interface,
+    _In_ PXENBUS_CACHE  Cache
     );
 
 // {A98DFD78-416A-4949-92A5-E084F2F4B44E}
-DEFINE_GUID(GUID_XENBUS_CACHE_INTERFACE, 
+DEFINE_GUID(GUID_XENBUS_CACHE_INTERFACE,
 0xa98dfd78, 0x416a, 0x4949, 0x92, 0xa5, 0xe0, 0x84, 0xf2, 0xf4, 0xb4, 0x4e);
 
 /*! \struct _XENBUS_CACHE_INTERFACE_V1

@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -74,7 +74,7 @@ extern PULONG   InitSafeBootMode;
 
 static FORCEINLINE PVOID
 __DriverAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XEN_DRIVER_TAG);
@@ -82,7 +82,7 @@ __DriverAllocate(
 
 static FORCEINLINE VOID
 __DriverFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XEN_DRIVER_TAG);
@@ -98,7 +98,7 @@ __DriverSafeMode(
 
 static FORCEINLINE VOID
 __DriverSetParametersKey(
-    IN  HANDLE  Key
+    _In_opt_ HANDLE Key
     )
 {
     Driver.ParametersKey = Key;
@@ -122,7 +122,7 @@ DriverGetParametersKey(
 
 static FORCEINLINE VOID
 __DriverSetUnplugKey(
-    IN  HANDLE  Key
+    _In_opt_ HANDLE Key
     )
 {
     Driver.UnplugKey = Key;
@@ -146,7 +146,7 @@ DriverGetUnplugKey(
 
 static FORCEINLINE VOID
 __DriverSetMemoryKey(
-    IN  HANDLE  Key
+    _In_opt_ HANDLE Key
     )
 {
     Driver.MemoryKey = Key;
@@ -164,9 +164,9 @@ __DriverGetMemoryKey(
 
 static FORCEINLINE NTSTATUS
 __DriverSetPfnArray(
-    IN  PCHAR       Name,
-    IN  ULONG       Count,
-    IN  PFN_NUMBER  PfnArray[]
+    _In_ PCHAR      Name,
+    _In_ ULONG      Count,
+    _In_ PFN_NUMBER PfnArray[]
     )
 {
     HANDLE          Key = __DriverGetMemoryKey();
@@ -224,9 +224,9 @@ fail1:
 
 static FORCEINLINE NTSTATUS
 __DriverAllocatePfnArray(
-    IN  PCHAR           Name,
-    IN  ULONG           Count,
-    OUT PFN_NUMBER      PfnArray[]
+    _In_ PCHAR          Name,
+    _In_ ULONG          Count,
+    _Out_ PFN_NUMBER    PfnArray[]
     )
 {
     PHYSICAL_ADDRESS    LowAddress;
@@ -289,14 +289,14 @@ fail1:
 
 static FORCEINLINE NTSTATUS
 __DriverGetPfnArray(
-    IN  PCHAR       Name,
-    IN  ULONG       Count,
-    OUT PFN_NUMBER  PfnArray[]
+    _In_ PCHAR                      Name,
+    _In_ ULONG                      Count,
+    _Out_writes_(Count) PFN_NUMBER  PfnArray[]
     )
 {
-    HANDLE          Key = __DriverGetMemoryKey();
-    ULONG           Index;
-    NTSTATUS        status;
+    HANDLE                          Key = __DriverGetMemoryKey();
+    ULONG                           Index;
+    NTSTATUS                        status;
 
     for (Index = 0; Index < Count; Index++) {
         CHAR    ValueName[MAXNAMELEN];
@@ -341,8 +341,8 @@ fail1:
 
 PMDL
 DriverGetNamedPages(
-    IN  PCHAR   Name,
-    IN  ULONG   Count
+    _In_ PCHAR  Name,
+    _In_ ULONG  Count
     )
 {
     ULONG       Size;
@@ -407,7 +407,7 @@ fail1:
 
 VOID
 DriverPutNamedPages(
-    IN  PMDL    Mdl
+    _In_ PMDL   Mdl
     )
 {
     PUCHAR	    MdlMappedSystemVa;
@@ -425,11 +425,11 @@ DriverPutNamedPages(
 XEN_API
 NTSTATUS
 XenTouch(
-    IN  const CHAR  *Name,
-    IN  ULONG       MajorVersion,
-    IN  ULONG       MinorVersion,
-    IN  ULONG       MicroVersion,
-    IN  ULONG       BuildNumber
+    _In_ const CHAR *Name,
+    _In_ ULONG      MajorVersion,
+    _In_ ULONG      MinorVersion,
+    _In_ ULONG      MicroVersion,
+    _In_ ULONG      BuildNumber
    )
 {
     static ULONG    Reference;
@@ -479,9 +479,9 @@ fail1:
 
 static VOID
 DriverOutputBuffer(
-    IN  PVOID   Argument,
-    IN  PCHAR   Buffer,
-    IN  ULONG   Length
+    _In_ PVOID  Argument,
+    _In_ PCHAR  Buffer,
+    _In_ ULONG  Length
     )
 {
     ULONG_PTR   Port = (ULONG_PTR)Argument;
@@ -494,15 +494,15 @@ DriverOutputBuffer(
 
 NTSTATUS
 DllInitialize(
-    IN  PUNICODE_STRING RegistryPath
+    _In_ PUNICODE_STRING    RegistryPath
     )
 {
-    HANDLE              ServiceKey;
-    HANDLE              ParametersKey;
-    HANDLE              UnplugKey;
-    HANDLE              MemoryKey;
-    LOG_LEVEL           LogLevel;
-    NTSTATUS            status;
+    HANDLE                  ServiceKey;
+    HANDLE                  ParametersKey;
+    HANDLE                  UnplugKey;
+    HANDLE                  MemoryKey;
+    LOG_LEVEL               LogLevel;
+    NTSTATUS                status;
 
     ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
     WdmlibProcgrpInitialize();
@@ -762,8 +762,8 @@ DRIVER_INITIALIZE   DriverEntry;
 
 NTSTATUS
 DriverEntry(
-    IN  PDRIVER_OBJECT  DriverObject,
-    IN  PUNICODE_STRING RegistryPath
+    _In_ PDRIVER_OBJECT     DriverObject,
+    _In_ PUNICODE_STRING    RegistryPath
     )
 {
     UNREFERENCED_PARAMETER(DriverObject);

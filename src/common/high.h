@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -42,12 +42,12 @@ typedef LONG    HIGH_LOCK, *PHIGH_LOCK;
 #define LOCK_MAGIC  0xFEEDFACE
 
 static FORCEINLINE
-__drv_maxIRQL(HIGH_LEVEL)
-__drv_raisesIRQL(HIGH_LEVEL)
-__drv_savesIRQL
+_IRQL_requires_max_(HIGH_LEVEL)
+_IRQL_raises_(HIGH_LEVEL)
+_IRQL_saves_
 KIRQL
 __AcquireHighLock(
-    IN  PHIGH_LOCK  Lock
+    _In_ PHIGH_LOCK Lock
     )
 {
     KIRQL           Irql;
@@ -68,12 +68,11 @@ __AcquireHighLock(
         } while (FALSE)
 
 static FORCEINLINE
-__drv_maxIRQL(HIGH_LEVEL)
-__drv_requiresIRQL(HIGH_LEVEL)
+_IRQL_requires_(HIGH_LEVEL)
 VOID
 ReleaseHighLock(
-    IN  PHIGH_LOCK                  Lock,
-    IN  __drv_restoresIRQL KIRQL    Irql
+    _In_ PHIGH_LOCK                 Lock,
+    _In_  _IRQL_restores_ KIRQL     Irql
     )
 {
     KeMemoryBarrier();
@@ -85,7 +84,7 @@ ReleaseHighLock(
 static FORCEINLINE
 VOID
 InitializeHighLock(
-    IN  PHIGH_LOCK  Lock
+    _In_ PHIGH_LOCK Lock
     )
 {
     RtlZeroMemory(&Lock, sizeof (HIGH_LOCK));

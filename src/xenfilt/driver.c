@@ -1,32 +1,32 @@
 /* Copyright (c) Xen Project.
  * Copyright (c) Cloud Software Group, Inc.
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, 
- * with or without modification, are permitted provided 
+ *
+ * Redistribution and use in source and binary forms,
+ * with or without modification, are permitted provided
  * that the following conditions are met:
- * 
- * *   Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
+ *
+ * *   Redistributions of source code must retain the above
+ *     copyright notice, this list of conditions and the
  *     following disclaimer.
- * *   Redistributions in binary form must reproduce the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
+ * *   Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the
+ *     following disclaimer in the documentation and/or other
  *     materials provided with the distribution.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND 
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, 
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
@@ -65,7 +65,7 @@ static XENFILT_DRIVER   Driver;
 
 static FORCEINLINE PVOID
 __DriverAllocate(
-    IN  ULONG   Length
+    _In_ ULONG  Length
     )
 {
     return __AllocatePoolWithTag(NonPagedPool, Length, XENFILT_DRIVER_TAG);
@@ -73,7 +73,7 @@ __DriverAllocate(
 
 static FORCEINLINE VOID
 __DriverFree(
-    IN  PVOID   Buffer
+    _In_ PVOID  Buffer
     )
 {
     __FreePoolWithTag(Buffer, XENFILT_DRIVER_TAG);
@@ -91,7 +91,7 @@ __DriverSafeMode(
 
 static FORCEINLINE VOID
 __DriverSetDriverObject(
-    IN  PDRIVER_OBJECT  DriverObject
+    _In_opt_ PDRIVER_OBJECT DriverObject
     )
 {
     Driver.DriverObject = DriverObject;
@@ -115,7 +115,7 @@ DriverGetDriverObject(
 
 static FORCEINLINE VOID
 __DriverSetEmulatedContext(
-    IN  PXENFILT_EMULATED_CONTEXT   Context
+    _In_ PXENFILT_EMULATED_CONTEXT  Context
     )
 {
     Driver.EmulatedContext = Context;
@@ -171,7 +171,7 @@ DriverReleaseMutex(
 
 VOID
 DriverAddFunctionDeviceObject(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PDEVICE_OBJECT      DeviceObject;
@@ -187,7 +187,7 @@ DriverAddFunctionDeviceObject(
 
 VOID
 DriverRemoveFunctionDeviceObject(
-    IN  PXENFILT_FDO    Fdo
+    _In_ PXENFILT_FDO   Fdo
     )
 {
     PDEVICE_OBJECT      DeviceObject;
@@ -206,8 +206,8 @@ DriverRemoveFunctionDeviceObject(
 
 static FORCEINLINE NTSTATUS
 __DriverGetActive(
-    IN  const CHAR  *Key,
-    OUT PCHAR       *Value
+    _In_ const CHAR *Key,
+    _Out_ PCHAR     *Value
     )
 {
     HANDLE          ParametersKey;
@@ -272,8 +272,8 @@ fail1:
 
 NTSTATUS
 DriverGetActive(
-    IN  const CHAR  *Key,
-    OUT PCHAR       *Value
+    _In_ const CHAR *Key,
+    _Out_ PCHAR     *Value
     )
 {
     return __DriverGetActive(Key, Value);
@@ -391,7 +391,7 @@ DRIVER_UNLOAD   DriverUnload;
 
 VOID
 DriverUnload(
-    IN  PDRIVER_OBJECT  DriverObject
+    _In_ PDRIVER_OBJECT DriverObject
     )
 {
     ASSERT3P(DriverObject, ==, __DriverGetDriverObject());
@@ -429,13 +429,14 @@ DriverUnload(
     Trace("<====\n");
 }
 
-__drv_functionClass(IO_COMPLETION_ROUTINE)
-__drv_sameIRQL
+static IO_COMPLETION_ROUTINE DriverQueryCompletion;
+
+_Use_decl_annotations_
 static NTSTATUS
 DriverQueryCompletion(
-    IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PIRP            Irp,
-    IN  PVOID           Context
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp,
+    PVOID               Context
     )
 {
     PKEVENT             Event = Context;
@@ -450,9 +451,9 @@ DriverQueryCompletion(
 
 NTSTATUS
 DriverQueryId(
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  BUS_QUERY_ID_TYPE   Type,
-    OUT PCHAR               *Id
+    _In_ PDEVICE_OBJECT     DeviceObject,
+    _In_ BUS_QUERY_ID_TYPE  Type,
+    _Out_ PCHAR             *Id
     )
 {
     PIRP                    Irp;
@@ -614,9 +615,9 @@ fail1:
 
 NTSTATUS
 DriverQueryDeviceText(
-    IN  PDEVICE_OBJECT      DeviceObject,
-    IN  DEVICE_TEXT_TYPE    Type,
-    OUT PCHAR               *Text
+    _In_ PDEVICE_OBJECT     DeviceObject,
+    _In_ DEVICE_TEXT_TYPE   Type,
+    _Out_ PCHAR             *Text
     )
 {
     PIRP                    Irp;
@@ -704,7 +705,7 @@ fail1:
 
 static FORCEINLINE PCHAR
 __EmulatedTypeName(
-    IN  XENFILT_EMULATED_OBJECT_TYPE    Type
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
     )
 {
     switch (Type) {
@@ -717,7 +718,7 @@ __EmulatedTypeName(
 
 static XENFILT_EMULATED_OBJECT_TYPE
 DriverGetEmulatedType(
-    IN  PCHAR                       Id
+    _In_ PCHAR                      Id
     )
 {
     HANDLE                          ParametersKey;
@@ -775,8 +776,8 @@ DRIVER_ADD_DEVICE   DriverAddDevice;
 NTSTATUS
 #pragma prefast(suppress:28152) // Does not clear DO_DEVICE_INITIALIZING
 DriverAddDevice(
-    IN  PDRIVER_OBJECT              DriverObject,
-    IN  PDEVICE_OBJECT              PhysicalDeviceObject
+    _In_ PDRIVER_OBJECT             DriverObject,
+    _In_ PDEVICE_OBJECT             PhysicalDeviceObject
     )
 {
     PCHAR                           Id;
@@ -823,10 +824,11 @@ done:
 
 DRIVER_DISPATCH DriverDispatch;
 
-NTSTATUS 
+_Use_decl_annotations_
+NTSTATUS
 DriverDispatch(
-    IN PDEVICE_OBJECT   DeviceObject,
-    IN PIRP             Irp
+    PDEVICE_OBJECT      DeviceObject,
+    PIRP                Irp
     )
 {
     PXENFILT_DX         Dx;
@@ -882,8 +884,8 @@ DRIVER_INITIALIZE   DriverEntry;
 
 NTSTATUS
 DriverEntry(
-    IN  PDRIVER_OBJECT          DriverObject,
-    IN  PUNICODE_STRING         RegistryPath
+    _In_ PDRIVER_OBJECT         DriverObject,
+    _In_ PUNICODE_STRING        RegistryPath
     )
 {
     PXENFILT_EMULATED_CONTEXT   EmulatedContext;
