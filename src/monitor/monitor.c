@@ -1118,7 +1118,7 @@ GetRequestKeyName(
     RequestKeyNameLength = MaxValueLength + sizeof (TCHAR);
 
     *RequestKeyName = calloc(1, RequestKeyNameLength);
-    if (RequestKeyName == NULL)
+    if (*RequestKeyName == NULL)
         goto fail2;
 
     Error = RegQueryValueEx(Context->ParametersKey,
