@@ -2205,7 +2205,7 @@ StoreEnable(
     NTSTATUS                    status;
 
     status = HvmGetParam(HVM_PARAM_STORE_EVTCHN, &Value);
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
 
     Port = (ULONG)Value;
 
