@@ -119,8 +119,8 @@ __Log(
 
     Length = __min(MAXIMUM_BUFFER_SIZE - 1, Length + 2);
 
-    __analysis_assume(Length < MAXIMUM_BUFFER_SIZE);
-    __analysis_assume(Length >= 2);
+    _Analysis_assume_(Length < MAXIMUM_BUFFER_SIZE);
+    _Analysis_assume_(Length >= 2);
     Buffer[Length] = '\0';
     Buffer[Length - 1] = '\n';
     Buffer[Length - 2] = '\r';

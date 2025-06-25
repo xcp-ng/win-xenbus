@@ -518,7 +518,7 @@ PdoTranslateBusAddress(
     _In_ PXENBUS_PDO        Pdo,
     _In_ PHYSICAL_ADDRESS   BusAddress,
     _In_ ULONG              Length,
-    _Inout_ PULONG          AddressSpace,
+    _Out_ PULONG            AddressSpace,
     _Out_ PPHYSICAL_ADDRESS TranslatedAddress
     )
 {
@@ -1713,6 +1713,8 @@ PdoSetDevicePowerWorker(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
+    ASSERT(Pdo != NULL);
+
     Irp = InterlockedExchangePointer(&Pdo->DevicePowerIrp, NULL);
     ASSERT(Irp != NULL);
 
@@ -1802,6 +1804,8 @@ PdoSetSystemPowerWorker(
     POWER_ACTION        PowerAction;
 
     UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(Pdo != NULL);
 
     Irp = InterlockedExchangePointer(&Pdo->SystemPowerIrp, NULL);
     ASSERT(Irp != NULL);

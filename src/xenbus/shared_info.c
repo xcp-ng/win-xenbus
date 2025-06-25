@@ -205,7 +205,7 @@ SharedInfoEvtchnPoll(
     _In_ PINTERFACE                 Interface,
     _In_ ULONG                      Index,
     _In_ XENBUS_SHARED_INFO_EVENT   Event,
-    _In_opt_ PVOID                  Argument
+    _In_ PVOID                      Argument
     )
 {
     PXENBUS_SHARED_INFO_CONTEXT     Context = Interface->Context;

@@ -164,14 +164,14 @@ __DriverGetMemoryKey(
 
 static FORCEINLINE NTSTATUS
 __DriverSetPfnArray(
-    _In_ PSTR       Name,
-    _In_ ULONG      Count,
-    _In_ PFN_NUMBER PfnArray[]
+    _In_ PSTR                       Name,
+    _In_ ULONG                      Count,
+    _In_reads_(Count) PFN_NUMBER    PfnArray[]
     )
 {
-    HANDLE          Key = __DriverGetMemoryKey();
-    LONG            Index;
-    NTSTATUS        status;
+    HANDLE                          Key = __DriverGetMemoryKey();
+    LONG                            Index;
+    NTSTATUS                        status;
 
     Index = 0;
     while (Index < (LONG)Count) {
@@ -224,17 +224,17 @@ fail1:
 
 static FORCEINLINE NTSTATUS
 __DriverAllocatePfnArray(
-    _In_ PSTR           Name,
-    _In_ ULONG          Count,
-    _Out_ PFN_NUMBER    PfnArray[]
+    _In_ PSTR                           Name,
+    _In_ ULONG                          Count,
+    _Out_writes_all_(Count) PFN_NUMBER  PfnArray[]
     )
 {
-    PHYSICAL_ADDRESS    LowAddress;
-    PHYSICAL_ADDRESS    HighAddress;
-    LARGE_INTEGER       SkipBytes;
-    SIZE_T              TotalBytes;
-    PMDL                Mdl;
-    NTSTATUS            status;
+    PHYSICAL_ADDRESS                    LowAddress;
+    PHYSICAL_ADDRESS                    HighAddress;
+    LARGE_INTEGER                       SkipBytes;
+    SIZE_T                              TotalBytes;
+    PMDL                                Mdl;
+    NTSTATUS                            status;
 
     LowAddress.QuadPart = 0ull;
     HighAddress.QuadPart = ~0ull;
@@ -289,14 +289,14 @@ fail1:
 
 static FORCEINLINE NTSTATUS
 __DriverGetPfnArray(
-    _In_ PSTR                       Name,
-    _In_ ULONG                      Count,
-    _Out_writes_(Count) PFN_NUMBER  PfnArray[]
+    _In_ PSTR                           Name,
+    _In_ ULONG                          Count,
+    _Out_writes_all_(Count) PFN_NUMBER  PfnArray[]
     )
 {
-    HANDLE                          Key = __DriverGetMemoryKey();
-    ULONG                           Index;
-    NTSTATUS                        status;
+    HANDLE                              Key = __DriverGetMemoryKey();
+    ULONG                               Index;
+    NTSTATUS                            status;
 
     for (Index = 0; Index < Count; Index++) {
         CHAR    ValueName[MAXNAMELEN];

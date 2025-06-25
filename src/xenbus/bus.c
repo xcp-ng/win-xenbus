@@ -103,6 +103,8 @@ BusTranslateAddress(
 {
     PXENBUS_BUS_CONTEXT         Context = _Context;
 
+    ASSERT(Context != NULL);
+
     return PdoTranslateBusAddress(Context->Pdo,
                                   BusAddress,
                                   Length,
@@ -122,6 +124,8 @@ BusGetDmaAdapter(
 {
     PXENBUS_BUS_CONTEXT         Context = _Context;
     XENBUS_DMA_ADAPTER_TYPE     Type;
+
+    ASSERT(Context != NULL);
 
     if (Context->InterceptDmaAdapter != 0) {
         RTL_OSVERSIONINFOEXW    VersionInformation;
@@ -161,6 +165,8 @@ BusSetData(
 {
     PXENBUS_BUS_CONTEXT Context = _Context;
 
+    ASSERT(Context != NULL);
+
     return PdoSetBusData(Context->Pdo,
                          DataType,
                          Buffer,
@@ -181,6 +187,8 @@ BusGetData(
     )
 {
     PXENBUS_BUS_CONTEXT Context = _Context;
+
+    ASSERT(Context != NULL);
 
     return PdoGetBusData(Context->Pdo,
                          DataType,

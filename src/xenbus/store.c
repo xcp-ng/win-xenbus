@@ -186,6 +186,7 @@ StorePrepareRequest(
     va_list                             Arguments;
     NTSTATUS                            status;
 
+#pragma prefast(suppress:6001) // for ASSERT on Request only
     ASSERT(IsZeroMemory(Request, sizeof (XENBUS_STORE_REQUEST)));
 
     if (Transaction != NULL) {

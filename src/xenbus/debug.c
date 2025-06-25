@@ -91,17 +91,17 @@ RtlCaptureStackBackTrace(
 
 static NTSTATUS
 DebugRegister(
-    _In_ PINTERFACE                     Interface,
-    _In_ PSTR                           Prefix,
-    _In_ XENBUS_DEBUG_FUNCTION          Function,
-    _In_opt_ PVOID                      Argument,
-    _Out_opt_ PXENBUS_DEBUG_CALLBACK    *Callback
+    _In_ PINTERFACE                 Interface,
+    _In_ PSTR                       Prefix,
+    _In_ XENBUS_DEBUG_FUNCTION      Function,
+    _In_opt_ PVOID                  Argument,
+    _Out_ PXENBUS_DEBUG_CALLBACK    *Callback
     )
 {
-    PXENBUS_DEBUG_CONTEXT               Context = Interface->Context;
-    ULONG                               Length;
-    KIRQL                               Irql;
-    NTSTATUS                            status;
+    PXENBUS_DEBUG_CONTEXT           Context = Interface->Context;
+    ULONG                           Length;
+    KIRQL                           Irql;
+    NTSTATUS                        status;
 
     *Callback = __DebugAllocate(sizeof (XENBUS_DEBUG_CALLBACK));
 

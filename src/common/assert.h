@@ -89,7 +89,7 @@ __Bug(
 #define ASSERT(_EXP)                    \
         do {                            \
             __ASSERT(_EXP);             \
-            __analysis_assume(_EXP);    \
+            _Analysis_assume_(_EXP);    \
         } while (FALSE)
 
 #define ASSERT3U(_X, _OP, _Y)                       \
@@ -132,7 +132,7 @@ __Bug(
 
 #define ASSERT(_EXP)                    \
         do {                            \
-            __analysis_assume(_EXP);    \
+            _Analysis_assume_(_EXP);    \
         } while (FALSE)
 
 #define ASSERT3U(_X, _OP, _Y)           \

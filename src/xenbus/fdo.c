@@ -435,7 +435,7 @@ FdoTranslateBusAddress(
     _In_ PXENBUS_FDO        Fdo,
     _In_ PHYSICAL_ADDRESS   BusAddress,
     _In_ ULONG              Length,
-    _Inout_ PULONG          AddressSpace,
+    _Out_ PULONG            AddressSpace,
     _Out_ PPHYSICAL_ADDRESS TranslatedAddress
     )
 {
@@ -453,11 +453,11 @@ FdoTranslateBusAddress(
 
 ULONG
 FdoSetBusData(
-    _In_ PXENBUS_FDO        Fdo,
-    _In_ ULONG              DataType,
-    _In_ PVOID              Buffer,
-    _In_ ULONG              Offset,
-    _In_ ULONG              Length
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ ULONG                      DataType,
+    _In_reads_bytes_(Length) PVOID  Buffer,
+    _In_ ULONG                      Offset,
+    _In_range_(!=, 0) ULONG         Length
     )
 {
     PBUS_INTERFACE_STANDARD BusInterface;
@@ -474,18 +474,19 @@ FdoSetBusData(
 
 ULONG
 FdoGetBusData(
-    _In_ PXENBUS_FDO        Fdo,
-    _In_ ULONG              DataType,
-    _In_ PVOID              Buffer,
-    _In_ ULONG              Offset,
-    _In_ ULONG              Length
+    _In_ PXENBUS_FDO                    Fdo,
+    _In_ ULONG                          DataType,
+    _Out_writes_bytes_(Length) PVOID    Buffer,
+    _In_ ULONG                          Offset,
+    _In_range_(!=, 0) ULONG             Length
     )
 {
-    PBUS_INTERFACE_STANDARD BusInterface;
+    PBUS_INTERFACE_STANDARD             BusInterface;
 
     BusInterface = Fdo->LowerBusInterface;
     ASSERT(BusInterface != NULL);
 
+#pragma prefast(suppress:6001) // imprecise GetBusData annotations
     return BusInterface->GetBusData(BusInterface->Context,
                                     DataType,
                                     Buffer,
@@ -863,6 +864,8 @@ FdoDelegateIrpCompletion(
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Irp);
 
+    ASSERT(Event != NULL);
+
     KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
 
     return STATUS_MORE_PROCESSING_REQUIRED;
@@ -948,6 +951,8 @@ FdoForwardIrpSynchronouslyCompletion(
 
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Irp);
+
+    ASSERT(Event != NULL);
 
     KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
 
@@ -4721,14 +4726,16 @@ static IO_WORKITEM_ROUTINE FdoSetDevcePowerUpWorker;
 _Use_decl_annotations_
 static VOID
 FdoSetDevcePowerUpWorker(
-    _In_ PDEVICE_OBJECT DeviceObject,
-    _In_opt_ PVOID      Context
+    PDEVICE_OBJECT      DeviceObject,
+    PVOID               Context
     )
 {
     PXENBUS_FDO         Fdo = (PXENBUS_FDO) Context;
     PIRP                Irp;
 
     UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(Fdo != NULL);
 
     Irp = InterlockedExchangePointer(&Fdo->DevicePowerIrp, NULL);
     ASSERT(Irp != NULL);
@@ -4754,6 +4761,8 @@ FdoSetDevicePowerUpComplete(
     DEVICE_POWER_STATE  DeviceState;
 
     UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(Fdo != NULL);
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
     DeviceState = StackLocation->Parameters.Power.State.DeviceState;
@@ -4805,6 +4814,8 @@ FdoSetDevicePowerDownWorker(
     PIRP                Irp;
 
     UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(Fdo != NULL);
 
     Irp = InterlockedExchangePointer(&Fdo->DevicePowerIrp, NULL);
     ASSERT(Irp != NULL);
@@ -4915,6 +4926,8 @@ FdoRequestDevicePowerUpComplete(
     UNREFERENCED_PARAMETER(PowerState);
     UNREFERENCED_PARAMETER(IoStatus);
 
+    ASSERT(Irp != NULL);
+
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
@@ -4935,6 +4948,8 @@ FdoSetSystemPowerUpWorker(
     NTSTATUS            status;
 
     UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(Fdo != NULL);
 
     Irp = InterlockedExchangePointer(&Fdo->SystemPowerIrp, NULL);
     ASSERT(Irp != NULL);
@@ -4988,8 +5003,13 @@ FdoSetSystemPowerUpComplete(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
+    ASSERT(Fdo != NULL);
+
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
     SystemState = StackLocation->Parameters.Power.State.SystemState;
+
+    ASSERT(SystemState >= PowerSystemUnspecified &&
+           SystemState < PowerSystemMaximum);
 
     if (SystemState < PowerSystemHibernate &&
         __FdoGetSystemPowerState(Fdo) >= PowerSystemHibernate) {
@@ -5061,6 +5081,8 @@ FdoSetSystemPowerDownWorker(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
+    ASSERT(Fdo != NULL);
+
     Irp = InterlockedExchangePointer(&Fdo->SystemPowerIrp, NULL);
     ASSERT(Irp != NULL);
 
@@ -5088,16 +5110,23 @@ FdoRequestDevicePowerDownComplete(
     )
 {
     PIRP                    Irp = (PIRP) Context;
-    PIO_STACK_LOCATION      StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    PDEVICE_OBJECT          UpperDeviceObject = StackLocation->DeviceObject;
-    PXENBUS_DX              Dx = (PXENBUS_DX)UpperDeviceObject->DeviceExtension;
-    PXENBUS_FDO             Fdo = Dx->Fdo;
-    SYSTEM_POWER_STATE      SystemState = StackLocation->Parameters.Power.State.SystemState;
+    PIO_STACK_LOCATION      StackLocation;
+    PDEVICE_OBJECT          UpperDeviceObject;
+    PXENBUS_DX              Dx;
+    PXENBUS_FDO             Fdo;
+    SYSTEM_POWER_STATE      SystemState;
     NTSTATUS                status = IoStatus->Status;
 
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(MinorFunction);
     UNREFERENCED_PARAMETER(PowerState);
+
+    ASSERT(Irp != NULL);
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    UpperDeviceObject = StackLocation->DeviceObject;
+    Dx = (PXENBUS_DX)UpperDeviceObject->DeviceExtension;
+    Fdo = Dx->Fdo;
+    SystemState = StackLocation->Parameters.Power.State.SystemState;
 
     if (!NT_SUCCESS(status))
         goto fail1;
@@ -5232,6 +5261,8 @@ FdoRequestQuerySystemPowerUpComplete(
     UNREFERENCED_PARAMETER(MinorFunction);
     UNREFERENCED_PARAMETER(PowerState);
 
+    ASSERT(Irp != NULL);
+
     if (!NT_SUCCESS(IoStatus->Status))
         Irp->IoStatus.Status = IoStatus->Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -5254,6 +5285,8 @@ FdoQuerySystemPowerUpComplete(
     NTSTATUS            status;
 
     UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(Fdo != NULL);
 
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
     SystemState = StackLocation->Parameters.Power.State.SystemState;
@@ -5299,22 +5332,28 @@ static REQUEST_POWER_COMPLETE FdoRequestQuerySystemPowerDownComplete;
 _Use_decl_annotations_
 static VOID
 FdoRequestQuerySystemPowerDownComplete(
-    _In_ PDEVICE_OBJECT     DeviceObject,
-    _In_ UCHAR              MinorFunction,
-    _In_ POWER_STATE        PowerState,
-    _In_opt_ PVOID          Context,
-    _In_ PIO_STATUS_BLOCK   IoStatus
+    PDEVICE_OBJECT          DeviceObject,
+    UCHAR                   MinorFunction,
+    POWER_STATE             PowerState,
+    PVOID                   Context,
+    PIO_STATUS_BLOCK        IoStatus
     )
 {
     PIRP                    Irp = (PIRP) Context;
-    PIO_STACK_LOCATION      StackLocation = IoGetCurrentIrpStackLocation(Irp);
-    PDEVICE_OBJECT          UpperDeviceObject = StackLocation->DeviceObject;
-    PXENBUS_DX              Dx = (PXENBUS_DX)UpperDeviceObject->DeviceExtension;
-    PXENBUS_FDO             Fdo = Dx->Fdo;
+    PIO_STACK_LOCATION      StackLocation;
+    PDEVICE_OBJECT          UpperDeviceObject;
+    PXENBUS_DX              Dx;
+    PXENBUS_FDO             Fdo;
 
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(MinorFunction);
     UNREFERENCED_PARAMETER(PowerState);
+
+    ASSERT(Irp != NULL);
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    UpperDeviceObject = StackLocation->DeviceObject;
+    Dx = (PXENBUS_DX)UpperDeviceObject->DeviceExtension;
+    Fdo = Dx->Fdo;
 
     if (!NT_SUCCESS(IoStatus->Status))
         goto fail1;

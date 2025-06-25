@@ -100,26 +100,26 @@ FdoTranslateBusAddress(
     _In_ PXENBUS_FDO        Fdo,
     _In_ PHYSICAL_ADDRESS   BusAddress,
     _In_ ULONG              Length,
-    _Inout_ PULONG          AddressSpace,
+    _Out_ PULONG            AddressSpace,
     _Out_ PPHYSICAL_ADDRESS TranslatedAddress
     );
 
 extern ULONG
 FdoSetBusData(
-    _In_ PXENBUS_FDO    Fdo,
-    _In_ ULONG          DataType,
-    _In_ PVOID          Buffer,
-    _In_ ULONG          Offset,
-    _In_ ULONG          Length
+    _In_ PXENBUS_FDO                Fdo,
+    _In_ ULONG                      DataType,
+    _In_reads_bytes_(Length) PVOID  Buffer,
+    _In_ ULONG                      Offset,
+    _In_range_(!=, 0) ULONG         Length
     );
 
 extern ULONG
 FdoGetBusData(
-    _In_ PXENBUS_FDO    Fdo,
-    _In_ ULONG          DataType,
-    _In_ PVOID          Buffer,
-    _In_ ULONG          Offset,
-    _In_ ULONG          Length
+    _In_ PXENBUS_FDO                    Fdo,
+    _In_ ULONG                          DataType,
+    _Out_writes_bytes_(Length) PVOID    Buffer,
+    _In_ ULONG                          Offset,
+    _In_range_(!=, 0) ULONG             Length
     );
 
 extern PSTR

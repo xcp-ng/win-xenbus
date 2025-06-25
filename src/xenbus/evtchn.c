@@ -1084,13 +1084,13 @@ EvtchnWaitVersion5(
                       Timeout);
 }
 
-static KSERVICE_ROUTINE EvtchnInterruptCallback;
-
-_Use_decl_annotations_
+_Function_class_(KSERVICE_ROUTINE)
+_IRQL_requires_(HIGH_LEVEL)
+_IRQL_requires_same_
 static BOOLEAN
 EvtchnInterruptCallback(
-    PKINTERRUPT                 InterruptObject,
-    PVOID                       Argument
+    _In_opt_ PKINTERRUPT        InterruptObject,
+    _In_ PVOID                  Argument
     )
 {
     PXENBUS_EVTCHN_PROCESSOR    Processor = Argument;

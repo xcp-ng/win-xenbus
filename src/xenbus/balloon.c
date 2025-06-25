@@ -323,7 +323,7 @@ static ULONG
 BalloonAllocatePfnArray(
     _In_ PXENBUS_BALLOON_CONTEXT    Context,
     _In_ ULONG                      Requested,
-    _Inout_ PBOOLEAN                Slow
+    _Out_ PBOOLEAN                  Slow
     )
 {
     LARGE_INTEGER                   Start;

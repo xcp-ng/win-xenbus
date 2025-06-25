@@ -150,13 +150,14 @@ __AllocatePoolWithTag(
 {
     PUCHAR          Buffer;
 
-    __analysis_assume(PoolType == NonPagedPool ||
+    _Analysis_assume_(PoolType == NonPagedPool ||
                       PoolType == PagedPool);
 
     if (NumberOfBytes == 0)
         return NULL;
 
 #if (_MSC_VER >= 1928) // VS 16.9 (EWDK 20344 or later)
+#pragma warning(suppress:28160) // annotation error
     Buffer = ExAllocatePoolUninitialized(PoolType, NumberOfBytes, Tag);
 #else
 #pragma warning(suppress:28160) // annotation error
@@ -278,7 +279,9 @@ static FORCEINLINE PSTR
 __strtok_r(
     _In_opt_ PSTR   Buffer,
     _In_ PSTR       Delimiter,
-    _Inout_ PSTR    *Context
+    _When_(Buffer != NULL, _Outptr_)
+    _When_(Buffer == NULL, _Inout_)
+    PSTR            *Context
     )
 {
     PSTR            Token;
@@ -316,7 +319,9 @@ static FORCEINLINE PWSTR
 __wcstok_r(
     _In_opt_ PWSTR  Buffer,
     _In_ PWSTR      Delimiter,
-    _Inout_ PWSTR   *Context
+    _When_(Buffer != NULL, _Outptr_)
+    _When_(Buffer == NULL, _Inout_)
+    PWSTR           *Context
     )
 {
     PWSTR           Token;

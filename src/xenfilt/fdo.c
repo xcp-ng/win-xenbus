@@ -1091,6 +1091,8 @@ FdoSetDevicePowerUpComplete(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
+    ASSERT(Fdo != NULL);
+
     StackLocation = IoGetCurrentIrpStackLocation(Irp);
     PowerState = StackLocation->Parameters.Power.State;
 
