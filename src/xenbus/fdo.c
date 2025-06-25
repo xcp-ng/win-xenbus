@@ -5611,6 +5611,9 @@ FdoQueryInterface(
     if (Irp == NULL)
         goto fail1;
 
+    // suppress "uninitialized *Interface" warning when IoCallDriver succeeds
+    RtlZeroMemory(Interface, sizeof (*Interface));
+
     StackLocation = IoGetNextIrpStackLocation(Irp);
     StackLocation->MinorFunction = IRP_MN_QUERY_INTERFACE;
 
