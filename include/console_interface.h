@@ -134,7 +134,7 @@ typedef NTSTATUS
 (*XENBUS_CONSOLE_WAKEUP_ADD)(
     _In_ PINTERFACE                 Interface,
     _In_ PKEVENT                    Event,
-    _Out_ PXENBUS_CONSOLE_WAKEUP    *Wakeup
+    _Outptr_ PXENBUS_CONSOLE_WAKEUP *Wakeup
     );
 
 /*! \typedef XENBUS_CONSOLE_WAKEUP_REMOVE

@@ -366,19 +366,19 @@ GnttabReleaseLock(
 
 static NTSTATUS
 GnttabCreateCache(
-    _In_ PINTERFACE             Interface,
-    _In_ PCSTR                  Name,
-    _In_ ULONG                  Reservation,
-    _In_ ULONG                  Cap,
-    _In_ VOID                   (*AcquireLock)(PVOID),
-    _In_ VOID                   (*ReleaseLock)(PVOID),
-    _In_ PVOID                  Argument,
-    _Out_ PXENBUS_GNTTAB_CACHE  *Cache
+    _In_ PINTERFACE                 Interface,
+    _In_ PCSTR                      Name,
+    _In_ ULONG                      Reservation,
+    _In_ ULONG                      Cap,
+    _In_ VOID                       (*AcquireLock)(PVOID),
+    _In_ VOID                       (*ReleaseLock)(PVOID),
+    _In_ PVOID                      Argument,
+    _Outptr_ PXENBUS_GNTTAB_CACHE   *Cache
     )
 {
-    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    PXENBUS_GNTTAB_CONTEXT          Context = Interface->Context;
+    KIRQL                           Irql;
+    NTSTATUS                        status;
 
     *Cache = __GnttabAllocate(sizeof (XENBUS_GNTTAB_CACHE));
 
@@ -445,13 +445,13 @@ fail1:
 
 static NTSTATUS
 GnttabCreateCacheVersion1(
-    _In_ PINTERFACE             Interface,
-    _In_ PCSTR                  Name,
-    _In_ ULONG                  Reservation,
-    _In_ VOID                   (*AcquireLock)(PVOID),
-    _In_ VOID                   (*ReleaseLock)(PVOID),
-    _In_ PVOID                  Argument,
-    _Out_ PXENBUS_GNTTAB_CACHE  *Cache
+    _In_ PINTERFACE                 Interface,
+    _In_ PCSTR                      Name,
+    _In_ ULONG                      Reservation,
+    _In_ VOID                       (*AcquireLock)(PVOID),
+    _In_ VOID                       (*ReleaseLock)(PVOID),
+    _In_ PVOID                      Argument,
+    _Outptr_ PXENBUS_GNTTAB_CACHE   *Cache
     )
 {
     return GnttabCreateCache(Interface,
@@ -498,19 +498,19 @@ GnttabDestroyCache(
 
 static NTSTATUS
 GnttabPermitForeignAccess(
-    _In_ PINTERFACE             Interface,
-    _In_ PXENBUS_GNTTAB_CACHE   Cache,
-    _In_ BOOLEAN                Locked,
-    _In_ USHORT                 Domain,
-    _In_ PFN_NUMBER             Pfn,
-    _In_ BOOLEAN                ReadOnly,
-    _Out_ PXENBUS_GNTTAB_ENTRY  *Entry
+    _In_ PINTERFACE                 Interface,
+    _In_ PXENBUS_GNTTAB_CACHE       Cache,
+    _In_ BOOLEAN                    Locked,
+    _In_ USHORT                     Domain,
+    _In_ PFN_NUMBER                 Pfn,
+    _In_ BOOLEAN                    ReadOnly,
+    _Outptr_ PXENBUS_GNTTAB_ENTRY   *Entry
     )
 {
-    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
-    PXENBUS_GNTTAB_FRAME        Frame;
-    ULONG                       Index;
-    NTSTATUS                    status;
+    PXENBUS_GNTTAB_CONTEXT          Context = Interface->Context;
+    PXENBUS_GNTTAB_FRAME            Frame;
+    ULONG                           Index;
+    NTSTATUS                        status;
 
     *Entry = XENBUS_CACHE(Get,
                           &Context->CacheInterface,
@@ -1082,7 +1082,7 @@ static struct _XENBUS_GNTTAB_INTERFACE_V4   GnttabInterfaceVersion4 = {
 NTSTATUS
 GnttabInitialize(
     _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_GNTTAB_CONTEXT    *Context
+    _Outptr_ PXENBUS_GNTTAB_CONTEXT *Context
     )
 {
     NTSTATUS                        status;

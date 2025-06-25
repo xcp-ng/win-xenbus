@@ -196,8 +196,8 @@ typedef NTSTATUS
 */
 typedef NTSTATUS
 (*XENBUS_STORE_TRANSACTION_START)(
-    _In_ PINTERFACE                 Interface,
-    _Out_ PXENBUS_STORE_TRANSACTION *Transaction
+    _In_ PINTERFACE                     Interface,
+    _Outptr_ PXENBUS_STORE_TRANSACTION  *Transaction
     );
 
 /*! \typedef XENBUS_STORE_TRANSACTION_END
@@ -231,11 +231,11 @@ typedef NTSTATUS
 */
 typedef NTSTATUS
 (*XENBUS_STORE_WATCH_ADD)(
-    _In_ PINTERFACE             Interface,
-    _In_opt_ PSTR               Prefix,
-    _In_ PSTR                   Node,
-    _In_ PKEVENT                Event,
-    _Out_ PXENBUS_STORE_WATCH   *Watch
+    _In_ PINTERFACE                 Interface,
+    _In_opt_ PSTR                   Prefix,
+    _In_ PSTR                       Node,
+    _In_ PKEVENT                    Event,
+    _Outptr_ PXENBUS_STORE_WATCH    *Watch
     );
 
 /*! \typedef XENBUS_STORE_WATCH_REMOVE

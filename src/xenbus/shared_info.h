@@ -43,8 +43,8 @@ typedef struct _XENBUS_SHARED_INFO_CONTEXT  XENBUS_SHARED_INFO_CONTEXT, *PXENBUS
 
 extern NTSTATUS
 SharedInfoInitialize(
-    _In_ PXENBUS_FDO                    Fdo,
-    _Out_ PXENBUS_SHARED_INFO_CONTEXT   *Context
+    _In_ PXENBUS_FDO                        Fdo,
+    _Outptr_ PXENBUS_SHARED_INFO_CONTEXT    *Context
     );
 
 extern NTSTATUS

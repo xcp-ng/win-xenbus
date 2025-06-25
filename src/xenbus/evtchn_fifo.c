@@ -638,10 +638,10 @@ static XENBUS_EVTCHN_ABI EvtchnAbiFifo = {
 NTSTATUS
 EvtchnFifoInitialize(
     _In_ PXENBUS_FDO                    Fdo,
-    _Out_ PXENBUS_EVTCHN_ABI_CONTEXT    *_Context
+    _Outptr_ PXENBUS_EVTCHN_ABI_CONTEXT *_Context
     )
 {
-    PXENBUS_EVTCHN_FIFO_CONTEXT    Context;
+    PXENBUS_EVTCHN_FIFO_CONTEXT         Context;
     NTSTATUS                            status;
 
     Trace("====>\n");

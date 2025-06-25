@@ -43,8 +43,8 @@ typedef struct _XENBUS_STORE_CONTEXT  XENBUS_STORE_CONTEXT, *PXENBUS_STORE_CONTE
 
 extern NTSTATUS
 StoreInitialize(
-    _In_ PXENBUS_FDO            Fdo,
-    _Out_ PXENBUS_STORE_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Outptr_ PXENBUS_STORE_CONTEXT  *Context
     );
 
 extern NTSTATUS

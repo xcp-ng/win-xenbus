@@ -43,8 +43,8 @@ typedef struct _XENBUS_RANGE_SET_CONTEXT  XENBUS_RANGE_SET_CONTEXT, *PXENBUS_RAN
 
 extern NTSTATUS
 RangeSetInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_RANGE_SET_CONTEXT *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_RANGE_SET_CONTEXT  *Context
     );
 
 extern NTSTATUS

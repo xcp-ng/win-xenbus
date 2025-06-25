@@ -42,7 +42,7 @@
 extern NTSTATUS
 EvtchnFifoInitialize(
     _In_ PXENBUS_FDO                    Fdo,
-    _Out_ PXENBUS_EVTCHN_ABI_CONTEXT    *Context
+    _Outptr_ PXENBUS_EVTCHN_ABI_CONTEXT *Context
     );
 
 extern VOID

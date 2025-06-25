@@ -489,8 +489,8 @@ fail1:
 XEN_API
 NTSTATUS
 ConfigQuerySystemStartOption(
-    _In_ PSTR           Key,
-    _Out_ PANSI_STRING  *Option
+    _In_ PSTR               Key,
+    _Outptr_ PANSI_STRING   *Option
     )
 {
     return RegistryQuerySystemStartOption(Key, Option);

@@ -43,8 +43,8 @@ typedef struct _XENBUS_CACHE_CONTEXT  XENBUS_CACHE_CONTEXT, *PXENBUS_CACHE_CONTE
 
 extern NTSTATUS
 CacheInitialize(
-    _In_ PXENBUS_FDO            Fdo,
-    _Out_ PXENBUS_CACHE_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Outptr_ PXENBUS_CACHE_CONTEXT  *Context
     );
 
 extern NTSTATUS

@@ -1074,7 +1074,7 @@ SystemRegisterCallback(
     _In_ PWSTR              Name,
     _In_ PCALLBACK_FUNCTION Function,
     _In_opt_ PVOID          Argument,
-    _Out_ PVOID             *Handle
+    _Outptr_ PVOID          *Handle
     )
 {
     UNICODE_STRING          Unicode;

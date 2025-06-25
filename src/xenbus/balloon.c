@@ -960,12 +960,12 @@ static struct _XENBUS_BALLOON_INTERFACE_V1 BalloonInterfaceVersion1 = {
 
 NTSTATUS
 BalloonInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_BALLOON_CONTEXT   *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_BALLOON_CONTEXT    *Context
     )
 {
-    UNICODE_STRING                  Unicode;
-    NTSTATUS                        status;
+    UNICODE_STRING                      Unicode;
+    NTSTATUS                            status;
 
     Trace("====>\n");
 

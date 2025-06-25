@@ -569,7 +569,7 @@ NTSTATUS
 RangeSetCreate(
     _In_ PINTERFACE             Interface,
     _In_ PCSTR                  Name,
-    _Out_ PXENBUS_RANGE_SET     *RangeSet
+    _Outptr_ PXENBUS_RANGE_SET  *RangeSet
     )
 {
     PXENBUS_RANGE_SET_CONTEXT   Context = Interface->Context;
@@ -822,11 +822,11 @@ static struct _XENBUS_RANGE_SET_INTERFACE_V1 RangeSetInterfaceVersion1 = {
 
 NTSTATUS
 RangeSetInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_RANGE_SET_CONTEXT *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_RANGE_SET_CONTEXT  *Context
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                            status;
 
     Trace("====>\n");
 

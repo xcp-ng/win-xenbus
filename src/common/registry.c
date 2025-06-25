@@ -1016,7 +1016,7 @@ RegistryQuerySzValue(
     _In_ HANDLE                     Key,
     _In_ PSTR                       Name,
     _Out_opt_ PULONG                Type,
-    _Out_ PANSI_STRING              *Array
+    _Outptr_ PANSI_STRING           *Array
     )
 {
     ANSI_STRING                     Ansi;
@@ -1102,7 +1102,7 @@ NTSTATUS
 RegistryQueryBinaryValue(
     _In_ HANDLE                     Key,
     _In_ PSTR                       Name,
-    _Out_ PVOID                     *Buffer,
+    _Outptr_ PVOID                  *Buffer,
     _Out_ PULONG                    Length
     )
 {
@@ -1243,7 +1243,7 @@ fail1:
 NTSTATUS
 RegistryQueryKeyName(
     _In_ HANDLE             Key,
-    _Out_ PANSI_STRING      *Array
+    _Outptr_ PANSI_STRING   *Array
     )
 {
     PKEY_NAME_INFORMATION   Value;
@@ -1298,7 +1298,7 @@ fail1:
 NTSTATUS
 RegistryQuerySystemStartOption(
     _In_ PSTR                       Prefix,
-    _Out_ PANSI_STRING              *Value
+    _Outptr_ PANSI_STRING           *Value
     )
 {
     UNICODE_STRING                  Unicode;

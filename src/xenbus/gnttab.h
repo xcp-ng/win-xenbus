@@ -44,7 +44,7 @@ typedef struct _XENBUS_GNTTAB_CONTEXT  XENBUS_GNTTAB_CONTEXT, *PXENBUS_GNTTAB_CO
 extern NTSTATUS
 GnttabInitialize(
     _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_GNTTAB_CONTEXT    *Context
+    _Outptr_ PXENBUS_GNTTAB_CONTEXT *Context
     );
 
 extern NTSTATUS

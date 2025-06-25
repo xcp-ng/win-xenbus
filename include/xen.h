@@ -447,10 +447,10 @@ typedef struct _LOG_DISPOSITION LOG_DISPOSITION, *PLOG_DISPOSITION;
 XEN_API
 NTSTATUS
 LogAddDisposition(
-    _In_ LOG_LEVEL          Mask,
-    _In_ VOID               (*Function)(PVOID, PSTR, ULONG),
-    _In_opt_ PVOID          Argument,
-    _Out_ PLOG_DISPOSITION  *Disposition
+    _In_ LOG_LEVEL              Mask,
+    _In_ VOID                   (*Function)(PVOID, PSTR, ULONG),
+    _In_opt_ PVOID              Argument,
+    _Outptr_ PLOG_DISPOSITION   *Disposition
     );
 
 XEN_API
@@ -581,8 +581,8 @@ ConfigRequestReboot(
 XEN_API
 NTSTATUS
 ConfigQuerySystemStartOption(
-    _In_ PSTR           Key,
-    _Out_ PANSI_STRING  *Option
+    _In_ PSTR               Key,
+    _Outptr_ PANSI_STRING   *Option
     );
 
 #endif  // _XEN_H

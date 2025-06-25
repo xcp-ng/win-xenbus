@@ -44,7 +44,7 @@ typedef struct _XENBUS_EVTCHN_CONTEXT  XENBUS_EVTCHN_CONTEXT, *PXENBUS_EVTCHN_CO
 extern NTSTATUS
 EvtchnInitialize(
     _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_EVTCHN_CONTEXT    *Context
+    _Outptr_ PXENBUS_EVTCHN_CONTEXT *Context
     );
 
 extern NTSTATUS

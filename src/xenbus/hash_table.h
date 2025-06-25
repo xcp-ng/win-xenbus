@@ -59,7 +59,7 @@ HashTableLookup(
 
 extern NTSTATUS
 HashTableCreate(
-    _Out_ PXENBUS_HASH_TABLE    *Table
+    _Outptr_ PXENBUS_HASH_TABLE *Table
     );
 
 extern VOID

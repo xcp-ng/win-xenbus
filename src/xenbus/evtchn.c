@@ -1892,7 +1892,7 @@ static struct _XENBUS_EVTCHN_INTERFACE_V9 EvtchnInterfaceVersion9 = {
 NTSTATUS
 EvtchnInitialize(
     _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_EVTCHN_CONTEXT    *Context
+    _Outptr_ PXENBUS_EVTCHN_CONTEXT *Context
     )
 {
     HANDLE                          ParametersKey;

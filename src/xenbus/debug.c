@@ -95,7 +95,7 @@ DebugRegister(
     _In_ PSTR                       Prefix,
     _In_ XENBUS_DEBUG_FUNCTION      Function,
     _In_opt_ PVOID                  Argument,
-    _Out_ PXENBUS_DEBUG_CALLBACK    *Callback
+    _Outptr_ PXENBUS_DEBUG_CALLBACK *Callback
     )
 {
     PXENBUS_DEBUG_CONTEXT           Context = Interface->Context;
@@ -361,11 +361,11 @@ static struct _XENBUS_DEBUG_INTERFACE_V1 DebugInterfaceVersion1 = {
 
 NTSTATUS
 DebugInitialize(
-    _In_ PXENBUS_FDO            Fdo,
-    _Out_ PXENBUS_DEBUG_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Outptr_ PXENBUS_DEBUG_CONTEXT  *Context
     )
 {
-    NTSTATUS                    status;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 

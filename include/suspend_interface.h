@@ -105,7 +105,7 @@ typedef NTSTATUS
     _In_ XENBUS_SUSPEND_CALLBACK_TYPE   Type,
     _In_ XENBUS_SUSPEND_FUNCTION        Function,
     _In_opt_ PVOID                      Argument,
-    _Out_ PXENBUS_SUSPEND_CALLBACK      *Callback
+    _Outptr_ PXENBUS_SUSPEND_CALLBACK   *Callback
     );
 
 /*! \typedef XENBUS_SUSPEND_DEREGISTER

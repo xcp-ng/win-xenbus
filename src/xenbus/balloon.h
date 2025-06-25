@@ -43,8 +43,8 @@ typedef struct _XENBUS_BALLOON_CONTEXT  XENBUS_BALLOON_CONTEXT, *PXENBUS_BALLOON
 
 extern NTSTATUS
 BalloonInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_BALLOON_CONTEXT   *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_BALLOON_CONTEXT    *Context
     );
 
 extern NTSTATUS

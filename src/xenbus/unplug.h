@@ -44,7 +44,7 @@ typedef struct _XENBUS_UNPLUG_CONTEXT  XENBUS_UNPLUG_CONTEXT, *PXENBUS_UNPLUG_CO
 extern NTSTATUS
 UnplugInitialize(
     _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_UNPLUG_CONTEXT    *Context
+    _Outptr_ PXENBUS_UNPLUG_CONTEXT *Context
     );
 
 extern NTSTATUS

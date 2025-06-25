@@ -96,7 +96,7 @@ typedef NTSTATUS
     _In_ PSTR                       Prefix,
     _In_ XENBUS_DEBUG_FUNCTION      Function,
     _In_opt_ PVOID                  Argument,
-    _Out_ PXENBUS_DEBUG_CALLBACK    *Callback
+    _Outptr_ PXENBUS_DEBUG_CALLBACK *Callback
     );
 
 /*! \typedef XENBUS_DEBUG_PRINTF

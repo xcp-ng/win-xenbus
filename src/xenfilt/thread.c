@@ -121,7 +121,7 @@ NTSTATUS
 ThreadCreate(
     _In_ XENFILT_THREAD_FUNCTION    Function,
     _In_ PVOID                      Context,
-    _Out_ PXENFILT_THREAD           *Thread
+    _Outptr_ PXENFILT_THREAD        *Thread
     )
 {
     HANDLE                          Handle;

@@ -44,7 +44,7 @@ extern NTSTATUS
 ThreadCreate(
     _In_ XENBUS_THREAD_FUNCTION Function,
     _In_ PVOID                  Context,
-    _Out_ PXENBUS_THREAD        *Thread
+    _Outptr_ PXENBUS_THREAD     *Thread
     );
 
 extern PKEVENT

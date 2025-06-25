@@ -271,7 +271,7 @@ static struct _XENBUS_UNPLUG_INTERFACE_V3 UnplugInterfaceVersion3 = {
 NTSTATUS
 UnplugInitialize(
     _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_UNPLUG_CONTEXT    *Context
+    _Outptr_ PXENBUS_UNPLUG_CONTEXT *Context
     )
 {
     NTSTATUS                        status;

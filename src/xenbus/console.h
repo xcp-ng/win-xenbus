@@ -43,8 +43,8 @@ typedef struct _XENBUS_CONSOLE_CONTEXT  XENBUS_CONSOLE_CONTEXT, *PXENBUS_CONSOLE
 
 extern NTSTATUS
 ConsoleInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_CONSOLE_CONTEXT   *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_CONSOLE_CONTEXT    *Context
     );
 
 extern NTSTATUS

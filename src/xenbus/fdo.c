@@ -2158,7 +2158,7 @@ FdoConnectInterrupt(
     _In_ PXENBUS_FDO                        Fdo,
     _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR    Raw,
     _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR    Translated,
-    _Out_ PXENBUS_INTERRUPT                 *Interrupt
+    _Outptr_ PXENBUS_INTERRUPT              *Interrupt
     )
 {
     IO_CONNECT_INTERRUPT_PARAMETERS         Connect;
@@ -2803,15 +2803,15 @@ __FdoVirqDestroy(
 
 static FORCEINLINE NTSTATUS
 __FdoVirqCreate(
-    _In_ PXENBUS_FDO    Fdo,
-    _In_ ULONG          Type,
-    _In_ ULONG          Cpu,
-    _Out_ PXENBUS_VIRQ  *Virq
+    _In_ PXENBUS_FDO        Fdo,
+    _In_ ULONG              Type,
+    _In_ ULONG              Cpu,
+    _Outptr_ PXENBUS_VIRQ   *Virq
     )
 {
-    PROCESSOR_NUMBER    ProcNumber;
-    unsigned int        vcpu_id;
-    NTSTATUS            status;
+    PROCESSOR_NUMBER        ProcNumber;
+    unsigned int            vcpu_id;
+    NTSTATUS                status;
 
     *Virq = __FdoAllocate(sizeof (XENBUS_VIRQ));
 

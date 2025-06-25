@@ -1497,15 +1497,15 @@ fail1:
 
 static NTSTATUS
 StoreTransactionStart(
-    _In_ PINTERFACE                 Interface,
-    _Out_ PXENBUS_STORE_TRANSACTION *Transaction
+    _In_ PINTERFACE                     Interface,
+    _Outptr_ PXENBUS_STORE_TRANSACTION  *Transaction
     )
 {
-    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
-    XENBUS_STORE_REQUEST            Request;
-    PXENBUS_STORE_RESPONSE          Response;
-    KIRQL                           Irql;
-    NTSTATUS                        status;
+    PXENBUS_STORE_CONTEXT               Context = Interface->Context;
+    XENBUS_STORE_REQUEST                Request;
+    PXENBUS_STORE_RESPONSE              Response;
+    KIRQL                               Irql;
+    NTSTATUS                            status;
 
     *Transaction = __StoreAllocate(sizeof (XENBUS_STORE_TRANSACTION));
 
@@ -1656,21 +1656,21 @@ fail1:
 
 static NTSTATUS
 StoreWatchAdd(
-    _In_ PINTERFACE             Interface,
-    _In_opt_ PSTR               Prefix,
-    _In_ PSTR                   Node,
-    _In_ PKEVENT                Event,
-    _Out_ PXENBUS_STORE_WATCH   *Watch
+    _In_ PINTERFACE                 Interface,
+    _In_opt_ PSTR                   Prefix,
+    _In_ PSTR                       Node,
+    _In_ PKEVENT                    Event,
+    _Outptr_ PXENBUS_STORE_WATCH    *Watch
     )
 {
-    PXENBUS_STORE_CONTEXT       Context = Interface->Context;
-    ULONG                       Length;
-    PSTR                        Path;
-    CHAR                        Token[TOKEN_LENGTH];
-    XENBUS_STORE_REQUEST        Request;
-    PXENBUS_STORE_RESPONSE      Response;
-    KIRQL                       Irql;
-    NTSTATUS                    status;
+    PXENBUS_STORE_CONTEXT           Context = Interface->Context;
+    ULONG                           Length;
+    PSTR                            Path;
+    CHAR                            Token[TOKEN_LENGTH];
+    XENBUS_STORE_REQUEST            Request;
+    PXENBUS_STORE_RESPONSE          Response;
+    KIRQL                           Irql;
+    NTSTATUS                        status;
 
     *Watch = __StoreAllocate(sizeof (XENBUS_STORE_WATCH));
 
@@ -2706,13 +2706,13 @@ static struct _XENBUS_STORE_INTERFACE_V2 StoreInterfaceVersion2 = {
 
 NTSTATUS
 StoreInitialize(
-    _In_ PXENBUS_FDO            Fdo,
-    _Out_ PXENBUS_STORE_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Outptr_ PXENBUS_STORE_CONTEXT  *Context
     )
 {
-    LARGE_INTEGER               Now;
-    ULONG                       Seed;
-    NTSTATUS                    status;
+    LARGE_INTEGER                   Now;
+    ULONG                           Seed;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 

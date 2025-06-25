@@ -844,11 +844,11 @@ static struct _XENBUS_SHARED_INFO_INTERFACE_V4 SharedInfoInterfaceVersion4 = {
 
 NTSTATUS
 SharedInfoInitialize(
-    _In_ PXENBUS_FDO                    Fdo,
-    _Out_ PXENBUS_SHARED_INFO_CONTEXT   *Context
+    _In_ PXENBUS_FDO                        Fdo,
+    _Outptr_ PXENBUS_SHARED_INFO_CONTEXT    *Context
     )
 {
-    NTSTATUS                            status;
+    NTSTATUS                                status;
 
     Trace("====>\n");
 

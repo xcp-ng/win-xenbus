@@ -81,7 +81,7 @@ typedef NTSTATUS
     _In_ XENBUS_CACHE_ACQUIRE_LOCK  AcquireLock,
     _In_ XENBUS_CACHE_RELEASE_LOCK  ReleaseLock,
     _In_opt_ PVOID                  Argument,
-    _Out_ PXENBUS_GNTTAB_CACHE      *Cache
+    _Outptr_ PXENBUS_GNTTAB_CACHE   *Cache
     );
 
 /*! \typedef XENBUS_GNTTAB_CREATE_CACHE
@@ -105,7 +105,7 @@ typedef NTSTATUS
     _In_ XENBUS_CACHE_ACQUIRE_LOCK  AcquireLock,
     _In_ XENBUS_CACHE_RELEASE_LOCK  ReleaseLock,
     _In_opt_ PVOID                  Argument,
-    _Out_ PXENBUS_GNTTAB_CACHE      *Cache
+    _Outptr_ PXENBUS_GNTTAB_CACHE   *Cache
     );
 
 /*! \typedef XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS
@@ -129,7 +129,7 @@ typedef NTSTATUS
     _In_ USHORT                     Domain,
     _In_ PFN_NUMBER                 Pfn,
     _In_ BOOLEAN                    ReadOnly,
-    _Out_ PXENBUS_GNTTAB_ENTRY      *Entry
+    _Outptr_ PXENBUS_GNTTAB_ENTRY   *Entry
     );
 
 /*! \typedef XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS

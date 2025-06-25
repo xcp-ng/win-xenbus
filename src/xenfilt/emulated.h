@@ -49,7 +49,7 @@ typedef struct _XENFILT_EMULATED_OBJECT XENFILT_EMULATED_OBJECT, *PXENFILT_EMULA
 
 extern NTSTATUS
 EmulatedInitialize(
-    _Out_ PXENFILT_EMULATED_CONTEXT *Context
+    _Outptr_ PXENFILT_EMULATED_CONTEXT  *Context
     );
 
 extern NTSTATUS
@@ -72,7 +72,7 @@ EmulatedAddObject(
     _In_ PSTR                           InstanceID,
     _In_opt_ PSTR                       CompatibleIDs,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
-    _Out_ PXENFILT_EMULATED_OBJECT      *EmulatedObject
+    _Outptr_ PXENFILT_EMULATED_OBJECT   *EmulatedObject
     );
 
 extern VOID

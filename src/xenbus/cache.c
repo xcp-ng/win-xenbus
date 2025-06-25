@@ -833,7 +833,7 @@ CacheCreate(
     _In_ VOID               (*AcquireLock)(PVOID),
     _In_ VOID               (*ReleaseLock)(PVOID),
     _In_ PVOID              Argument,
-    _Out_ PXENBUS_CACHE     *Cache
+    _Outptr_ PXENBUS_CACHE  *Cache
     )
 {
     PXENBUS_CACHE_CONTEXT   Context = Interface->Context;
@@ -954,7 +954,7 @@ CacheCreateVersion1(
     _In_ VOID               (*AcquireLock)(PVOID),
     _In_ VOID               (*ReleaseLock)(PVOID),
     _In_ PVOID              Argument,
-    _Out_ PXENBUS_CACHE     *Cache
+    _Outptr_ PXENBUS_CACHE  *Cache
     )
 {
     return CacheCreate(Interface,
@@ -1232,11 +1232,11 @@ static struct _XENBUS_CACHE_INTERFACE_V2 CacheInterfaceVersion2 = {
 
 NTSTATUS
 CacheInitialize(
-    _In_ PXENBUS_FDO            Fdo,
-    _Out_ PXENBUS_CACHE_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Outptr_ PXENBUS_CACHE_CONTEXT  *Context
     )
 {
-    NTSTATUS                    status;
+    NTSTATUS                        status;
 
     Trace("====>\n");
 

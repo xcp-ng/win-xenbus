@@ -227,7 +227,7 @@ EmulatedAddObject(
     _In_ PSTR                           InstanceID,
     _In_opt_ PSTR                       CompatibleIDs,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
-    _Out_ PXENFILT_EMULATED_OBJECT      *EmulatedObject
+    _Outptr_ PXENFILT_EMULATED_OBJECT   *EmulatedObject
     )
 {
     KIRQL                               Irql;
@@ -468,10 +468,10 @@ static struct _XENFILT_EMULATED_INTERFACE_V2 EmulatedInterfaceVersion2 = {
 
 NTSTATUS
 EmulatedInitialize(
-    _Out_ PXENFILT_EMULATED_CONTEXT *Context
+    _Outptr_ PXENFILT_EMULATED_CONTEXT  *Context
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                            status;
 
     Trace("====>\n");
 

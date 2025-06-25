@@ -151,17 +151,17 @@ RegistryUpdateDwordValue(
 
 extern NTSTATUS
 RegistryQuerySzValue(
-    _In_ HANDLE         Key,
-    _In_ PSTR           Name,
-    _Out_opt_ PULONG    Type,
-    _Out_ PANSI_STRING  *Array
+    _In_ HANDLE             Key,
+    _In_ PSTR               Name,
+    _Out_opt_ PULONG        Type,
+    _Outptr_ PANSI_STRING   *Array
     );
 
 extern NTSTATUS
 RegistryQueryBinaryValue(
     _In_ HANDLE         Key,
     _In_ PSTR           Name,
-    _Out_ PVOID         *Buffer,
+    _Outptr_ PVOID      *Buffer,
     _Out_ PULONG        Length
     );
 
@@ -176,13 +176,13 @@ RegistryUpdateBinaryValue(
 extern NTSTATUS
 RegistryQueryKeyName(
     _In_ HANDLE             Key,
-    _Out_ PANSI_STRING      *Array
+    _Outptr_ PANSI_STRING   *Array
     );
 
 extern NTSTATUS
 RegistryQuerySystemStartOption(
-    _In_ PSTR           Name,
-    _Out_ PANSI_STRING  *Option
+    _In_ PSTR               Name,
+    _Outptr_ PANSI_STRING   *Option
     );
 
 extern VOID

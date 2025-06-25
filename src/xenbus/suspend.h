@@ -43,8 +43,8 @@ typedef struct _XENBUS_SUSPEND_CONTEXT  XENBUS_SUSPEND_CONTEXT, *PXENBUS_SUSPEND
 
 extern NTSTATUS
 SuspendInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_SUSPEND_CONTEXT   *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_SUSPEND_CONTEXT    *Context
     );
 
 extern NTSTATUS

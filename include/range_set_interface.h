@@ -76,9 +76,9 @@ typedef VOID
 */
 typedef NTSTATUS
 (*XENBUS_RANGE_SET_CREATE)(
-    _In_ PINTERFACE         Interface,
-    _In_ PCSTR              Name,
-    _Out_ PXENBUS_RANGE_SET *RangeSet
+    _In_ PINTERFACE             Interface,
+    _In_ PCSTR                  Name,
+    _Outptr_ PXENBUS_RANGE_SET  *RangeSet
     );
 
 /*! \typedef XENBUS_RANGE_SET_PUT

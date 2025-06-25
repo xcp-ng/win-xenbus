@@ -135,7 +135,7 @@ typedef NTSTATUS
     _In_ XENBUS_CACHE_ACQUIRE_LOCK  AcquireLock,
     _In_ XENBUS_CACHE_RELEASE_LOCK  ReleaseLock,
     _In_opt_ PVOID                  Argument,
-    _Out_ PXENBUS_CACHE             *Cache
+    _Outptr_ PXENBUS_CACHE          *Cache
     );
 
 /*! \typedef XENBUS_CACHE_CREATE
@@ -168,7 +168,7 @@ typedef NTSTATUS
     _In_ XENBUS_CACHE_ACQUIRE_LOCK  AcquireLock,
     _In_ XENBUS_CACHE_RELEASE_LOCK  ReleaseLock,
     _In_opt_ PVOID                  Argument,
-    _Out_ PXENBUS_CACHE             *Cache
+    _Outptr_ PXENBUS_CACHE          *Cache
     );
 
 /*! \typedef XENBUS_CACHE_GET

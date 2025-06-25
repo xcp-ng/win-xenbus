@@ -83,7 +83,7 @@ SuspendRegister(
     _In_ XENBUS_SUSPEND_CALLBACK_TYPE   Type,
     _In_ VOID                           (*Function)(PVOID),
     _In_opt_ PVOID                      Argument,
-    _Out_ PXENBUS_SUSPEND_CALLBACK      *Callback
+    _Outptr_ PXENBUS_SUSPEND_CALLBACK   *Callback
     )
 {
     PXENBUS_SUSPEND_CONTEXT             Context = Interface->Context;
@@ -479,11 +479,11 @@ static struct _XENBUS_SUSPEND_INTERFACE_V1 SuspendInterfaceVersion1 = {
 
 NTSTATUS
 SuspendInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_SUSPEND_CONTEXT   *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_SUSPEND_CONTEXT    *Context
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                            status;
 
     Trace("====>\n");
 

@@ -43,8 +43,8 @@ typedef struct _XENBUS_DEBUG_CONTEXT  XENBUS_DEBUG_CONTEXT, *PXENBUS_DEBUG_CONTE
 
 extern NTSTATUS
 DebugInitialize(
-    _In_ PXENBUS_FDO            Fdo,
-    _Out_ PXENBUS_DEBUG_CONTEXT *Context
+    _In_ PXENBUS_FDO                Fdo,
+    _Outptr_ PXENBUS_DEBUG_CONTEXT  *Context
     );
 
 extern NTSTATUS

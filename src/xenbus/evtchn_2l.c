@@ -242,7 +242,7 @@ static XENBUS_EVTCHN_ABI EvtchnAbiTwoLevel = {
 NTSTATUS
 EvtchnTwoLevelInitialize(
     _In_ PXENBUS_FDO                    Fdo,
-    _Out_ PXENBUS_EVTCHN_ABI_CONTEXT    *_Context
+    _Outptr_ PXENBUS_EVTCHN_ABI_CONTEXT *_Context
     )
 {
     PXENBUS_EVTCHN_TWO_LEVEL_CONTEXT    Context;

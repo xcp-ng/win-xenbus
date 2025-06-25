@@ -621,7 +621,7 @@ static NTSTATUS
 ConsoleWakeupAdd(
     _In_ PINTERFACE                 Interface,
     _In_ PKEVENT                    Event,
-    _Out_ PXENBUS_CONSOLE_WAKEUP    *Wakeup
+    _Outptr_ PXENBUS_CONSOLE_WAKEUP *Wakeup
     )
 {
     PXENBUS_CONSOLE_CONTEXT         Context = Interface->Context;
@@ -868,11 +868,11 @@ static struct _XENBUS_CONSOLE_INTERFACE_V1 ConsoleInterfaceVersion1 = {
 
 NTSTATUS
 ConsoleInitialize(
-    _In_ PXENBUS_FDO                Fdo,
-    _Out_ PXENBUS_CONSOLE_CONTEXT   *Context
+    _In_ PXENBUS_FDO                    Fdo,
+    _Outptr_ PXENBUS_CONSOLE_CONTEXT    *Context
     )
 {
-    NTSTATUS                        status;
+    NTSTATUS                            status;
 
     Trace("====>\n");
 
