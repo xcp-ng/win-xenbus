@@ -62,6 +62,7 @@ __RegistryFree(
 }
 
 NTSTATUS
+#pragma prefast(suppress:28101) // unannotated DriverEntry function
 RegistryInitialize(
     _In_opt_ PDRIVER_OBJECT DriverObject,
     _In_ PUNICODE_STRING    Path
