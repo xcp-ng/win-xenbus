@@ -5789,37 +5789,39 @@ FdoCreate(
     Fdo->PhysicalDeviceObject = PhysicalDeviceObject;
     Fdo->LowerDeviceObject = IoAttachDeviceToDeviceStack(FunctionDeviceObject,
                                                          PhysicalDeviceObject);
+    if (Fdo->LowerDeviceObject == NULL)
+        goto fail3;
 
     Fdo->SystemPowerWorkItem = IoAllocateWorkItem(FunctionDeviceObject);
     if (Fdo->SystemPowerWorkItem == NULL)
-        goto fail3;
+        goto fail4;
 
     Fdo->DevicePowerWorkItem = IoAllocateWorkItem(FunctionDeviceObject);
     if (Fdo->DevicePowerWorkItem == NULL)
-        goto fail4;
+        goto fail5;
 
     status = FdoAcquireLowerBusInterface(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     if (FdoGetBusData(Fdo,
                       PCI_WHICHSPACE_CONFIG,
                       &Header,
                       0,
                       sizeof (PCI_COMMON_HEADER)) == 0)
-        goto fail6;
+        goto fail7;
 
     status = __FdoSetVendorName(Fdo,
                                 Header.VendorID,
                                 Header.DeviceID);
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail8;
 
     __FdoSetName(Fdo);
 
     status = FdoSetActive(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail9;
 
     if (!__FdoIsActive(Fdo))
         goto done;
@@ -5836,47 +5838,47 @@ FdoCreate(
 
     status = DebugInitialize(Fdo, &Fdo->DebugContext);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail10;
 
     status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail11;
 
     status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail12;
 
     status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
     if (!NT_SUCCESS(status))
-        goto fail12;
+        goto fail13;
 
     status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
-        goto fail13;
+        goto fail14;
 
     status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
-        goto fail14;
+        goto fail15;
 
     status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
-        goto fail15;
+        goto fail16;
 
     status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
-        goto fail16;
+        goto fail17;
 
     status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
     if (!NT_SUCCESS(status))
-        goto fail17;
+        goto fail18;
 
     status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
     if (!NT_SUCCESS(status))
-        goto fail18;
+        goto fail19;
 
     status = FdoBalloonInitialize(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail19;
+        goto fail20;
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
                                XENBUS_DEBUG_INTERFACE_VERSION_MAX,
@@ -5945,68 +5947,68 @@ done:
 
     return STATUS_SUCCESS;
 
-fail19:
-    Error("fail19\n");
+fail20:
+    Error("fail20\n");
 
     UnplugTeardown(Fdo->UnplugContext);
     Fdo->UnplugContext = NULL;
 
-fail18:
-    Error("fail18\n");
+fail19:
+    Error("fail19\n");
 
     ConsoleTeardown(Fdo->ConsoleContext);
     Fdo->ConsoleContext = NULL;
 
-fail17:
-    Error("fail17\n");
+fail18:
+    Error("fail18\n");
 
     StoreTeardown(Fdo->StoreContext);
     Fdo->StoreContext = NULL;
 
-fail16:
-    Error("fail16\n");
+fail17:
+    Error("fail17\n");
 
     GnttabTeardown(Fdo->GnttabContext);
     Fdo->GnttabContext = NULL;
 
-fail15:
-    Error("fail15\n");
+fail16:
+    Error("fail16\n");
 
     CacheTeardown(Fdo->CacheContext);
     Fdo->CacheContext = NULL;
 
-fail14:
-    Error("fail14\n");
+fail15:
+    Error("fail15\n");
 
     RangeSetTeardown(Fdo->RangeSetContext);
     Fdo->RangeSetContext = NULL;
 
-fail13:
-    Error("fail13\n");
+fail14:
+    Error("fail14\n");
 
     EvtchnTeardown(Fdo->EvtchnContext);
     Fdo->EvtchnContext = NULL;
 
-fail12:
-    Error("fail12\n");
+fail13:
+    Error("fail13\n");
 
     SharedInfoTeardown(Fdo->SharedInfoContext);
     Fdo->SharedInfoContext = NULL;
 
-fail11:
-    Error("fail11\n");
+fail12:
+    Error("fail12\n");
 
     SuspendTeardown(Fdo->SuspendContext);
     Fdo->SuspendContext = NULL;
 
-fail10:
-    Error("fail10\n");
+fail11:
+    Error("fail11\n");
 
     DebugTeardown(Fdo->DebugContext);
     Fdo->DebugContext = NULL;
 
-fail9:
-    Error("fail9\n");
+fail10:
+    Error("fail10\n");
 
     Fdo->UseMemoryHole = 0;
 
@@ -6016,36 +6018,39 @@ fail9:
     //
     Fdo->Active = FALSE;
 
-fail8:
-    Error("fail8\n");
+fail9:
+    Error("fail9\n");
 
     RtlZeroMemory(Fdo->VendorName, MAXNAMELEN);
+
+fail8:
+    Error("fail8\n");
 
 fail7:
     Error("fail7\n");
 
-fail6:
-    Error("fail6\n");
-
     FdoReleaseLowerBusInterface(Fdo);
 
-fail5:
-    Error("fail5\n");
+fail6:
+    Error("fail6\n");
 
     IoFreeWorkItem(Fdo->DevicePowerWorkItem);
     Fdo->DevicePowerWorkItem = NULL;
 
-fail4:
-    Error("fail4\n");
+fail5:
+    Error("fail5\n");
 
     IoFreeWorkItem(Fdo->SystemPowerWorkItem);
     Fdo->SystemPowerWorkItem = NULL;
 
+fail4:
+    Error("fail4\n");
+
+    if (Fdo->LowerDeviceObject)
+        IoDetachDevice(Fdo->LowerDeviceObject);
+
 fail3:
     Error("fail3\n");
-
-#pragma prefast(suppress:28183) // Fdo->LowerDeviceObject could be NULL
-    IoDetachDevice(Fdo->LowerDeviceObject);
 
     Fdo->PhysicalDeviceObject = NULL;
     Fdo->LowerDeviceObject = NULL;
