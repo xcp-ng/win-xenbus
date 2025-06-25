@@ -146,13 +146,13 @@ KDEFERRED_ROUTINE   SyncWorker;
 #pragma intrinsic(_enable)
 #pragma intrinsic(_disable)
 
-#pragma warning(push)
-#pragma warning(disable:28167) // Function changes IRQL and does not restore it before exit
-#pragma warning(disable:28156) // Actual IRQL is inconsistent with required IRQL
-
+_Must_inspect_result_
+_IRQL_requires_(DISPATCH_LEVEL)
+_When_(NT_SUCCESS(return), _IRQL_raises_(HIGH_LEVEL))
 static FORCEINLINE NTSTATUS
 __SyncProcessorDisableInterrupts(
-    VOID
+    _At_(*Irql, _IRQL_saves_)
+    _Out_ PKIRQL    Irql
     )
 {
     PSYNC_CONTEXT   Context = &SyncContext;
@@ -161,7 +161,7 @@ __SyncProcessorDisableInterrupts(
     LONG            New;
     NTSTATUS        status;
 
-    (VOID) KfRaiseIrql(HIGH_LEVEL);
+    KeRaiseIrql(HIGH_LEVEL, Irql);
     status = STATUS_SUCCESS;
 
     InterlockedIncrement(&Context->CompletionCount);
@@ -185,8 +185,7 @@ __SyncProcessorDisableInterrupts(
     } while (InterlockedCompareExchange(&Context->CompletionCount, New, Old) != Old);
 
     if (Old < Context->ProcessorCount) {
-#pragma prefast(suppress:28138) // Use constant rather than variable
-        KeLowerIrql(DISPATCH_LEVEL);
+        KeLowerIrql(*Irql);
         status = STATUS_UNSUCCESSFUL;
     }
 
@@ -209,17 +208,17 @@ __SyncProcessorRunEarly(
     InterlockedIncrement(&Context->CompletionCount);
 }
 
+_IRQL_requires_(HIGH_LEVEL)
 static FORCEINLINE VOID
 __SyncProcessorEnableInterrupts(
-    VOID
+    _In_ _IRQL_restores_ KIRQL  Irql
     )
 {
-    PSYNC_CONTEXT   Context = &SyncContext;
+    PSYNC_CONTEXT               Context = &SyncContext;
 
     _enable();
 
-#pragma prefast(suppress:28138) // Use constant rather than variable
-    KeLowerIrql(DISPATCH_LEVEL);
+    KeLowerIrql(Irql);
 
     InterlockedIncrement(&Context->CompletionCount);
 }
@@ -254,8 +253,8 @@ __SyncWait(
     }
 }
 
+_Use_decl_annotations_
 VOID
-#pragma prefast(suppress:28166) // Function does not restore IRQL
 SyncWorker(
     PKDPC               Dpc,
     PVOID               _Context,
@@ -267,11 +266,14 @@ SyncWorker(
     ULONG               Index;
     PROCESSOR_NUMBER    ProcNumber = { 0 };
     SYNC_REQUEST        Request;
+    KIRQL               Irql;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(_Context);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
+
+    Irql = DISPATCH_LEVEL;
 
     Index = KeGetCurrentProcessorNumberEx(&ProcNumber);
 
@@ -298,7 +300,7 @@ SyncWorker(
 
         switch (Context->Request) {
         case SYNC_REQUEST_DISABLE_INTERRUPTS:
-            status = __SyncProcessorDisableInterrupts();
+            status = __SyncProcessorDisableInterrupts(&Irql);
             break;
 
         case SYNC_REQUEST_RUN_EARLY:
@@ -306,7 +308,8 @@ SyncWorker(
             break;
 
         case SYNC_REQUEST_ENABLE_INTERRUPTS:
-            __SyncProcessorEnableInterrupts();
+            _Analysis_assume_(KeGetCurrentIrql() == HIGH_LEVEL);
+            __SyncProcessorEnableInterrupts(Irql);
             break;
 
         case SYNC_REQUEST_RUN_LATE:
@@ -320,6 +323,8 @@ SyncWorker(
         if (NT_SUCCESS(status))
             Request = Context->Request;
     }
+
+    ASSERT3U(KeGetCurrentIrql(), ==, DISPATCH_LEVEL);
 
     Trace("<==== (%u:%u)\n", ProcNumber.Group, ProcNumber.Number);
     InterlockedIncrement(&Context->CompletionCount);
@@ -391,7 +396,8 @@ _IRQL_requires_(DISPATCH_LEVEL)
 _IRQL_raises_(HIGH_LEVEL)
 VOID
 SyncDisableInterrupts(
-    VOID
+    _At_(*Irql, _IRQL_saves_)
+    _Out_ PKIRQL    Irql
     )
 {
     PSYNC_CONTEXT   Context = &SyncContext;
@@ -408,7 +414,8 @@ SyncDisableInterrupts(
     KeMemoryBarrier();
 
     for (;;) {
-        status = __SyncProcessorDisableInterrupts();
+        status = __SyncProcessorDisableInterrupts(Irql);
+        _Analysis_assume_(NT_SUCCESS(status));
         if (NT_SUCCESS(status))
             break;
 
@@ -437,19 +444,19 @@ SyncRunEarly(
 }
 
 _IRQL_requires_(HIGH_LEVEL)
-_IRQL_raises_(DISPATCH_LEVEL)
 VOID
 SyncEnableInterrupts(
+    _In_ _IRQL_restores_ KIRQL  Irql
     )
 {
-    PSYNC_CONTEXT   Context = &SyncContext;
+    PSYNC_CONTEXT               Context = &SyncContext;
 
     ASSERT(SyncOwner >= 0);
 
     Context->CompletionCount = 0;
     KeMemoryBarrier();
 
-    __SyncProcessorEnableInterrupts();
+    __SyncProcessorEnableInterrupts(Irql);
 
     Context->Request = SYNC_REQUEST_ENABLE_INTERRUPTS;
     KeMemoryBarrier();
@@ -482,7 +489,6 @@ SyncRunLate(
 
 _IRQL_requires_(DISPATCH_LEVEL)
 VOID
-#pragma prefast(suppress:28167) // Function changes IRQL
 SyncRelease(
     VOID
     )
@@ -510,5 +516,3 @@ SyncRelease(
 
     Trace("<====\n");
 }
-
-#pragma warning(pop)

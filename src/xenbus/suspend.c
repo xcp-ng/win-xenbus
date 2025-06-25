@@ -251,13 +251,13 @@ SuspendLate(
 }
 
 NTSTATUS
-#pragma prefast(suppress:28167) // Function changes IRQL
 SuspendTrigger(
     _In_ PINTERFACE         Interface
     )
 {
     PXENBUS_SUSPEND_CONTEXT Context = Interface->Context;
     KIRQL                   Irql;
+    KIRQL                   InterruptIrql;
     NTSTATUS                status;
 
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
@@ -266,7 +266,7 @@ SuspendTrigger(
               "SUSPEND: ====>\n");
 
     SyncCapture(Context, SuspendEarly, SuspendLate);
-    SyncDisableInterrupts();
+    SyncDisableInterrupts(&InterruptIrql);
 
     __SuspendLogTimers("PRE-SUSPEND");
 
@@ -282,7 +282,7 @@ SuspendTrigger(
     if (NT_SUCCESS(status))
         SyncRunEarly();
 
-    SyncEnableInterrupts();
+    SyncEnableInterrupts(InterruptIrql);
 
     if (NT_SUCCESS(status))
         SyncRunLate();

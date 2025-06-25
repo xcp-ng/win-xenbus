@@ -56,7 +56,8 @@ _IRQL_requires_(DISPATCH_LEVEL)
 _IRQL_raises_(HIGH_LEVEL)
 VOID
 SyncDisableInterrupts(
-    VOID
+    _At_(*Irql, _IRQL_saves_)
+    _Out_ PKIRQL    Irql
     );
 
 extern
@@ -68,10 +69,9 @@ SyncRunEarly(
 
 extern
 _IRQL_requires_(HIGH_LEVEL)
-_IRQL_raises_(DISPATCH_LEVEL)
 VOID
 SyncEnableInterrupts(
-    VOID
+    _In_ _IRQL_restores_ KIRQL  Irql
     );
 
 extern
