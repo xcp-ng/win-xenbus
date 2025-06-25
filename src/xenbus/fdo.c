@@ -1402,12 +1402,16 @@ FdoScan(
             StoreClasses = NULL;
         }
 
-        status = RegistryQuerySzValue(ParametersKey,
-                                      "SyntheticClasses",
-                                      NULL,
-                                      &SyntheticClasses);
-        if (!NT_SUCCESS(status))
+        if (ParametersKey != NULL) {
+            status = RegistryQuerySzValue(ParametersKey,
+                                          "SyntheticClasses",
+                                          NULL,
+                                          &SyntheticClasses);
+            if (!NT_SUCCESS(status))
+                SyntheticClasses = NULL;
+        } else {
             SyntheticClasses = NULL;
+        }
 
         Classes = FdoCombineAnsi(StoreClasses, SyntheticClasses);
 
