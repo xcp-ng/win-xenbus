@@ -381,7 +381,7 @@ fail1:
     return status;
 }
 
-static
+static NTSTATUS
 ConsoleGetAddress(
     _In_ PXENBUS_CONSOLE_CONTEXT    Context,
     _Out_ PPHYSICAL_ADDRESS         Address

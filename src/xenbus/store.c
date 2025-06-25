@@ -2235,7 +2235,7 @@ StoreEnable(
         Context->Dpcs++;
 }
 
-static
+static NTSTATUS
 StoreGetAddress(
     _In_ PXENBUS_STORE_CONTEXT  Context,
     _Out_ PPHYSICAL_ADDRESS     Address
