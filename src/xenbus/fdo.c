@@ -5887,49 +5887,49 @@ FdoCreate(
                                XENBUS_DEBUG_INTERFACE_VERSION_MAX,
                                (PINTERFACE)&Fdo->DebugInterface,
                                sizeof (Fdo->DebugInterface));
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
     ASSERT(Fdo->DebugInterface.Interface.Context != NULL);
 
     status = SuspendGetInterface(__FdoGetSuspendContext(Fdo),
                                  XENBUS_SUSPEND_INTERFACE_VERSION_MAX,
                                  (PINTERFACE)&Fdo->SuspendInterface,
                                  sizeof (Fdo->SuspendInterface));
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
     ASSERT(Fdo->SuspendInterface.Interface.Context != NULL);
 
     status = EvtchnGetInterface(__FdoGetEvtchnContext(Fdo),
                                 XENBUS_EVTCHN_INTERFACE_VERSION_MAX,
                                 (PINTERFACE)&Fdo->EvtchnInterface,
                                 sizeof (Fdo->EvtchnInterface));
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
     ASSERT(Fdo->EvtchnInterface.Interface.Context != NULL);
 
     status = RangeSetGetInterface(__FdoGetRangeSetContext(Fdo),
                                   XENBUS_RANGE_SET_INTERFACE_VERSION_MAX,
                                   (PINTERFACE)&Fdo->RangeSetInterface,
                                   sizeof (Fdo->RangeSetInterface));
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
     ASSERT(Fdo->RangeSetInterface.Interface.Context != NULL);
 
     status = StoreGetInterface(__FdoGetStoreContext(Fdo),
                                XENBUS_STORE_INTERFACE_VERSION_MAX,
                                (PINTERFACE)&Fdo->StoreInterface,
                                sizeof (Fdo->StoreInterface));
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
     ASSERT(Fdo->StoreInterface.Interface.Context != NULL);
 
     status = ConsoleGetInterface(__FdoGetConsoleContext(Fdo),
                                  XENBUS_CONSOLE_INTERFACE_VERSION_MAX,
                                  (PINTERFACE)&Fdo->ConsoleInterface,
                                  sizeof (Fdo->ConsoleInterface));
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
     ASSERT(Fdo->ConsoleInterface.Interface.Context != NULL);
 
     status = BalloonGetInterface(__FdoGetBalloonContext(Fdo),
                                  XENBUS_BALLOON_INTERFACE_VERSION_MAX,
                                  (PINTERFACE)&Fdo->BalloonInterface,
                                  sizeof (Fdo->BalloonInterface));
-    ASSERT(NT_SUCCESS(status));
+    BUG_ON(!NT_SUCCESS(status));
 
 done:
     InitializeMutex(&Fdo->Mutex);
