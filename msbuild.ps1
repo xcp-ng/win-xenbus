@@ -40,8 +40,7 @@ Function Run-MSBuild {
 
 	Invoke-Expression $c
 	if ($LASTEXITCODE -ne 0) {
-		Write-Host -ForegroundColor Red "ERROR: MSBuild failed, code:" $LASTEXITCODE
-		Exit $LASTEXITCODE
+		throw "ERROR: MSBuild failed, code: $LASTEXITCODE"
 	}
 }
 
@@ -117,8 +116,7 @@ Function Run-CodeQL {
 	$b += $database
 	Invoke-Expression $b
 	if ($LASTEXITCODE -ne 0) {
-		Write-Host -ForegroundColor Red "ERROR: CodeQL failed, code:" $LASTEXITCODE
-		Exit $LASTEXITCODE
+		throw "ERROR: CodeQL failed, code: $LASTEXITCODE"
 	}
 	Remove-Item $bat
 
@@ -136,8 +134,7 @@ Function Run-CodeQL {
 
 	Invoke-Expression $c
 	if ($LASTEXITCODE -ne 0) {
-		Write-Host -ForegroundColor Red "ERROR: CodeQL failed, code:" $LASTEXITCODE
-		Exit $LASTEXITCODE
+		throw "ERROR: CodeQL failed, code: $LASTEXITCODE"
 	}
 
 	Copy-Item $sarif -Destination $SolutionPath
