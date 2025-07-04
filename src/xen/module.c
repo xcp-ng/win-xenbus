@@ -330,14 +330,14 @@ fail1:
 XEN_API
 VOID
 ModuleLookup(
-    _In_ ULONG_PTR          Address,
-    _Outptr_result_z_ PSTR  *Name,
-    _Out_ PULONG_PTR        Offset
+    _In_ ULONG_PTR                      Address,
+    _Outptr_result_maybenull_z_ PSTR    *Name,
+    _Out_ PULONG_PTR                    Offset
     )
 {
-    PMODULE_CONTEXT         Context = &ModuleContext;
-    PLIST_ENTRY             ListEntry;
-    KIRQL                   Irql;
+    PMODULE_CONTEXT                     Context = &ModuleContext;
+    PLIST_ENTRY                         ListEntry;
+    KIRQL                               Irql;
 
     *Name = NULL;
     *Offset = 0;

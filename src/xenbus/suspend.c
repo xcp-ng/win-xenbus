@@ -266,7 +266,8 @@ SuspendTrigger(
               "SUSPEND: ====>\n");
 
     SyncCapture(Context, SuspendEarly, SuspendLate);
-    SyncDisableInterrupts(&InterruptIrql);
+    status = SyncDisableInterrupts(&InterruptIrql);
+    _Analysis_assume_(NT_SUCCESS(status));
 
     __SuspendLogTimers("PRE-SUSPEND");
 

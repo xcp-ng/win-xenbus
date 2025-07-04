@@ -602,16 +602,16 @@ LogTeardown(
 
 NTSTATUS
 LogAddDisposition(
-    _In_ LOG_LEVEL              Mask,
-    _In_ VOID                   (*Function)(PVOID, PSTR, ULONG),
-    _In_opt_ PVOID              Argument,
-    _Outptr_ PLOG_DISPOSITION   *Disposition
+    _In_ LOG_LEVEL                              Mask,
+    _In_ VOID                                   (*Function)(PVOID, PSTR, ULONG),
+    _In_opt_ PVOID                              Argument,
+    _Outptr_result_maybenull_ PLOG_DISPOSITION  *Disposition
     )
 {
-    PLOG_CONTEXT                Context = &LogContext;
-    KIRQL                       Irql;
-    ULONG                       Index;
-    NTSTATUS                    status;
+    PLOG_CONTEXT                                Context = &LogContext;
+    KIRQL                                       Irql;
+    ULONG                                       Index;
+    NTSTATUS                                    status;
 
     *Disposition = NULL;
     if (Mask == LOG_LEVEL_NONE)
@@ -653,12 +653,12 @@ fail1:
 
 extern VOID
 LogRemoveDisposition(
-    _In_ PLOG_DISPOSITION   Disposition
+    _In_opt_ PLOG_DISPOSITION   Disposition
     )
 {
-    PLOG_CONTEXT            Context = &LogContext;
-    KIRQL                   Irql;
-    ULONG                   Index;
+    PLOG_CONTEXT                Context = &LogContext;
+    KIRQL                       Irql;
+    ULONG                       Index;
 
     if (Disposition == NULL)
         return;

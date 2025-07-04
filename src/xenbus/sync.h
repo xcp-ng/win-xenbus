@@ -52,9 +52,10 @@ SyncCapture(
     );
 
 extern
+_Must_inspect_result_
 _IRQL_requires_(DISPATCH_LEVEL)
-_IRQL_raises_(HIGH_LEVEL)
-VOID
+_When_(NT_SUCCESS(return), _IRQL_raises_(HIGH_LEVEL))
+NTSTATUS
 SyncDisableInterrupts(
     _At_(*Irql, _IRQL_saves_)
     _Out_ PKIRQL    Irql

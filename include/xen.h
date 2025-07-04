@@ -346,9 +346,9 @@ XenVersionExtra(
 XEN_API
 VOID
 ModuleLookup(
-    _In_ ULONG_PTR          Address,
-    _Outptr_result_z_ PSTR  *Name,
-    _Out_ PULONG_PTR        Offset
+    _In_ ULONG_PTR                      Address,
+    _Outptr_result_maybenull_z_ PSTR    *Name,
+    _Out_ PULONG_PTR                    Offset
     );
 
 // UNPLUG
@@ -447,16 +447,16 @@ typedef struct _LOG_DISPOSITION LOG_DISPOSITION, *PLOG_DISPOSITION;
 XEN_API
 NTSTATUS
 LogAddDisposition(
-    _In_ LOG_LEVEL              Mask,
-    _In_ VOID                   (*Function)(PVOID, PSTR, ULONG),
-    _In_opt_ PVOID              Argument,
-    _Outptr_ PLOG_DISPOSITION   *Disposition
+    _In_ LOG_LEVEL                              Mask,
+    _In_ VOID                                   (*Function)(PVOID, PSTR, ULONG),
+    _In_opt_ PVOID                              Argument,
+    _Outptr_result_maybenull_ PLOG_DISPOSITION  *Disposition
     );
 
 XEN_API
 VOID
 LogRemoveDisposition(
-    _In_ PLOG_DISPOSITION   Disposition
+    _In_opt_ PLOG_DISPOSITION   Disposition
     );
 
 
