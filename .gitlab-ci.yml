@@ -1,0 +1,39 @@
+# Required software:
+#   - Latest PowerShell Core
+#   - git
+#     - Enable Git long paths so that files are cleaned correctly:
+#       git config --system core.longpaths true
+#   - EWDK with EWDK_ROOT set to the mounted EWDK path
+# I also set the following in config.toml to shorten the build path:
+#   builds_dir = "C:/a"
+
+stages:
+  - build
+
+build-job:
+  tags:
+    - windows
+    - ewdk
+  stage: build
+  parallel:
+    matrix:
+      - BUILD_ARCH:
+          # x86 is no longer supported by new WDKs
+          - x64
+        BUILD_TYPE:
+          - checked
+          - free
+  script:
+    - Get-Content $Env:EWDK_ROOT\Version.txt
+    - |
+      Set-Content -Path build.cmd -Value `
+        "call %EWDK_ROOT%\BuildEnv\SetupBuildEnv.cmd",
+        'pwsh.exe -NonInteractive -ExecutionPolicy Bypass -Command ".\build.ps1 -Type $Env:BUILD_TYPE -Arch $Env:BUILD_ARCH"'
+    - cmd.exe /c build.cmd
+  artifacts:
+    name: $CI_PROJECT_NAME
+    paths:
+      - $CI_PROJECT_NAME/
+    when: on_success
+    access: all
+    expire_in: 30 days
