@@ -16,8 +16,4 @@
 		<TargetVersion>Windows10</TargetVersion>
 		<UseDebugLibraries>false</UseDebugLibraries>
 	</PropertyGroup>
-	<PropertyGroup Condition="'$(ConfigurationType)'=='Driver'">
-		<RunCodeAnalysis>true</RunCodeAnalysis>
-		<CodeAnalysisRuleSet>$([System.Environment]::GetEnvironmentVariable("WindowsSdkDir"))CodeAnalysis\DriverRecommendedRules.ruleset</CodeAnalysisRuleSet>
-	</PropertyGroup>
 </Project>

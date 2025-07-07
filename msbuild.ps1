@@ -18,7 +18,8 @@ Function Run-MSBuild {
 		[string]$Configuration,
 		[string]$Platform,
 		[string]$Target = "Build",
-		[string]$Inputs = ""
+		[string]$Inputs = "",
+		[switch]$CodeAnalysis
 	)
 
 	$c = "msbuild.exe"
@@ -29,6 +30,10 @@ Function Run-MSBuild {
 	$c += [string]::Format(" /t:""{0}"" ", $Target)
 	if ($Inputs) {
 		$c += [string]::Format(" /p:Inputs=""{0}"" ", $Inputs)
+	}
+	if ($CodeAnalysis) {
+		$c += "/p:RunCodeAnalysis=true "
+		$c += "/p:EnablePREFast=true "
 	}
 
 	$c += Join-Path -Path $SolutionPath -ChildPath $Name
@@ -57,6 +62,7 @@ Function Run-MSBuildSDV {
 	Run-MSBuild $projpath $project $Configuration $Platform "Build"
 	Run-MSBuild $projpath $project $Configuration $Platform "sdv" "/clean"
 	Run-MSBuild $projpath $project $Configuration $Platform "sdv" "/check:default.sdv /debug"
+	Run-MSBuild $projpath $project $Configuration $Platform "Build" -CodeAnalysis
 	Run-MSBuild $projpath $project $Configuration $Platform "dvl"
 
 	$refine = Join-Path -Path $projpath -ChildPath "refine.sdv"
