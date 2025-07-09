@@ -266,6 +266,7 @@ UnplugSetRequest(
 {
     PUNPLUG_CONTEXT     Context = &UnplugContext;
     HANDLE              UnplugKey;
+    HANDLE              ForceUnplugKey;
     PSTR                ValueName;
     PSTR                EnumName;
     ULONG               Value;
@@ -277,6 +278,7 @@ UnplugSetRequest(
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
     UnplugKey = DriverGetUnplugKey();
+    ForceUnplugKey = DriverGetForceUnplugKey();
 
     switch (Type) {
     case UNPLUG_DISKS:
@@ -293,16 +295,23 @@ UnplugSetRequest(
         ASSERT(FALSE);
     }
 
+    status = RegistryQueryDwordValue(ForceUnplugKey,
+                                     ValueName,
+                                     &Value);
+    if (NT_SUCCESS(status) && Value)
+        goto unplug;
+
     status = RegistryQueryDwordValue(UnplugKey,
                                      ValueName,
                                      &Value);
     if (!NT_SUCCESS(status))
         goto done;
 
-    (VOID) RegistryDeleteValue(UnplugKey, ValueName);
-
     if (Value != 0)
         (VOID) UnplugCheckEnumKey(EnumName, &Value);
+
+unplug:
+    (VOID) RegistryDeleteValue(UnplugKey, ValueName);
 
     Info("%s (%u)\n", ValueName, Value);
 

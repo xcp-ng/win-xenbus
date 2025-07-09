@@ -63,6 +63,7 @@ typedef struct _XEN_DRIVER {
     PLOG_DISPOSITION    QemuDisposition;
     HANDLE              ParametersKey;
     HANDLE              UnplugKey;
+    HANDLE              ForceUnplugKey;
     HANDLE              MemoryKey;
 } XEN_DRIVER, *PXEN_DRIVER;
 
@@ -142,6 +143,30 @@ DriverGetUnplugKey(
     )
 {
     return __DriverGetUnplugKey();
+}
+
+static FORCEINLINE VOID
+__DriverSetForceUnplugKey(
+    _In_opt_ HANDLE Key
+    )
+{
+    Driver.ForceUnplugKey = Key;
+}
+
+static FORCEINLINE HANDLE
+__DriverGetForceUnplugKey(
+    VOID
+    )
+{
+    return Driver.ForceUnplugKey;
+}
+
+HANDLE
+DriverGetForceUnplugKey(
+    VOID
+    )
+{
+    return __DriverGetForceUnplugKey();
 }
 
 static FORCEINLINE VOID
@@ -500,6 +525,7 @@ DllInitialize(
     HANDLE                  ServiceKey;
     HANDLE                  ParametersKey;
     HANDLE                  UnplugKey;
+    HANDLE                  ForceUnplugKey;
     HANDLE                  MemoryKey;
     LOG_LEVEL               LogLevel;
     NTSTATUS                status;
@@ -578,11 +604,20 @@ DllInitialize(
     __DriverSetUnplugKey(UnplugKey);
 
     status = RegistryCreateSubKey(ServiceKey,
+                                  "ForceUnplug",
+                                  REG_OPTION_NON_VOLATILE,
+                                  &ForceUnplugKey);
+    if (!NT_SUCCESS(status))
+        goto fail6;
+
+    __DriverSetForceUnplugKey(ForceUnplugKey);
+
+    status = RegistryCreateSubKey(ServiceKey,
                                   "Memory",
                                   REG_OPTION_VOLATILE,
                                   &MemoryKey);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail7;
 
     __DriverSetMemoryKey(MemoryKey);
 
@@ -590,27 +625,27 @@ DllInitialize(
 
     status = AcpiInitialize();
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail8;
 
     status = SystemInitialize();
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail9;
 
     status = BugCheckInitialize();
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail10;
 
     status = ModuleInitialize();
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail11;
 
     status = ProcessInitialize();
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail12;
 
     status = UnplugInitialize();
     if (!NT_SUCCESS(status))
-        goto fail12;
+        goto fail13;
 
     RegistryCloseKey(ServiceKey);
 
@@ -618,38 +653,44 @@ DllInitialize(
 
     return STATUS_SUCCESS;
 
+fail13:
+    Error("fail13\n");
+
+    ProcessTeardown();
+
 fail12:
     Error("fail12\n");
 
-    ProcessTeardown();
+    ModuleTeardown();
 
 fail11:
     Error("fail11\n");
 
-    ModuleTeardown();
+    BugCheckTeardown();
 
 fail10:
     Error("fail10\n");
 
-    BugCheckTeardown();
+    SystemTeardown();
 
 fail9:
     Error("fail9\n");
 
-    SystemTeardown();
+    AcpiTeardown();
 
 fail8:
     Error("fail8\n");
-
-    AcpiTeardown();
-
-fail7:
-    Error("fail7\n");
 
     HypercallTeardown();
 
     RegistryCloseKey(MemoryKey);
     __DriverSetMemoryKey(NULL);
+
+fail7:
+    Error("fail7\n");
+
+    RegistryCloseKey(ForceUnplugKey);
+    __DriverSetForceUnplugKey(NULL);
 
 fail6:
     Error("fail6\n");
@@ -698,6 +739,7 @@ DllUnload(
     )
 {
     HANDLE  MemoryKey;
+    HANDLE  ForceUnplugKey;
     HANDLE  UnplugKey;
     HANDLE  ParametersKey;
 
@@ -721,6 +763,11 @@ DllUnload(
 
     RegistryCloseKey(MemoryKey);
     __DriverSetMemoryKey(NULL);
+
+    ForceUnplugKey = __DriverGetForceUnplugKey();
+
+    RegistryCloseKey(ForceUnplugKey);
+    __DriverSetForceUnplugKey(NULL);
 
     UnplugKey = __DriverGetUnplugKey();
 
