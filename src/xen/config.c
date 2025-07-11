@@ -152,7 +152,8 @@ __ConfigIsVendorDevicePresent(
     HANDLE      DeviceKey;
     BOOLEAN     Found;
     NTSTATUS    status;
-    PCSTR       VendorDeviceID = "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR "&SUBSYS_C0005853&REV_01";
+    PCSTR       VendorDeviceID = "PCI\\VEN_5853&DEV_" VENDOR_DEVICE_ID_STR
+                                 "&SUBSYS_" VENDOR_DEVICE_ID_STR "5853&REV_01";
 
     status = RegistryOpenSubKey(NULL,
                                 ENUM_PATH,
