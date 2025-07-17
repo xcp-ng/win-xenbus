@@ -72,6 +72,7 @@ EmulatedAddObject(
     _In_ PSTR                           InstanceID,
     _In_opt_ PSTR                       CompatibleIDs,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
+    _In_ LONG                           ForceActivate,
     _Outptr_ PXENFILT_EMULATED_OBJECT   *EmulatedObject
     );
 

@@ -48,6 +48,7 @@ typedef struct _XENFILT_EMULATED_DEVICE_DATA {
     CHAR    DeviceID[MAXNAMELEN];
     CHAR    InstanceID[MAXNAMELEN];
     CHAR    CompatibleID[MAXNAMELEN];
+    LONG    ForceActivate;
 } XENFILT_EMULATED_DEVICE_DATA, *PXENFILT_EMULATED_DEVICE_DATA;
 
 typedef struct _XENFILT_EMULATED_DISK_DATA {
@@ -227,6 +228,7 @@ EmulatedAddObject(
     _In_ PSTR                           InstanceID,
     _In_opt_ PSTR                       CompatibleIDs,
     _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
+    _In_ LONG                           ForceActivate,
     _Outptr_ PXENFILT_EMULATED_OBJECT   *EmulatedObject
     )
 {
@@ -267,6 +269,8 @@ EmulatedAddObject(
         goto fail2;
 
     (*EmulatedObject)->Type = Type;
+    if (Type == XENFILT_EMULATED_OBJECT_TYPE_PCI)
+        (*EmulatedObject)->Data.Device.ForceActivate = ForceActivate;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     InsertTailList(&Context->List, &(*EmulatedObject)->ListEntry);
@@ -305,8 +309,9 @@ EmulatedRemoveObject(
 static BOOLEAN
 EmulatedIsDevicePresent(
     _In_ PINTERFACE             Interface,
-    _In_ PSTR                   DeviceID,
-    _In_opt_ PSTR               InstanceID
+    _In_opt_ PSTR               DeviceID,
+    _In_opt_ PSTR               InstanceID,
+    _Out_opt_ PLONG             IsForceActivated
     )
 {
     PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
@@ -314,24 +319,32 @@ EmulatedIsDevicePresent(
     PLIST_ENTRY                 ListEntry;
 
     Trace("====> (%s %s)\n",
-          DeviceID,
+          (DeviceID != NULL) ? DeviceID : "ACTIVE",
           (InstanceID != NULL) ? InstanceID : "ANY");
+
+    if (IsForceActivated)
+        *IsForceActivated = 0;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
     ListEntry = Context->List.Flink;
     while (ListEntry != &Context->List) {
-        PXENFILT_EMULATED_OBJECT    EmulatedObject;
+        PXENFILT_EMULATED_OBJECT        EmulatedObject;
+        PXENFILT_EMULATED_DEVICE_DATA   Device;
 
         EmulatedObject = CONTAINING_RECORD(ListEntry,
                                            XENFILT_EMULATED_OBJECT,
                                            ListEntry);
+        Device = &EmulatedObject->Data.Device;
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_PCI &&
-            _stricmp(DeviceID, EmulatedObject->Data.Device.DeviceID) == 0 &&
+            ((DeviceID == NULL && Device->ForceActivate > 0) ||
+             (DeviceID != NULL && _stricmp(DeviceID, Device->DeviceID) == 0)) &&
             (InstanceID == NULL ||
-             _stricmp(InstanceID, EmulatedObject->Data.Device.InstanceID) == 0)) {
+             _stricmp(InstanceID, Device->InstanceID) == 0)) {
             Trace("FOUND\n");
+            if (IsForceActivated)
+                *IsForceActivated = Device->ForceActivate;
             break;
         }
 
@@ -343,6 +356,16 @@ EmulatedIsDevicePresent(
     Trace("<====\n");
 
     return (ListEntry != &Context->List) ? TRUE : FALSE;
+}
+
+static BOOLEAN
+EmulatedIsDevicePresentVersion1(
+    _In_ PINTERFACE             Interface,
+    _In_ PSTR                   DeviceID,
+    _In_opt_ PSTR               InstanceID
+    )
+{
+    return EmulatedIsDevicePresent(Interface, DeviceID, InstanceID, NULL);
 }
 
 static BOOLEAN
@@ -434,6 +457,14 @@ static struct _XENFILT_EMULATED_INTERFACE_V2 EmulatedInterfaceVersion2 = {
     { sizeof (struct _XENFILT_EMULATED_INTERFACE_V2), 2, NULL, NULL, NULL },
     EmulatedAcquire,
     EmulatedRelease,
+    EmulatedIsDevicePresentVersion1,
+    EmulatedIsDiskPresent
+};
+
+static struct _XENFILT_EMULATED_INTERFACE_V3 EmulatedInterfaceVersion3 = {
+    { sizeof (struct _XENFILT_EMULATED_INTERFACE_V3), 3, NULL, NULL, NULL },
+    EmulatedAcquire,
+    EmulatedRelease,
     EmulatedIsDevicePresent,
     EmulatedIsDiskPresent
 };
@@ -489,6 +520,23 @@ EmulatedGetInterface(
             break;
 
         *EmulatedInterface = EmulatedInterfaceVersion2;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 3: {
+        struct _XENFILT_EMULATED_INTERFACE_V3   *EmulatedInterface;
+
+        EmulatedInterface = (struct _XENFILT_EMULATED_INTERFACE_V3 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENFILT_EMULATED_INTERFACE_V3))
+            break;
+
+        *EmulatedInterface = EmulatedInterfaceVersion3;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
