@@ -627,7 +627,7 @@ FdoQueryId(
     Buffer = (PWSTR)StatusBlock.Information;
     Length = (ULONG)(wcslen(Buffer) + 1) * sizeof (CHAR);
 
-    *Id = __AllocatePoolWithTag(PagedPool, Length, 'SUB');
+    *Id = __AllocatePoolWithTag(NonPagedPool, Length, 'SUB');
 
     status = STATUS_NO_MEMORY;
     if (*Id == NULL)
