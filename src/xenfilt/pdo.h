@@ -78,11 +78,19 @@ PdoGetDeviceObject(
     _In_ PXENFILT_PDO   Pdo
     );
 
+_On_failure_(_Post_satisfies_(*Precedence == 0))
+extern NTSTATUS
+PdoGetPrecedence(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PULONG        Precedence
+    );
+
 extern NTSTATUS
 PdoCreate(
     _In_ PXENFILT_FDO                   Fdo,
     _In_ PDEVICE_OBJECT                 PhysicalDeviceObject,
-    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
+    _In_ LONG                           ForceActivate
     );
 
 extern VOID
