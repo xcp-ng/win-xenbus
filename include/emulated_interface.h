@@ -62,7 +62,7 @@ typedef VOID
     _In_ PINTERFACE Interface
     );
 
-/*! \typedef XENFILT_EMULATED_IS_DEVICE_PRESENT
+/*! \typedef XENFILT_EMULATED_IS_DEVICE_PRESENT_V1
     \brief Determine whether a given device is present in the VM
 
     \param Interface The interface header
@@ -73,10 +73,32 @@ typedef VOID
     FALSE if it is not
 */
 typedef BOOLEAN
-(*XENFILT_EMULATED_IS_DEVICE_PRESENT)(
+(*XENFILT_EMULATED_IS_DEVICE_PRESENT_V1)(
     _In_ PVOID      Context,
     _In_ PSTR       DeviceID,
     _In_opt_ PSTR   InstanceID
+    );
+
+/*! \typedef XENFILT_EMULATED_IS_DEVICE_PRESENT
+    \brief Determine whether a given device is present in the VM
+
+    \param Interface The interface header
+    \param DeviceID The DeviceID of the device, or NULL to query the force-
+           activated device
+    \param InstanceID The (un-prefixed) InstanceID of the device or
+           NULL to match any device instance
+    \param IsForceActivated Returns 1 if the device was force-activated, -1 if
+           the device was not active and another device was force-activated,
+           and 0 otherwise
+    \return TRUE if the specified device is present in the system or
+            FALSE if it is not
+*/
+typedef BOOLEAN
+(*XENFILT_EMULATED_IS_DEVICE_PRESENT)(
+    _In_ PVOID      Context,
+    _In_opt_ PSTR   DeviceID,
+    _In_opt_ PSTR   InstanceID,
+    _Out_opt_ PLONG IsForceActivated
     );
 
 typedef BOOLEAN
@@ -110,11 +132,11 @@ DEFINE_GUID(GUID_XENFILT_EMULATED_INTERFACE,
     \ingroup interfaces
 */
 struct _XENFILT_EMULATED_INTERFACE_V1 {
-    INTERFACE                           Interface;
-    XENFILT_EMULATED_ACQUIRE            EmulatedAcquire;
-    XENFILT_EMULATED_RELEASE            EmulatedRelease;
-    XENFILT_EMULATED_IS_DEVICE_PRESENT  EmulatedIsDevicePresent;
-    XENFILT_EMULATED_IS_DISK_PRESENT_V1 EmulatedIsDiskPresentVersion1;
+    INTERFACE                               Interface;
+    XENFILT_EMULATED_ACQUIRE                EmulatedAcquire;
+    XENFILT_EMULATED_RELEASE                EmulatedRelease;
+    XENFILT_EMULATED_IS_DEVICE_PRESENT_V1   EmulatedIsDevicePresentVersion1;
+    XENFILT_EMULATED_IS_DISK_PRESENT_V1     EmulatedIsDiskPresentVersion1;
 };
 
 /*! \struct _XENFILT_EMULATED_INTERFACE_V2
@@ -122,6 +144,18 @@ struct _XENFILT_EMULATED_INTERFACE_V1 {
     \ingroup interfaces
 */
 struct _XENFILT_EMULATED_INTERFACE_V2 {
+    INTERFACE                               Interface;
+    XENFILT_EMULATED_ACQUIRE                EmulatedAcquire;
+    XENFILT_EMULATED_RELEASE                EmulatedRelease;
+    XENFILT_EMULATED_IS_DEVICE_PRESENT_V1   EmulatedIsDevicePresentVersion1;
+    XENFILT_EMULATED_IS_DISK_PRESENT        EmulatedIsDiskPresent;
+};
+
+/*! \struct _XENFILT_EMULATED_INTERFACE_V3
+    \brief EMULATED interface version 3
+    \ingroup interfaces
+*/
+struct _XENFILT_EMULATED_INTERFACE_V3 {
     INTERFACE                           Interface;
     XENFILT_EMULATED_ACQUIRE            EmulatedAcquire;
     XENFILT_EMULATED_RELEASE            EmulatedRelease;
@@ -129,7 +163,7 @@ struct _XENFILT_EMULATED_INTERFACE_V2 {
     XENFILT_EMULATED_IS_DISK_PRESENT    EmulatedIsDiskPresent;
 };
 
-typedef struct _XENFILT_EMULATED_INTERFACE_V2 XENFILT_EMULATED_INTERFACE, *PXENFILT_EMULATED_INTERFACE;
+typedef struct _XENFILT_EMULATED_INTERFACE_V3 XENFILT_EMULATED_INTERFACE, *PXENFILT_EMULATED_INTERFACE;
 
 /*! \def XENFILT_EMULATED
     \brief Macro at assist in method invocation
@@ -140,6 +174,6 @@ typedef struct _XENFILT_EMULATED_INTERFACE_V2 XENFILT_EMULATED_INTERFACE, *PXENF
 #endif  // _WINDLL
 
 #define XENFILT_EMULATED_INTERFACE_VERSION_MIN  1
-#define XENFILT_EMULATED_INTERFACE_VERSION_MAX  2
+#define XENFILT_EMULATED_INTERFACE_VERSION_MAX  3
 
 #endif  // _XENFILT_EMULATED_INTERFACE_H
