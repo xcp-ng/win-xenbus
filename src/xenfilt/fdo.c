@@ -404,6 +404,8 @@ FdoEnumerate(
     ULONG                   Count;
     PLIST_ENTRY             ListEntry;
     ULONG                   Index;
+    ULONG                   ActiveIndex;
+    ULONG                   Precedence;
     NTSTATUS                status;
 
     Count = Relations->Count;
@@ -458,11 +460,32 @@ FdoEnumerate(
         ListEntry = Next;
     }
 
+    ActiveIndex = Precedence = 0;
+    for (Index = 0; Index < Count; Index++) {
+        ULONG   ThisPrecedence;
+
+        if (PhysicalDeviceObject[Index] != NULL) {
+            status = PdoGetPrecedence(PhysicalDeviceObject[Index],
+                                      &ThisPrecedence);
+            if (ThisPrecedence > Precedence) {
+                ActiveIndex = Index;
+                Precedence = ThisPrecedence;
+            }
+        }
+    }
+
     // Walk the list and create PDO filters for any new devices
     for (Index = 0; Index < Count; Index++) {
 #pragma warning(suppress:6385)  // Reading invalid data from 'PhysicalDeviceObject'
         if (PhysicalDeviceObject[Index] != NULL) {
-            (VOID) PdoCreate(Fdo, PhysicalDeviceObject[Index], Fdo->Type);
+            LONG    ForceActivate = 0;
+
+            if (Precedence > 0)
+                ForceActivate = Index == ActiveIndex ? 1 : -1;
+            (VOID) PdoCreate(Fdo,
+                             PhysicalDeviceObject[Index],
+                             Fdo->Type,
+                             ForceActivate);
             ObDereferenceObject(PhysicalDeviceObject[Index]);
         }
     }

@@ -249,7 +249,8 @@ __PdoGetFdo(
 
 static NTSTATUS
 PdoSetDeviceInformation(
-    _In_ PXENFILT_PDO   Pdo
+    _In_ PXENFILT_PDO   Pdo,
+    _In_ LONG           ForceActivate
     )
 {
     PXENFILT_DX         Dx = Pdo->Dx;
@@ -265,19 +266,23 @@ PdoSetDeviceInformation(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = DriverGetActive("DeviceID",
-                             &ActiveDeviceID);
-    if (NT_SUCCESS(status)) {
-        Pdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ?
-                      TRUE :
-                      FALSE;
-
-        ExFreePool(ActiveDeviceID);
+    if (ForceActivate) {
+        Pdo->Active = ForceActivate > 0;
     } else {
-        Pdo->Active = FALSE;
+        status = DriverGetActive("DeviceID",
+                                &ActiveDeviceID);
+        if (NT_SUCCESS(status)) {
+            Pdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ?
+                        TRUE :
+                        FALSE;
+
+            ExFreePool(ActiveDeviceID);
+        } else {
+            Pdo->Active = FALSE;
+        }
     }
 
-    if (Pdo->Active) {
+    if (Pdo->Active && !ForceActivate) {
         status = DriverGetActive("InstanceID",
                                  &InstanceID);
         if (!NT_SUCCESS(status))
@@ -1618,11 +1623,59 @@ PdoSuspend(
     UNREFERENCED_PARAMETER(Pdo);
 }
 
+_On_failure_(_Post_satisfies_(*Precedence == 0))
+NTSTATUS
+PdoGetPrecedence(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PULONG        Precedence
+    )
+{
+    PSTR                CompatibleIDs;
+    ULONG               Index;
+    NTSTATUS            status;
+
+    status = DriverQueryId(PhysicalDeviceObject,
+                           BusQueryCompatibleIDs,
+                           &CompatibleIDs);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    Index = 0;
+
+    do {
+        ULONG           Length;
+
+        Length = (ULONG)strlen(&CompatibleIDs[Index]);
+        if (Length == 0)
+            break;
+
+        status = DriverGetPrecedence(&CompatibleIDs[Index],
+                                     Precedence);
+        if (NT_SUCCESS(status))
+            goto done;
+
+        Index += Length + 1;
+    } while (1);
+
+    *Precedence = 0;
+
+done:
+    ExFreePool(CompatibleIDs);
+
+    return STATUS_SUCCESS;
+
+fail1:
+    *Precedence = 0;
+
+    return status;
+}
+
 NTSTATUS
 PdoCreate(
     _In_ PXENFILT_FDO                   Fdo,
     _In_ PDEVICE_OBJECT                 PhysicalDeviceObject,
-    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
+    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
+    _In_ LONG                           ForceActivate
     )
 {
     PDEVICE_OBJECT                      LowerDeviceObject;
@@ -1680,7 +1733,7 @@ PdoCreate(
     Pdo->LowerDeviceObject = LowerDeviceObject;
     Pdo->Type = Type;
 
-    status = PdoSetDeviceInformation(Pdo);
+    status = PdoSetDeviceInformation(Pdo, ForceActivate);
     if (!NT_SUCCESS(status))
         goto fail4;
 

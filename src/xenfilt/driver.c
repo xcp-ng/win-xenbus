@@ -279,6 +279,41 @@ DriverGetActive(
     return __DriverGetActive(Key, Value);
 }
 
+_On_failure_(_Post_satisfies_(*Value == 0))
+NTSTATUS
+DriverGetPrecedence(
+    _In_ PCSTR      Id,
+    _Out_ PULONG    Value
+    )
+{
+    HANDLE          ParametersKey;
+    NTSTATUS        status;
+
+    status = RegistryOpenParametersKey(KEY_READ, &ParametersKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     (PSTR)Id,
+                                     Value);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Info("%s found precedence %04lX\n", Id, *Value);
+
+    RegistryCloseKey(ParametersKey);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    RegistryCloseKey(ParametersKey);
+
+fail1:
+    *Value = 0;
+
+    return status;
+}
+
 static BOOLEAN
 DriverIsActivePresent(
     VOID
