@@ -343,15 +343,22 @@ DriverIsActivePresent(
     VOID
     )
 {
-    PSTR        ActiveDeviceID;
-    BOOLEAN     Present;
-    NTSTATUS    status;
+    PSTR                                ActiveDeviceID;
+    BOOLEAN                             Present;
+    XENBUS_EMULATED_ACTIVATION_STATUS   IsForceActivated;
+    NTSTATUS                            status;
 
     status = XENFILT_EMULATED(Acquire, &Driver.EmulatedInterface);
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    Present = FALSE;
+    Present = XENFILT_EMULATED(IsDevicePresent,
+                               &Driver.EmulatedInterface,
+                               NULL,
+                               NULL,
+                               &IsForceActivated);
+    if (NT_SUCCESS(status) && Present)
+        goto done;
 
     status = __DriverGetActive("DeviceID",
                                &ActiveDeviceID);
@@ -361,14 +368,17 @@ DriverIsActivePresent(
     Present = XENFILT_EMULATED(IsDevicePresent,
                                &Driver.EmulatedInterface,
                                ActiveDeviceID,
-                               NULL);
+                               NULL,
+                               &IsForceActivated);
 
     ExFreePool(ActiveDeviceID);
 
 done:
     XENFILT_EMULATED(Release, &Driver.EmulatedInterface);
 
-    Info("ACTIVE DEVICE %sPRESENT\n", (!Present) ? "NOT " : "");
+    Info("ACTIVE DEVICE %sPRESENT%s\n",
+         (!Present) ? "NOT " : "",
+         IsForceActivated == XENBUS_EMULATED_FORCE_ACTIVATED ? " (FORCED)" : "");
 
     return Present;
 
