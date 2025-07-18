@@ -502,15 +502,12 @@ EvtchnFifoAcquire(
 
     ProcessorCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
-    Index = 0;
-    while (Index < ProcessorCount) {
+    for (Index = 0; Index < ProcessorCount; Index++) {
         unsigned int        vcpu_id;
         PFN_NUMBER          Pfn;
         PHYSICAL_ADDRESS    Address;
 
         status = SystemProcessorVcpuId(Index, &vcpu_id);
-
-        Index++;
 
         if (status == STATUS_NOT_SUPPORTED)
             continue;
