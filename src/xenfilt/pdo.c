@@ -1701,6 +1701,7 @@ PdoCreate(
                                __PdoGetInstanceID(Pdo),
                                CompatibleIDs,
                                __PdoGetType(Pdo),
+                               ForceActivate,
                                &Pdo->EmulatedObject);
     if (!NT_SUCCESS(status))
         goto fail5;
