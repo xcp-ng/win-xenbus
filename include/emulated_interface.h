@@ -79,13 +79,6 @@ typedef BOOLEAN
     _In_opt_ PSTR   InstanceID
     );
 
-typedef BOOLEAN
-(*XENFILT_EMULATED_IS_DISK_PRESENT_V1)(
-    _In_ PVOID  Context,
-    _In_ ULONG  Controller,
-    _In_ ULONG  Target,
-    _In_ ULONG  Lun
-    );
 /*! \typedef XENFILT_EMULATED_IS_DISK_PRESENT
     \brief Determine whether a given emulated disk is present in the VM
 
@@ -104,18 +97,6 @@ typedef BOOLEAN
 // {959027A1-FCCE-4E78-BCF4-637384F499C5}
 DEFINE_GUID(GUID_XENFILT_EMULATED_INTERFACE,
 0x959027a1, 0xfcce, 0x4e78, 0xbc, 0xf4, 0x63, 0x73, 0x84, 0xf4, 0x99, 0xc5);
-
-/*! \struct _XENFILT_EMULATED_INTERFACE_V1
-    \brief EMULATED interface version 1
-    \ingroup interfaces
-*/
-struct _XENFILT_EMULATED_INTERFACE_V1 {
-    INTERFACE                           Interface;
-    XENFILT_EMULATED_ACQUIRE            EmulatedAcquire;
-    XENFILT_EMULATED_RELEASE            EmulatedRelease;
-    XENFILT_EMULATED_IS_DEVICE_PRESENT  EmulatedIsDevicePresent;
-    XENFILT_EMULATED_IS_DISK_PRESENT_V1 EmulatedIsDiskPresentVersion1;
-};
 
 /*! \struct _XENFILT_EMULATED_INTERFACE_V2
     \brief EMULATED interface version 2
@@ -139,7 +120,7 @@ typedef struct _XENFILT_EMULATED_INTERFACE_V2 XENFILT_EMULATED_INTERFACE, *PXENF
 
 #endif  // _WINDLL
 
-#define XENFILT_EMULATED_INTERFACE_VERSION_MIN  1
+#define XENFILT_EMULATED_INTERFACE_VERSION_MIN  2
 #define XENFILT_EMULATED_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENFILT_EMULATED_INTERFACE_H

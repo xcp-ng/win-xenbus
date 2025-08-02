@@ -943,33 +943,6 @@ fail1:
     return status;
 }
 
-static NTSTATUS
-CacheCreateVersion1(
-    _In_ PINTERFACE         Interface,
-    _In_ PCSTR              Name,
-    _In_ ULONG              Size,
-    _In_ ULONG              Reservation,
-    _In_ NTSTATUS           (*Ctor)(PVOID, PVOID),
-    _In_ VOID               (*Dtor)(PVOID, PVOID),
-    _In_ VOID               (*AcquireLock)(PVOID),
-    _In_ VOID               (*ReleaseLock)(PVOID),
-    _In_ PVOID              Argument,
-    _Outptr_ PXENBUS_CACHE  *Cache
-    )
-{
-    return CacheCreate(Interface,
-                       Name,
-                       Size,
-                       Reservation,
-                       0,
-                       Ctor,
-                       Dtor,
-                       AcquireLock,
-                       ReleaseLock,
-                       Argument,
-                       Cache);
-}
-
 static VOID
 CacheDestroy(
     _In_ PINTERFACE         Interface,
@@ -1210,16 +1183,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_CACHE_INTERFACE_V1 CacheInterfaceVersion1 = {
-    { sizeof (struct _XENBUS_CACHE_INTERFACE_V1), 1, NULL, NULL, NULL },
-    CacheAcquire,
-    CacheRelease,
-    CacheCreateVersion1,
-    CacheGet,
-    CachePut,
-    CacheDestroy
-};
-
 static struct _XENBUS_CACHE_INTERFACE_V2 CacheInterfaceVersion2 = {
     { sizeof (struct _XENBUS_CACHE_INTERFACE_V2), 2, NULL, NULL, NULL },
     CacheAcquire,
@@ -1294,23 +1257,6 @@ CacheGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 1: {
-        struct _XENBUS_CACHE_INTERFACE_V1   *CacheInterface;
-
-        CacheInterface = (struct _XENBUS_CACHE_INTERFACE_V1 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_CACHE_INTERFACE_V1))
-            break;
-
-        *CacheInterface = CacheInterfaceVersion1;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 2: {
         struct _XENBUS_CACHE_INTERFACE_V2   *CacheInterface;
 

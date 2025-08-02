@@ -442,18 +442,6 @@ SharedInfoGetTime(
 #undef NS_PER_S
 }
 
-static LARGE_INTEGER
-SharedInfoGetTimeVersion2(
-    _In_ PINTERFACE Interface
-    )
-{
-    LARGE_INTEGER   Time;
-
-    SharedInfoGetTime(Interface, &Time, NULL);
-
-    return Time;
-}
-
 static VOID
 SharedInfoMap(
     _In_ PXENBUS_SHARED_INFO_CONTEXT    Context
@@ -805,18 +793,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_SHARED_INFO_INTERFACE_V2 SharedInfoInterfaceVersion2 = {
-    { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V2), 2, NULL, NULL, NULL },
-    SharedInfoAcquire,
-    SharedInfoRelease,
-    SharedInfoUpcallPending,
-    SharedInfoEvtchnPoll,
-    SharedInfoEvtchnAck,
-    SharedInfoEvtchnMask,
-    SharedInfoEvtchnUnmask,
-    SharedInfoGetTimeVersion2
-};
-
 static struct _XENBUS_SHARED_INFO_INTERFACE_V3 SharedInfoInterfaceVersion3 = {
     { sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V3), 3, NULL, NULL, NULL },
     SharedInfoAcquire,
@@ -899,23 +875,6 @@ SharedInfoGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 2: {
-        struct _XENBUS_SHARED_INFO_INTERFACE_V2 *SharedInfoInterface;
-
-        SharedInfoInterface = (struct _XENBUS_SHARED_INFO_INTERFACE_V2 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_SHARED_INFO_INTERFACE_V2))
-            break;
-
-        *SharedInfoInterface = SharedInfoInterfaceVersion2;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 3: {
         struct _XENBUS_SHARED_INFO_INTERFACE_V3 *SharedInfoInterface;
 

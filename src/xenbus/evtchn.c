@@ -887,16 +887,6 @@ done:
 }
 
 static VOID
-EvtchnUnmaskVersion4(
-    _In_ PINTERFACE             Interface,
-    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
-    _In_ BOOLEAN                InUpcall
-    )
-{
-    EvtchnUnmask(Interface, Channel, InUpcall, TRUE);
-}
-
-static VOID
 EvtchnSend(
     _In_ PINTERFACE             Interface,
     _In_ PXENBUS_EVTCHN_CHANNEL Channel
@@ -910,19 +900,6 @@ EvtchnSend(
 
     if (Channel->Active)
         (VOID) EventChannelSend(Channel->LocalPort);
-}
-
-static VOID
-EvtchnSendVersion1(
-    _In_ PINTERFACE             Interface,
-    _In_ PXENBUS_EVTCHN_CHANNEL Channel
-    )
-{
-    KIRQL                       Irql;
-
-    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
-    EvtchnSend(Interface, Channel);
-    KeLowerIrql(Irql);
 }
 
 static VOID
@@ -1065,23 +1042,6 @@ EvtchnWait(
     KeLowerIrql(Irql);
 
     return status;
-}
-
-static NTSTATUS
-EvtchnWaitVersion5(
-    _In_ PINTERFACE             Interface,
-    _In_ PXENBUS_EVTCHN_CHANNEL Channel,
-    _In_ PLARGE_INTEGER         Timeout
-    )
-{
-    ULONG                       Count;
-
-    Count = EvtchnGetCount(Interface, Channel);
-
-    return EvtchnWait(Interface,
-                      Channel,
-                      Count + 1,
-                      Timeout);
 }
 
 _Function_class_(KSERVICE_ROUTINE)
@@ -1816,64 +1776,6 @@ done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
 
-static struct _XENBUS_EVTCHN_INTERFACE_V5 EvtchnInterfaceVersion5 = {
-    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V5), 5, NULL, NULL, NULL },
-    EvtchnAcquire,
-    EvtchnRelease,
-    EvtchnOpen,
-    EvtchnBind,
-    EvtchnUnmaskVersion4,
-    EvtchnSendVersion1,
-    EvtchnTrigger,
-    EvtchnWaitVersion5,
-    EvtchnGetPort,
-    EvtchnClose,
-};
-
-static struct _XENBUS_EVTCHN_INTERFACE_V6 EvtchnInterfaceVersion6 = {
-    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V6), 6, NULL, NULL, NULL },
-    EvtchnAcquire,
-    EvtchnRelease,
-    EvtchnOpen,
-    EvtchnBind,
-    EvtchnUnmaskVersion4,
-    EvtchnSend,
-    EvtchnTrigger,
-    EvtchnWaitVersion5,
-    EvtchnGetPort,
-    EvtchnClose,
-};
-
-static struct _XENBUS_EVTCHN_INTERFACE_V7 EvtchnInterfaceVersion7 = {
-    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V7), 7, NULL, NULL, NULL },
-    EvtchnAcquire,
-    EvtchnRelease,
-    EvtchnOpen,
-    EvtchnBind,
-    EvtchnUnmaskVersion4,
-    EvtchnSend,
-    EvtchnTrigger,
-    EvtchnGetCount,
-    EvtchnWait,
-    EvtchnGetPort,
-    EvtchnClose,
-};
-
-static struct _XENBUS_EVTCHN_INTERFACE_V8 EvtchnInterfaceVersion8 = {
-    { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V8), 8, NULL, NULL, NULL },
-    EvtchnAcquire,
-    EvtchnRelease,
-    EvtchnOpen,
-    EvtchnBind,
-    EvtchnUnmask,
-    EvtchnSend,
-    EvtchnTrigger,
-    EvtchnGetCount,
-    EvtchnWait,
-    EvtchnGetPort,
-    EvtchnClose,
-};
-
 static struct _XENBUS_EVTCHN_INTERFACE_V9 EvtchnInterfaceVersion9 = {
     { sizeof (struct _XENBUS_EVTCHN_INTERFACE_V9), 9, NULL, NULL, NULL },
     EvtchnAcquire,
@@ -2006,74 +1908,6 @@ EvtchnGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 5: {
-        struct _XENBUS_EVTCHN_INTERFACE_V5  *EvtchnInterface;
-
-        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V5 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V5))
-            break;
-
-        *EvtchnInterface = EvtchnInterfaceVersion5;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
-    case 6: {
-        struct _XENBUS_EVTCHN_INTERFACE_V6  *EvtchnInterface;
-
-        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V6 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V6))
-            break;
-
-        *EvtchnInterface = EvtchnInterfaceVersion6;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
-    case 7: {
-        struct _XENBUS_EVTCHN_INTERFACE_V7  *EvtchnInterface;
-
-        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V7 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V7))
-            break;
-
-        *EvtchnInterface = EvtchnInterfaceVersion7;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
-    case 8: {
-        struct _XENBUS_EVTCHN_INTERFACE_V8  *EvtchnInterface;
-
-        EvtchnInterface = (struct _XENBUS_EVTCHN_INTERFACE_V8 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENBUS_EVTCHN_INTERFACE_V8))
-            break;
-
-        *EvtchnInterface = EvtchnInterfaceVersion8;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 9: {
         struct _XENBUS_EVTCHN_INTERFACE_V9  *EvtchnInterface;
 

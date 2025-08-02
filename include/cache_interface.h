@@ -124,20 +124,6 @@ typedef VOID
     _In_ PVOID  Argument
     );
 
-typedef NTSTATUS
-(*XENBUS_CACHE_CREATE_V1)(
-    _In_ PINTERFACE                 Interface,
-    _In_ PCSTR                      Name,
-    _In_ ULONG                      Size,
-    _In_ ULONG                      Reservation,
-    _In_ XENBUS_CACHE_CTOR          Ctor,
-    _In_ XENBUS_CACHE_DTOR          Dtor,
-    _In_ XENBUS_CACHE_ACQUIRE_LOCK  AcquireLock,
-    _In_ XENBUS_CACHE_RELEASE_LOCK  ReleaseLock,
-    _In_opt_ PVOID                  Argument,
-    _Outptr_ PXENBUS_CACHE          *Cache
-    );
-
 /*! \typedef XENBUS_CACHE_CREATE
     \brief Create a cache of objects of the given \a Size
 
@@ -220,22 +206,8 @@ typedef VOID
 DEFINE_GUID(GUID_XENBUS_CACHE_INTERFACE,
 0xa98dfd78, 0x416a, 0x4949, 0x92, 0xa5, 0xe0, 0x84, 0xf2, 0xf4, 0xb4, 0x4e);
 
-/*! \struct _XENBUS_CACHE_INTERFACE_V1
-    \brief CACHE interface version 1
-    \ingroup interfaces
-*/
-struct _XENBUS_CACHE_INTERFACE_V1 {
-    INTERFACE               Interface;
-    XENBUS_CACHE_ACQUIRE    CacheAcquire;
-    XENBUS_CACHE_RELEASE    CacheRelease;
-    XENBUS_CACHE_CREATE_V1  CacheCreateVersion1;
-    XENBUS_CACHE_GET        CacheGet;
-    XENBUS_CACHE_PUT        CachePut;
-    XENBUS_CACHE_DESTROY    CacheDestroy;
-};
-
 /*! \struct _XENBUS_CACHE_INTERFACE_V2
-    \brief CACHE interface version 1
+    \brief CACHE interface version 2
     \ingroup interfaces
 */
 struct _XENBUS_CACHE_INTERFACE_V2 {
@@ -258,7 +230,7 @@ typedef struct _XENBUS_CACHE_INTERFACE_V2 XENBUS_CACHE_INTERFACE, *PXENBUS_CACHE
 
 #endif  // _WINDLL
 
-#define XENBUS_CACHE_INTERFACE_VERSION_MIN  1
+#define XENBUS_CACHE_INTERFACE_VERSION_MIN  2
 #define XENBUS_CACHE_INTERFACE_VERSION_MAX  2
 
 #endif  // _XENBUS_CACHE_INTERFACE_H

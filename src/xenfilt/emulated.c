@@ -390,26 +390,6 @@ EmulatedIsDiskPresent(
     return (ListEntry != &Context->List) ? TRUE : FALSE;
 }
 
-static BOOLEAN
-EmulatedIsDiskPresentVersion1(
-    _In_ PINTERFACE             Interface,
-    _In_ ULONG                  Controller,
-    _In_ ULONG                  Target,
-    _In_ ULONG                  Lun
-    )
-{
-    UNREFERENCED_PARAMETER(Controller);
-    UNREFERENCED_PARAMETER(Lun);
-
-    //
-    // XENVBD erroneously passes the disk number of the PV disk as
-    // the IDE target number (i.e. in can pass a value > 1), with
-    // Controller always set to 0. So, simply treat the Target argument
-    // as the PV disk number and call the new method.
-    //
-    return EmulatedIsDiskPresent(Interface, Target);
-}
-
 NTSTATUS
 EmulatedAcquire(
     _In_ PINTERFACE             Interface
@@ -449,14 +429,6 @@ EmulatedRelease(
 done:
     KeReleaseSpinLock(&Context->Lock, Irql);
 }
-
-static struct _XENFILT_EMULATED_INTERFACE_V1 EmulatedInterfaceVersion1 = {
-    { sizeof (struct _XENFILT_EMULATED_INTERFACE_V1), 1, NULL, NULL, NULL },
-    EmulatedAcquire,
-    EmulatedRelease,
-    EmulatedIsDevicePresent,
-    EmulatedIsDiskPresentVersion1
-};
 
 static struct _XENFILT_EMULATED_INTERFACE_V2 EmulatedInterfaceVersion2 = {
     { sizeof (struct _XENFILT_EMULATED_INTERFACE_V2), 2, NULL, NULL, NULL },
@@ -507,23 +479,6 @@ EmulatedGetInterface(
     ASSERT(Context != NULL);
 
     switch (Version) {
-    case 1: {
-        struct _XENFILT_EMULATED_INTERFACE_V1   *EmulatedInterface;
-
-        EmulatedInterface = (struct _XENFILT_EMULATED_INTERFACE_V1 *)Interface;
-
-        status = STATUS_BUFFER_OVERFLOW;
-        if (Size < sizeof (struct _XENFILT_EMULATED_INTERFACE_V1))
-            break;
-
-        *EmulatedInterface = EmulatedInterfaceVersion1;
-
-        ASSERT3U(Interface->Version, ==, Version);
-        Interface->Context = Context;
-
-        status = STATUS_SUCCESS;
-        break;
-    }
     case 2: {
         struct _XENFILT_EMULATED_INTERFACE_V2   *EmulatedInterface;
 

@@ -123,11 +123,6 @@ typedef BOOLEAN
     _In_ ULONG      Port
     );
 
-typedef LARGE_INTEGER
-(*XENBUS_SHARED_INFO_GET_TIME_V2)(
-    _In_ PINTERFACE Interface
-    );
-
 /*! \typedef XENBUS_SHARED_INFO_GET_TIME
     \brief Retrieve the wallclock time from the shared info
 
@@ -145,22 +140,6 @@ typedef VOID
 // {7E73C34F-1640-4649-A8F3-263BC930A004}
 DEFINE_GUID(GUID_XENBUS_SHARED_INFO_INTERFACE,
 0x7e73c34f, 0x1640, 0x4649, 0xa8, 0xf3, 0x26, 0x3b, 0xc9, 0x30, 0xa0, 0x4);
-
-/*! \struct _XENBUS_SHARED_INFO_INTERFACE_V2
-    \brief SHARED_INFO interface version 2
-    \ingroup interfaces
-*/
-struct _XENBUS_SHARED_INFO_INTERFACE_V2 {
-    INTERFACE                           Interface;
-    XENBUS_SHARED_INFO_ACQUIRE          SharedInfoAcquire;
-    XENBUS_SHARED_INFO_RELEASE          SharedInfoRelease;
-    XENBUS_SHARED_INFO_UPCALL_PENDING   SharedInfoUpcallPending;
-    XENBUS_SHARED_INFO_EVTCHN_POLL      SharedInfoEvtchnPoll;
-    XENBUS_SHARED_INFO_EVTCHN_ACK       SharedInfoEvtchnAck;
-    XENBUS_SHARED_INFO_EVTCHN_MASK      SharedInfoEvtchnMask;
-    XENBUS_SHARED_INFO_EVTCHN_UNMASK    SharedInfoEvtchnUnmask;
-    XENBUS_SHARED_INFO_GET_TIME_V2      SharedInfoGetTimeVersion2;
-};
 
 /*! \struct _XENBUS_SHARED_INFO_INTERFACE_V3
     \brief SHARED_INFO interface version 3
@@ -205,7 +184,7 @@ typedef struct _XENBUS_SHARED_INFO_INTERFACE_V4 XENBUS_SHARED_INFO_INTERFACE, *P
 
 #endif  // _WINDLL
 
-#define XENBUS_SHARED_INFO_INTERFACE_VERSION_MIN    2
+#define XENBUS_SHARED_INFO_INTERFACE_VERSION_MIN    3
 #define XENBUS_SHARED_INFO_INTERFACE_VERSION_MAX    4
 
 #endif  // _XENBUS_SHARED_INFO_H
