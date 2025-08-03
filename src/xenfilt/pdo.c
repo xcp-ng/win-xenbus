@@ -1706,6 +1706,11 @@ PdoCreate(
     if (!NT_SUCCESS(status))
         goto fail5;
 
+    if (ForceActivate > 0)
+        (VOID) ConfigSetActive(__PdoGetDeviceID(Pdo),
+                               __PdoGetInstanceID(Pdo),
+                               __PdoGetLocationInformation(Pdo));
+
     if (CompatibleIDs)
         ExFreePool(CompatibleIDs);
 
