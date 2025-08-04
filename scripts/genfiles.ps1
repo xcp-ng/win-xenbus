@@ -32,7 +32,9 @@ Function Copy-FileWithReplacements {
 				Write-Host "Skipping Line Containing " $_.Name
 				$line = $null
 			}
-			$line = $line -replace $key, $_.Value
+			if ($null -ne $line) {
+				$line = $line -replace $key, $_.Value
+			}
 		}
 		$line
 	} |
