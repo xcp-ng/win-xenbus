@@ -43,6 +43,11 @@ DriverGetUnplugKey(
     VOID
     );
 
+extern HANDLE
+DriverGetForceUnplugKey(
+    VOID
+    );
+
 extern PMDL
 DriverGetNamedPages(
     _In_ PSTR   Name,
