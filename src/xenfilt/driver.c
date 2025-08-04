@@ -279,6 +279,65 @@ DriverGetActive(
     return __DriverGetActive(Key, Value);
 }
 
+_On_failure_(_Post_satisfies_(*Precedence == 0))
+NTSTATUS
+DriverGetPrecedence(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PULONG        Precedence
+    )
+{
+    HANDLE              ParametersKey;
+    PSTR                CompatibleIDs;
+    ULONG               Index;
+    NTSTATUS            status;
+
+    status = RegistryOpenParametersKey(KEY_READ, &ParametersKey);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = DriverQueryId(PhysicalDeviceObject,
+                           BusQueryCompatibleIDs,
+                           &CompatibleIDs);
+    if (!NT_SUCCESS(status))
+        goto fail2;
+
+    Index = 0;
+
+    do {
+        ULONG   Length = (ULONG)strlen(&CompatibleIDs[Index]);
+
+        if (Length == 0)
+            break;
+
+        status = RegistryQueryDwordValue(ParametersKey,
+                                         &CompatibleIDs[Index],
+                                         Precedence);
+        if (NT_SUCCESS(status))
+            goto done;
+
+        Index += Length + 1;
+    } while (1);
+
+    *Precedence = 0;
+
+done:
+    if (*Precedence)
+        Info("%s found precedence %lX\n", CompatibleIDs, *Precedence);
+
+    ExFreePool(CompatibleIDs);
+    RegistryCloseKey(ParametersKey);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    RegistryCloseKey(ParametersKey);
+
+fail1:
+    *Precedence = 0;
+
+    return status;
+}
+
 static BOOLEAN
 DriverIsActivePresent(
     VOID
