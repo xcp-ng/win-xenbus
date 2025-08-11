@@ -110,7 +110,6 @@ Function Run-CodeQL {
 	$b += " database"
 	$b += " create"
 	$b += " -l=cpp"
-	$b += " -s=src"
 	$b += " -c"
 	$b += ' "' + (Resolve-Path $bat) + '" '
 	$b += $database
