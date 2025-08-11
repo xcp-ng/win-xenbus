@@ -1,0 +1,79 @@
+name: CodeQL
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  analyze:
+    runs-on: windows-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Detect repo
+        id: whoami
+        run: |
+          if ($Env:GITHUB_REPOSITORY -match '^[^/]+/win-(.*)$') {
+            Add-Content -Force $Env:GITHUB_OUTPUT "xen_repo=$($Matches[1])"
+          }
+      - name: Init CodeQL
+        if: ${{steps.whoami.outputs.xen_repo}}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.22.3/codeql-bundle-win64.tar.gz -OutFile $Env:RUNNER_TEMP\codeql-bundle-win64.tar.gz
+          tar -C $Env:RUNNER_TEMP -xf $Env:RUNNER_TEMP\codeql-bundle-win64.tar.gz
+          Add-Content -Force $Env:GITHUB_PATH "$Env:RUNNER_TEMP\codeql"
+      - name: Init suites
+        if: ${{steps.whoami.outputs.xen_repo}}
+        run: |
+          Set-Content -Force windows_driver_recommended.qls @"
+          # Copyright (c) Microsoft Corporation.
+          # Licensed under the MIT license.
+          - description: Recommended and required queries for Windows Drivers.
+          - import: windows-driver-suites/windows_mustfix_partial.qls
+            from: microsoft/windows-drivers
+            version: 1.1.0
+          - import: windows-driver-suites/windows_recommended_partial.qls
+            from: microsoft/windows-drivers
+            version: 1.1.0
+          - queries: .
+            from: codeql/cpp-queries
+            version: 0.9.0
+          - include:
+              query path:
+                - Best Practices/Likely Errors/OffsetUseBeforeRangeCheck.ql
+                - Likely Bugs/Arithmetic/IntMultToLong.ql
+                - Likely Bugs/Arithmetic/SignedOverflowCheck.ql
+                - Likely Bugs/Conversion/CastArrayPointerArithmetic.ql
+                - Likely Bugs/Likely Typos/IncorrectNotOperatorUsage.ql
+                - Likely Bugs/Memory Management/SuspiciousSizeof.ql
+                - Likely Bugs/Memory Management/UninitializedLocal.ql
+                - Security/CWE/CWE-121/UnterminatedVarargsCall.ql
+                - Security/CWE/CWE-457/ConditionallyUninitializedVariable.ql
+                - Security/CWE/CWE-468/IncorrectPointerScaling.ql
+                - Security/CWE/CWE-468/IncorrectPointerScalingVoid.ql
+                - Security/CWE/CWE-468/SuspiciousAddWithSizeof.ql
+                - Security/CWE/CWE-676/PotentiallyDangerousFunction.ql
+                - Security/CWE/CWE-704/WcharCharConversion.ql
+                - Likely Bugs/Arithmetic/BadAdditionOverflowCheck.ql
+                - Likely Bugs/Memory Management/PointerOverflow.ql
+                - Likely Bugs/Underspecified Functions/TooFewArguments.ql
+                - Security/CWE/CWE-190/ComparisonWithWiderType.ql
+                - Security/CWE/CWE-253/HResultBooleanConversion.ql
+          "@
+          codeql pack download microsoft/windows-drivers@1.1.0 codeql/cpp-queries@0.9.0
+      - name: Build driver
+        if: ${{steps.whoami.outputs.xen_repo}}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vsDir = & "${Env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property resolvedInstallationPath
+          Import-Module "$vsDir\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vsDir -SkipAutomaticLocation
+          .\build.ps1 -Type checked -Arch x64 -CodeQL
+      - name: Upload SARIF
+        if: ${{steps.whoami.outputs.xen_repo}}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .\${{steps.whoami.outputs.xen_repo}}
