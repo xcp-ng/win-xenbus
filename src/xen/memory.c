@@ -112,15 +112,17 @@ fail1:
 
 _Check_return_
 XEN_API
-ULONG
+NTSTATUS
 MemoryDecreaseReservation(
     _In_ ULONG                      Order,
     _In_ ULONG                      Count,
-    _In_ PPFN_NUMBER                PfnArray
+    _In_ PPFN_NUMBER                PfnArray,
+    _Out_ PULONG                    Result
     )
 {
     struct xen_memory_reservation   op;
     LONG_PTR                        rc;
+    NTSTATUS                        status;
 
     set_xen_guest_handle(op.extent_start, PfnArray);
     op.extent_order = Order;
@@ -130,20 +132,34 @@ MemoryDecreaseReservation(
 
     rc = MemoryOp(XENMEM_decrease_reservation, &op);
 
-    return (ULONG)rc;
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    *Result = (ULONG)rc;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }
 
 _Check_return_
 XEN_API
-ULONG
+NTSTATUS
 MemoryPopulatePhysmap(
     _In_ ULONG                      Order,
     _In_ ULONG                      Count,
-    _In_ PPFN_NUMBER                PfnArray
+    _In_ PPFN_NUMBER                PfnArray,
+    _Out_ PULONG                    Result
     )
 {
     struct xen_memory_reservation   op;
     LONG_PTR                        rc;
+    NTSTATUS                        status;
 
     set_xen_guest_handle(op.extent_start, PfnArray);
     op.extent_order = Order;
@@ -153,5 +169,17 @@ MemoryPopulatePhysmap(
 
     rc = MemoryOp(XENMEM_populate_physmap, &op);
 
-    return (ULONG)rc;
+    if (rc < 0) {
+        ERRNO_TO_STATUS(-rc, status);
+        goto fail1;
+    }
+
+    *Result = (ULONG)rc;
+
+    return STATUS_SUCCESS;
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
 }

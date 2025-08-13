@@ -369,10 +369,11 @@ done:
     return Count;
 }
 
-static ULONG
+static NTSTATUS
 BalloonPopulatePhysmap(
     _In_ ULONG          Requested,
-    _In_ PPFN_NUMBER    PfnArray
+    _In_ PPFN_NUMBER    PfnArray,
+    _Out_ PULONG        Populated
     )
 {
     LARGE_INTEGER       Start;
@@ -380,12 +381,18 @@ BalloonPopulatePhysmap(
     ULONGLONG           TimeDelta;
     ULONGLONG           Rate;
     ULONG               Count;
+    NTSTATUS            status;
 
     ASSERT(Requested != 0);
 
     KeQuerySystemTime(&Start);
 
-    Count = MemoryPopulatePhysmap(PAGE_ORDER_4K, Requested, PfnArray);
+    status = MemoryPopulatePhysmap(PAGE_ORDER_4K,
+                                   Requested,
+                                   PfnArray,
+                                   &Count);
+    if (!NT_SUCCESS(status))
+        return status;
 
     KeQuerySystemTime(&End);
     TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
@@ -393,7 +400,8 @@ BalloonPopulatePhysmap(
     Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
 
     Info("%u page(s) at %llu pages/s\n", Count, Rate);
-    return Count;
+    *Populated = Count;
+    return STATUS_SUCCESS;
 }
 
 static ULONG
@@ -408,6 +416,7 @@ BalloonPopulatePfnArray(
     ULONGLONG                       Rate;
     ULONG                           Index;
     ULONG                           Count;
+    NTSTATUS                        status;
 
     ASSERT(Requested != 0);
     ASSERT3U(Requested, <=, XENBUS_BALLOON_PFN_ARRAY_SIZE);
@@ -417,7 +426,6 @@ BalloonPopulatePfnArray(
 
     for (Index = 0; Index < Requested; Index++) {
         LONGLONG    Pfn;
-        NTSTATUS    status;
 
         status = XENBUS_RANGE_SET(Pop,
                                   &Context->RangeSetInterface,
@@ -429,12 +437,12 @@ BalloonPopulatePfnArray(
         Context->PfnArray[Index] = (PFN_NUMBER)Pfn;
     }
 
-    Count = BalloonPopulatePhysmap(Requested, Context->PfnArray);
+    status = BalloonPopulatePhysmap(Requested, Context->PfnArray, &Count);
+    if (!NT_SUCCESS(status))
+        Count = 0;
 
     Index = Count;
     while (Index < Requested) {
-        NTSTATUS    status;
-
         status = XENBUS_RANGE_SET(Put,
                                   &Context->RangeSetInterface,
                                   Context->RangeSet,
@@ -456,10 +464,11 @@ BalloonPopulatePfnArray(
     return Count;
 }
 
-static ULONG
+static NTSTATUS
 BalloonDecreaseReservation(
     _In_ ULONG          Requested,
-    _In_ PPFN_NUMBER    PfnArray
+    _In_ PPFN_NUMBER    PfnArray,
+    _Out_ PULONG        Decreased
     )
 {
     LARGE_INTEGER       Start;
@@ -467,12 +476,18 @@ BalloonDecreaseReservation(
     ULONGLONG           TimeDelta;
     ULONGLONG           Rate;
     ULONG               Count;
+    NTSTATUS            status;
 
     ASSERT(Requested != 0);
 
     KeQuerySystemTime(&Start);
 
-    Count = MemoryDecreaseReservation(PAGE_ORDER_4K, Requested, PfnArray);
+    status = MemoryDecreaseReservation(PAGE_ORDER_4K,
+                                       Requested,
+                                       PfnArray,
+                                       &Count);
+    if (!NT_SUCCESS(status))
+        return status;
 
     KeQuerySystemTime(&End);
     TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
@@ -480,7 +495,8 @@ BalloonDecreaseReservation(
     Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
 
     Info("%u page(s) at %llu pages/s\n", Count, Rate);
-    return Count;
+    *Decreased = Count;
+    return STATUS_SUCCESS;
 }
 
 static ULONG
@@ -495,6 +511,7 @@ BalloonReleasePfnArray(
     ULONGLONG                       Rate;
     ULONG                           Index;
     ULONG                           Count;
+    NTSTATUS                        status;
 
     ASSERT3U(Requested, <=, XENBUS_BALLOON_PFN_ARRAY_SIZE);
 
@@ -506,8 +523,6 @@ BalloonReleasePfnArray(
 
     Index = 0;
     while (Index < Requested) {
-        NTSTATUS    status;
-
         status = XENBUS_RANGE_SET(Put,
                                   &Context->RangeSetInterface,
                                   Context->RangeSet,
@@ -520,13 +535,13 @@ BalloonReleasePfnArray(
     }
     Requested = Index;
 
-    Count = BalloonDecreaseReservation(Requested, Context->PfnArray);
+    status = BalloonDecreaseReservation(Requested, Context->PfnArray, &Count);
+    if (!NT_SUCCESS(status))
+        Count = 0;
 
     RtlZeroMemory(Context->PfnArray, Count * sizeof (PFN_NUMBER));
 
     for (Index = Count; Index < Requested; Index++) {
-        NTSTATUS    status;
-
         status = XENBUS_RANGE_SET(Get,
                                   &Context->RangeSetInterface,
                                   Context->RangeSet,

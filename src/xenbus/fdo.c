@@ -3366,6 +3366,7 @@ FdoMemoryHoleAllocate(
 {
     PMDL                Mdl;
     PPFN_NUMBER         PfnArray;
+    ULONG               Decreased;
     NTSTATUS            status;
 
     UNREFERENCED_PARAMETER(Fdo);
@@ -3378,11 +3379,20 @@ FdoMemoryHoleAllocate(
 
     PfnArray = MmGetMdlPfnArray(Mdl);
 
-    status = STATUS_UNSUCCESSFUL;
-    if (MemoryDecreaseReservation(PAGE_ORDER_4K, Count, PfnArray) != Count)
+    status = MemoryDecreaseReservation(PAGE_ORDER_4K,
+                                       Count,
+                                       PfnArray,
+                                       &Decreased);
+    if (!NT_SUCCESS(status))
         goto fail2;
 
+    status = STATUS_UNSUCCESSFUL;
+    if (Decreased != Count)
+        goto fail3;
+
     return Mdl;
+
+fail3:
 
 fail2:
     Error("fail2\n");
@@ -3403,14 +3413,20 @@ FdoMemoryHoleFree(
 {
     ULONG               Count;
     PPFN_NUMBER         PfnArray;
+    ULONG               Populated;
+    NTSTATUS            status;
 
     UNREFERENCED_PARAMETER(Fdo);
 
     Count = Mdl->ByteCount >> PAGE_SHIFT;
     PfnArray = MmGetMdlPfnArray(Mdl);
 
-    if (MemoryPopulatePhysmap(PAGE_ORDER_4K, Count, PfnArray) != Count)
-        BUG("FAILED TO RE-POPULATE HOLE");
+    status = MemoryPopulatePhysmap(PAGE_ORDER_4K,
+                                   Count,
+                                   PfnArray,
+                                   &Populated);
+    BUG_ON(!NT_SUCCESS(status));
+    BUG_ON(Populated != Count);
 
     __FreePages(Mdl);
 }

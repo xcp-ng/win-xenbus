@@ -140,20 +140,22 @@ MemoryRemoveFromPhysmap(
 
 _Check_return_
 XEN_API
-ULONG
+NTSTATUS
 MemoryDecreaseReservation(
-    _In_ ULONG          Order,
-    _In_ ULONG          Count,
-    _In_ PPFN_NUMBER    PfnArray
+    _In_ ULONG                      Order,
+    _In_ ULONG                      Count,
+    _In_ PPFN_NUMBER                PfnArray,
+    _Out_ PULONG                    Result
     );
 
 _Check_return_
 XEN_API
-ULONG
+NTSTATUS
 MemoryPopulatePhysmap(
-    _In_ ULONG          Order,
-    _In_ ULONG          Count,
-    _In_ PPFN_NUMBER    PfnArray
+    _In_ ULONG                      Order,
+    _In_ ULONG                      Count,
+    _In_ PPFN_NUMBER                PfnArray,
+    _Out_ PULONG                    Result
     );
 
 // EVENT CHANNEL
