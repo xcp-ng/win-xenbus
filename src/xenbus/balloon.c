@@ -41,10 +41,7 @@
 #include "assert.h"
 #include "util.h"
 
-#define MDL_SIZE_MAX        ((1 << (RTL_FIELD_SIZE(MDL, Size) * 8)) - 1)
-#define MAX_PAGES_PER_MDL   ((MDL_SIZE_MAX - sizeof(MDL)) / sizeof(PFN_NUMBER))
-
-#define XENBUS_BALLOON_PFN_ARRAY_SIZE  (MAX_PAGES_PER_MDL)
+#define XENBUS_BALLOON_PFN_ARRAY_SIZE  8192
 
 typedef struct _XENBUS_BALLOON_FIST {
     BOOLEAN Inflation;
@@ -58,7 +55,6 @@ struct _XENBUS_BALLOON_CONTEXT {
     PKEVENT                     LowMemoryEvent;
     HANDLE                      LowMemoryHandle;
     ULONGLONG                   Size;
-    MDL                         Mdl;
     PFN_NUMBER                  PfnArray[XENBUS_BALLOON_PFN_ARRAY_SIZE];
     XENBUS_RANGE_SET_INTERFACE  RangeSetInterface;
     PXENBUS_RANGE_SET           RangeSet;
@@ -204,7 +200,6 @@ BalloonAllocatePagesForMdl(
     LARGE_INTEGER   HighAddress;
     LARGE_INTEGER   SkipBytes;
     SIZE_T          TotalBytes;
-    PMDL            Mdl;
 
     ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
 
@@ -213,90 +208,31 @@ BalloonAllocatePagesForMdl(
     SkipBytes.QuadPart = 0ull;
     TotalBytes = (SIZE_T)Count << PAGE_SHIFT;
 
-    Mdl = MmAllocatePagesForMdlEx(LowAddress,
-                                  HighAddress,
-                                  SkipBytes,
-                                  TotalBytes,
-                                  MmCached,
-                                  MM_DONT_ZERO_ALLOCATION |
-                                  MM_ALLOCATE_PREFER_CONTIGUOUS |
-                                  MM_ALLOCATE_AND_HOT_REMOVE);
-    if (Mdl == NULL)
-        goto done;
-
-    ASSERT((Mdl->MdlFlags & (MDL_MAPPED_TO_SYSTEM_VA |
-                             MDL_PARTIAL_HAS_BEEN_MAPPED |
-                             MDL_PARTIAL |
-                             MDL_PARENT_MAPPED_SYSTEM_VA |
-                             MDL_SOURCE_IS_NONPAGED_POOL)) == 0);
-
-done:
-    return Mdl;
+    return MmAllocatePagesForMdlEx(LowAddress,
+                                   HighAddress,
+                                   SkipBytes,
+                                   TotalBytes,
+                                   MmCached,
+                                   MM_DONT_ZERO_ALLOCATION |
+                                   MM_ALLOCATE_PREFER_CONTIGUOUS |
+                                   MM_ALLOCATE_AND_HOT_REMOVE);
 }
 
 static VOID
-BalloonFreePagesFromMdl(
-    _In_ PMDL       Mdl,
-    _In_ BOOLEAN    Check
+BalloonFreePages(
+    _In_ PPFN_NUMBER    Pfn,
+    _In_ ULONG          Count
     )
 {
-    volatile UCHAR  *Mapping;
-    ULONG           Index;
-    PPFN_NUMBER     Pfn;
-    PFN_NUMBER      RangeStart, RangeEnd;
-    NTSTATUS        Status;
-
-    if (!Check)
-        goto done;
-
-    // Sanity check:
-    //
-    // Make sure that things written to the page really do stick.
-    // If the page is still ballooned out at the hypervisor level
-    // then writes will be discarded and reads will give back
-    // all 1s.
-
-    Mapping = MmMapLockedPagesSpecifyCache(Mdl,
-                                           KernelMode,
-                                           MmCached,
-                                           NULL,
-                                           FALSE,
-                                           LowPagePriority);
-    if (Mapping == NULL)
-        // Windows couldn't map the memory. That's kind of sad, but not
-        // really an error: it might be that we're very low on kernel
-        // virtual address space.
-        goto done;
-
-    // Write and read the first byte in each page to make sure it's backed
-    // by RAM.
-    ASSERT((Mdl->ByteCount & (PAGE_SIZE - 1)) == 0);
-
-    for (Index = 0; Index < (Mdl->ByteCount >> PAGE_SHIFT); Index++) {
-        UCHAR   Byte;
-
-        ASSERT3U(Index << PAGE_SHIFT, <, Mdl->ByteCount);
-        Mapping[Index << PAGE_SHIFT] = (UCHAR)Index;
-
-        KeMemoryBarrier();
-        Byte = Mapping[Index << PAGE_SHIFT];
-
-        ASSERT3U(Byte, ==, (UCHAR)Index);
-    }
-
-    MmUnmapLockedPages((PVOID)Mapping, Mdl);
-
-done:
-    Pfn = MmGetMdlPfnArray(Mdl);
+    PFN_NUMBER          RangeStart, RangeEnd;
+    NTSTATUS            Status;
 
     RangeStart = 0;
-    while (RangeStart < (MmGetMdlByteCount(Mdl) >> PAGE_SHIFT)) {
+    while (RangeStart < Count) {
         PHYSICAL_ADDRESS    StartAddress;
         LARGE_INTEGER       NumberOfBytes;
 
-        for (RangeEnd = RangeStart;
-             RangeEnd < (MmGetMdlByteCount(Mdl) >> PAGE_SHIFT);
-             RangeEnd++) {
+        for (RangeEnd = RangeStart; RangeEnd < Count; RangeEnd++) {
             if (Pfn[RangeEnd] != Pfn[RangeStart] + (RangeEnd - RangeStart))
                 break;
         }
@@ -345,8 +281,6 @@ BalloonAllocatePfnArray(
     if (Mdl == NULL)
         goto done;
 
-    ASSERT(Mdl->ByteOffset == 0);
-    ASSERT((Mdl->ByteCount & (PAGE_SIZE - 1)) == 0);
     ASSERT(Mdl->MdlFlags & MDL_PAGES_LOCKED);
 
     Count = Mdl->ByteCount >> PAGE_SHIFT;
@@ -501,8 +435,7 @@ done:
 static ULONG
 BalloonFreePfnArray(
     _In_ PXENBUS_BALLOON_CONTEXT    Context,
-    _In_ ULONG                      Requested,
-    _In_ BOOLEAN                    Check
+    _In_ ULONG                      Requested
     )
 {
     LARGE_INTEGER                   Start;
@@ -511,7 +444,6 @@ BalloonFreePfnArray(
     ULONGLONG                       Rate;
     ULONG                           Index;
     ULONG                           Count;
-    PMDL                            Mdl;
 
     ASSERT3U(Requested, <=, XENBUS_BALLOON_PFN_ARRAY_SIZE);
 
@@ -521,31 +453,11 @@ BalloonFreePfnArray(
     if (Requested == 0)
         goto done;
 
-    ASSERT(IsZeroMemory(&Context->Mdl, sizeof (MDL)));
-
     for (Index = 0; Index < Requested; Index++)
         ASSERT(Context->PfnArray[Index] != 0);
 
-    Mdl = &Context->Mdl;
-
-#pragma warning(push)
-#pragma warning(disable:28145)  // The opaque MDL structure should not be modified by a driver
-
-    Mdl->Next = NULL;
-    Mdl->Size = (SHORT)(sizeof(MDL) + (sizeof(PFN_NUMBER) * Requested));
-    Mdl->MdlFlags = MDL_PAGES_LOCKED | MDL_IO_SPACE;
-    Mdl->Process = NULL;
-    Mdl->MappedSystemVa = NULL;
-    Mdl->StartVa = NULL;
-    Mdl->ByteCount = Requested << PAGE_SHIFT;
-    Mdl->ByteOffset = 0;
-
-#pragma warning(pop)
-
-    BalloonFreePagesFromMdl(Mdl, Check);
+    BalloonFreePages(Context->PfnArray, Requested);
     Count = Requested;
-
-    RtlZeroMemory(&Context->Mdl, sizeof (MDL));
 
     RtlZeroMemory(Context->PfnArray, Count * sizeof (PFN_NUMBER));
 
@@ -612,7 +524,7 @@ BalloonDeflate(
         if (Populated < ThisTime)
             status = STATUS_RETRY;
 
-        Freed = BalloonFreePfnArray(Context, Populated, TRUE);
+        Freed = BalloonFreePfnArray(Context, Populated);
         ASSERT(Freed == Populated);
 
         Count += Freed;
@@ -675,7 +587,7 @@ BalloonInflate(
                           &(Context->PfnArray[Released]),
                           (Allocated - Released) * sizeof (PFN_NUMBER));
 
-            Freed = BalloonFreePfnArray(Context, Allocated - Released, FALSE);
+            Freed = BalloonFreePfnArray(Context, Allocated - Released);
             ASSERT3U(Freed, ==, Allocated - Released);
         }
 
