@@ -299,7 +299,7 @@ done:
     Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
     *Slow = (Rate < XENBUS_BALLOON_MIN_PAGES_PER_S) ? TRUE : FALSE;
 
-    Info("%u page(s) at %llu pages/s\n", Count, Rate);
+    Trace("%u page(s) at %llu pages/s\n", Count, Rate);
     return Count;
 }
 
@@ -362,7 +362,7 @@ BalloonPopulatePfnArray(
 
     Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
 
-    Info("%u page(s) at %llu pages/s\n", Count, Rate);
+    Trace("%u page(s) at %llu pages/s\n", Count, Rate);
     return Count;
 }
 
@@ -428,7 +428,7 @@ done:
 
     Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
 
-    Info("%u page(s) at %llu pages/s\n", Count, Rate);
+    Trace("%u page(s) at %llu pages/s\n", Count, Rate);
     return Count;
 }
 
@@ -469,7 +469,7 @@ done:
 
     Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
 
-    Info("%u page(s) at %llu pages/s\n", Count, Rate);
+    Trace("%u page(s) at %llu pages/s\n", Count, Rate);
     return Count;
 }
 
