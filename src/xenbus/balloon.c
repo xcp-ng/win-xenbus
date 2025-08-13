@@ -369,41 +369,6 @@ done:
     return Count;
 }
 
-static NTSTATUS
-BalloonPopulatePhysmap(
-    _In_ ULONG          Requested,
-    _In_ PPFN_NUMBER    PfnArray,
-    _Out_ PULONG        Populated
-    )
-{
-    LARGE_INTEGER       Start;
-    LARGE_INTEGER       End;
-    ULONGLONG           TimeDelta;
-    ULONGLONG           Rate;
-    ULONG               Count;
-    NTSTATUS            status;
-
-    ASSERT(Requested != 0);
-
-    KeQuerySystemTime(&Start);
-
-    status = MemoryPopulatePhysmap(PAGE_ORDER_4K,
-                                   Requested,
-                                   PfnArray,
-                                   &Count);
-    if (!NT_SUCCESS(status))
-        return status;
-
-    KeQuerySystemTime(&End);
-    TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
-
-    Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
-
-    Info("%u page(s) at %llu pages/s\n", Count, Rate);
-    *Populated = Count;
-    return STATUS_SUCCESS;
-}
-
 static ULONG
 BalloonPopulatePfnArray(
     _In_ PXENBUS_BALLOON_CONTEXT    Context,
@@ -437,7 +402,10 @@ BalloonPopulatePfnArray(
         Context->PfnArray[Index] = (PFN_NUMBER)Pfn;
     }
 
-    status = BalloonPopulatePhysmap(Requested, Context->PfnArray, &Count);
+    status = MemoryPopulatePhysmap(PAGE_ORDER_4K,
+                                   Requested,
+                                   Context->PfnArray,
+                                   &Count);
     if (!NT_SUCCESS(status))
         Count = 0;
 
@@ -462,41 +430,6 @@ BalloonPopulatePfnArray(
 
     Info("%u page(s) at %llu pages/s\n", Count, Rate);
     return Count;
-}
-
-static NTSTATUS
-BalloonDecreaseReservation(
-    _In_ ULONG          Requested,
-    _In_ PPFN_NUMBER    PfnArray,
-    _Out_ PULONG        Decreased
-    )
-{
-    LARGE_INTEGER       Start;
-    LARGE_INTEGER       End;
-    ULONGLONG           TimeDelta;
-    ULONGLONG           Rate;
-    ULONG               Count;
-    NTSTATUS            status;
-
-    ASSERT(Requested != 0);
-
-    KeQuerySystemTime(&Start);
-
-    status = MemoryDecreaseReservation(PAGE_ORDER_4K,
-                                       Requested,
-                                       PfnArray,
-                                       &Count);
-    if (!NT_SUCCESS(status))
-        return status;
-
-    KeQuerySystemTime(&End);
-    TimeDelta = __max(((End.QuadPart - Start.QuadPart) / 10000ull), 1);
-
-    Rate = (ULONGLONG)(Count * 1000) / TimeDelta;
-
-    Info("%u page(s) at %llu pages/s\n", Count, Rate);
-    *Decreased = Count;
-    return STATUS_SUCCESS;
 }
 
 static ULONG
@@ -535,7 +468,10 @@ BalloonReleasePfnArray(
     }
     Requested = Index;
 
-    status = BalloonDecreaseReservation(Requested, Context->PfnArray, &Count);
+    status = MemoryDecreaseReservation(PAGE_ORDER_4K,
+                                       Requested,
+                                       Context->PfnArray,
+                                       &Count);
     if (!NT_SUCCESS(status))
         Count = 0;
 
