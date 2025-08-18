@@ -143,6 +143,13 @@ RegistryQueryDwordValue(
     );
 
 extern NTSTATUS
+RegistryQueryQwordValue(
+    _In_ HANDLE         Key,
+    _In_ PSTR           Name,
+    _Out_ PULONGLONG    Value
+    );
+
+extern NTSTATUS
 RegistryUpdateDwordValue(
     _In_ HANDLE         Key,
     _In_ PSTR           Name,

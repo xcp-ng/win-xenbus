@@ -854,6 +854,76 @@ fail1:
 }
 
 NTSTATUS
+RegistryQueryQwordValue(
+    _In_ HANDLE                     Key,
+    _In_ PSTR                       Name,
+    _Out_ PULONGLONG                Value
+    )
+{
+    ANSI_STRING                     Ansi;
+    UNICODE_STRING                  Unicode;
+    PKEY_VALUE_PARTIAL_INFORMATION  Partial;
+    ULONG                           Size;
+    NTSTATUS                        status;
+
+    RtlInitAnsiString(&Ansi, Name);
+
+    status = RtlAnsiStringToUnicodeString(&Unicode, &Ansi, TRUE);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
+    status = ZwQueryValueKey(Key,
+                             &Unicode,
+                             KeyValuePartialInformation,
+                             NULL,
+                             0,
+                             &Size);
+    if (!NT_SUCCESS(status) &&
+        status != STATUS_BUFFER_OVERFLOW &&
+        status != STATUS_BUFFER_TOO_SMALL)
+        goto fail2;
+
+    Partial = __RegistryAllocate(Size);
+
+    status = STATUS_NO_MEMORY;
+    if (Partial == NULL)
+        goto fail3;
+
+    status = ZwQueryValueKey(Key,
+                             &Unicode,
+                             KeyValuePartialInformation,
+                             Partial,
+                             Size,
+                             &Size);
+    if (!NT_SUCCESS(status))
+        goto fail4;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (Partial->Type != REG_QWORD ||
+        Partial->DataLength != sizeof (ULONGLONG))
+        goto fail5;
+
+    *Value = *(PULONGLONG)Partial->Data;
+
+    __RegistryFree(Partial);
+
+    RtlFreeUnicodeString(&Unicode);
+
+    return STATUS_SUCCESS;
+
+fail5:
+fail4:
+    __RegistryFree(Partial);
+
+fail3:
+fail2:
+    RtlFreeUnicodeString(&Unicode);
+
+fail1:
+    return status;
+}
+
+NTSTATUS
 RegistryUpdateDwordValue(
     _In_ HANDLE                     Key,
     _In_ PSTR                       Name,
