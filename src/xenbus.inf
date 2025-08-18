@@ -114,6 +114,8 @@ ErrorControl=%SERVICE_ERROR_NORMAL%
 ServiceBinary=%12%\xenfilt.sys 
 LoadOrderGroup="Boot Bus Extender"
 AddReg = XenFilt_Parameters
+; Attention: XenFilt_Filters should only be used with forced-activation Xenbus
+AddReg = XenFilt_Filters  ; @FORCE_ACTIVATE@
 
 [XenFilt_Parameters]
 HKR,"Parameters",,0x00000010
@@ -122,6 +124,10 @@ HKR,"Parameters","Internal_IDE_Channel",0x00000000,"IDE"
 HKR,"Parameters\Precedence","PCI\VEN_5853&DEV_0001",0x00010001,0x0001  ; @FORCE_ACTIVATE@
 HKR,"Parameters\Precedence","PCI\VEN_5853&DEV_0002",0x00010001,0x0002  ; @FORCE_ACTIVATE@
 HKR,"Parameters\Precedence","PCI\VEN_5853&DEV_@VENDOR_DEVICE_ID@",0x00010001,0x@VENDOR_DEVICE_ID@  ; @FORCE_ACTIVATE@
+
+[XenFilt_Filters]  ; @FORCE_ACTIVATE@
+HKLM,%SystemClassKey%,"UpperFilters",0x00010008,"XENFILT"  ; @FORCE_ACTIVATE@
+HKLM,%HDCClassKey%,"UpperFilters",0x00010008,"XENFILT"  ; @FORCE_ACTIVATE@
 
 [Monitor_Service]
 DisplayName=%MonitorName%
@@ -156,6 +162,8 @@ MonitorName="@PRODUCT_NAME@ PV Driver Monitor"
 MonitorDesc="Provides support for @PRODUCT_NAME@ PV drivers"
 RequestKey="SYSTEM\CurrentControlSet\Services\xenbus_monitor\Request"
 UnplugKey="SYSTEM\CurrentControlSet\Services\XEN\Unplug"
+SystemClassKey="SYSTEM\CurrentControlSet\Control\Class\{4d36e97d-e325-11ce-bfc1-08002be10318}"
+HDCClassKey="SYSTEM\CurrentControlSet\Control\Class\{4d36e96a-e325-11ce-bfc1-08002be10318}"
 DialogTitle="@PRODUCT_NAME@"
 DialogText="needs to restart the system to complete installation."
 DialogQuestion="Press 'Yes' to restart the system now or 'No' if you plan to restart the system later."
