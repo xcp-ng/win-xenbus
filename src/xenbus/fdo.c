@@ -48,6 +48,7 @@
 #include "thread.h"
 #include "high.h"
 #include "mutex.h"
+#include "emulated_interface.h"
 #include "shared_info.h"
 #include "evtchn.h"
 #include "debug.h"
@@ -133,6 +134,8 @@ struct _XENBUS_FDO {
 
     PCM_PARTIAL_RESOURCE_LIST       RawResourceList;
     PCM_PARTIAL_RESOURCE_LIST       TranslatedResourceList;
+
+    XENFILT_EMULATED_INTERFACE      EmulatedInterface;
 
     BOOLEAN                         Active;
 
@@ -739,14 +742,16 @@ fail1:
 
 static NTSTATUS
 FdoSetActive(
-    _In_ PXENBUS_FDO    Fdo
+    _In_ PXENBUS_FDO                    Fdo
     )
 {
-    PSTR                DeviceID;
-    PSTR                InstanceID;
-    PSTR                ActiveDeviceID;
-    PSTR                LocationInformation;
-    NTSTATUS            status;
+    PSTR                                DeviceID;
+    PSTR                                InstanceID;
+    PSTR                                ActiveDeviceID;
+    PSTR                                LocationInformation;
+    BOOLEAN                             Present;
+    XENBUS_EMULATED_ACTIVATION_STATUS   IsForceActivated;
+    NTSTATUS                            status;
 
     status = FdoQueryId(Fdo,
                         BusQueryDeviceID,
@@ -766,6 +771,34 @@ FdoSetActive(
     if (!NT_SUCCESS(status))
         goto fail3;
 
+    if (Fdo->EmulatedInterface.Interface.Context == NULL)
+        goto fallback;
+
+    status = XENFILT_EMULATED(Acquire, &Fdo->EmulatedInterface);
+    if (!NT_SUCCESS(status))
+        goto fallback;
+
+    Present = XENFILT_EMULATED(IsDevicePresent,
+                               &Fdo->EmulatedInterface,
+                               DeviceID,
+                               NULL,
+                               &IsForceActivated);
+    BUG_ON(!Present);
+
+    XENFILT_EMULATED(Release, &Fdo->EmulatedInterface);
+
+    if (IsForceActivated == XENBUS_EMULATED_ACTIVATE_NEUTRAL)
+        goto fallback;
+
+    Fdo->Active = IsForceActivated == XENBUS_EMULATED_FORCE_ACTIVATED;
+    Info("FDO %s force %sactivated\n", DeviceID, Fdo->Active ? "" : "de");
+
+    if (Fdo->Active)
+        (VOID) ConfigSetActive(DeviceID, InstanceID, LocationInformation);
+
+    goto done;
+
+fallback:
     status = ConfigGetActive("DeviceID", &ActiveDeviceID);
     if (NT_SUCCESS(status)) {
         Fdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ? TRUE : FALSE;
@@ -780,6 +813,7 @@ FdoSetActive(
             Fdo->Active = TRUE;
     }
 
+done:
     ExFreePool(LocationInformation);
     ExFreePool(InstanceID);
     ExFreePool(DeviceID);
@@ -5838,9 +5872,18 @@ FdoCreate(
 
     __FdoSetName(Fdo);
 
-    status = FdoSetActive(Fdo);
+    status = FDO_QUERY_INTERFACE(Fdo,
+                                 XENFILT,
+                                 EMULATED,
+                                 (PINTERFACE)&Fdo->EmulatedInterface,
+                                 sizeof (Fdo->EmulatedInterface),
+                                 TRUE);
     if (!NT_SUCCESS(status))
         goto fail9;
+
+    status = FdoSetActive(Fdo);
+    if (!NT_SUCCESS(status))
+        goto fail10;
 
     if (!__FdoIsActive(Fdo))
         goto done;
@@ -5857,47 +5900,47 @@ FdoCreate(
 
     status = DebugInitialize(Fdo, &Fdo->DebugContext);
     if (!NT_SUCCESS(status))
-        goto fail10;
+        goto fail11;
 
     status = SuspendInitialize(Fdo, &Fdo->SuspendContext);
     if (!NT_SUCCESS(status))
-        goto fail11;
+        goto fail12;
 
     status = SharedInfoInitialize(Fdo, &Fdo->SharedInfoContext);
     if (!NT_SUCCESS(status))
-        goto fail12;
+        goto fail13;
 
     status = EvtchnInitialize(Fdo, &Fdo->EvtchnContext);
     if (!NT_SUCCESS(status))
-        goto fail13;
+        goto fail14;
 
     status = RangeSetInitialize(Fdo, &Fdo->RangeSetContext);
     if (!NT_SUCCESS(status))
-        goto fail14;
+        goto fail15;
 
     status = CacheInitialize(Fdo, &Fdo->CacheContext);
     if (!NT_SUCCESS(status))
-        goto fail15;
+        goto fail16;
 
     status = GnttabInitialize(Fdo, &Fdo->GnttabContext);
     if (!NT_SUCCESS(status))
-        goto fail16;
+        goto fail17;
 
     status = StoreInitialize(Fdo, &Fdo->StoreContext);
     if (!NT_SUCCESS(status))
-        goto fail17;
+        goto fail18;
 
     status = ConsoleInitialize(Fdo, &Fdo->ConsoleContext);
     if (!NT_SUCCESS(status))
-        goto fail18;
+        goto fail19;
 
     status = UnplugInitialize(Fdo, &Fdo->UnplugContext);
     if (!NT_SUCCESS(status))
-        goto fail19;
+        goto fail20;
 
     status = FdoBalloonInitialize(Fdo);
     if (!NT_SUCCESS(status))
-        goto fail20;
+        goto fail21;
 
     status = DebugGetInterface(__FdoGetDebugContext(Fdo),
                                XENBUS_DEBUG_INTERFACE_VERSION_MAX,
@@ -5966,68 +6009,68 @@ done:
 
     return STATUS_SUCCESS;
 
-fail20:
-    Error("fail20\n");
+fail21:
+    Error("fail21\n");
 
     UnplugTeardown(Fdo->UnplugContext);
     Fdo->UnplugContext = NULL;
 
-fail19:
-    Error("fail19\n");
+fail20:
+    Error("fail20\n");
 
     ConsoleTeardown(Fdo->ConsoleContext);
     Fdo->ConsoleContext = NULL;
 
-fail18:
-    Error("fail18\n");
+fail19:
+    Error("fail19\n");
 
     StoreTeardown(Fdo->StoreContext);
     Fdo->StoreContext = NULL;
 
-fail17:
-    Error("fail17\n");
+fail18:
+    Error("fail18\n");
 
     GnttabTeardown(Fdo->GnttabContext);
     Fdo->GnttabContext = NULL;
 
-fail16:
-    Error("fail16\n");
+fail17:
+    Error("fail17\n");
 
     CacheTeardown(Fdo->CacheContext);
     Fdo->CacheContext = NULL;
 
-fail15:
-    Error("fail15\n");
+fail16:
+    Error("fail16\n");
 
     RangeSetTeardown(Fdo->RangeSetContext);
     Fdo->RangeSetContext = NULL;
 
-fail14:
-    Error("fail14\n");
+fail15:
+    Error("fail15\n");
 
     EvtchnTeardown(Fdo->EvtchnContext);
     Fdo->EvtchnContext = NULL;
 
-fail13:
-    Error("fail13\n");
+fail14:
+    Error("fail14\n");
 
     SharedInfoTeardown(Fdo->SharedInfoContext);
     Fdo->SharedInfoContext = NULL;
 
-fail12:
-    Error("fail12\n");
+fail13:
+    Error("fail13\n");
 
     SuspendTeardown(Fdo->SuspendContext);
     Fdo->SuspendContext = NULL;
 
-fail11:
-    Error("fail11\n");
+fail12:
+    Error("fail12\n");
 
     DebugTeardown(Fdo->DebugContext);
     Fdo->DebugContext = NULL;
 
-fail10:
-    Error("fail10\n");
+fail11:
+    Error("fail11\n");
 
     Fdo->UseMemoryHole = 0;
 
@@ -6036,6 +6079,12 @@ fail10:
     // clear the FDO flag.
     //
     Fdo->Active = FALSE;
+
+fail10:
+    Error("fail10\n");
+
+    RtlZeroMemory(&Fdo->EmulatedInterface,
+                  sizeof (Fdo->EmulatedInterface));
 
 fail9:
     Error("fail9\n");
@@ -6174,6 +6223,9 @@ FdoDestroy(
 
         FdoClearActive(Fdo);
     }
+
+    RtlZeroMemory(&Fdo->EmulatedInterface,
+                  sizeof (Fdo->EmulatedInterface));
 
     RtlZeroMemory(Fdo->VendorName, MAXNAMELEN);
 
