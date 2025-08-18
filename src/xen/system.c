@@ -1183,7 +1183,8 @@ SystemGetTimeInformation(
     PSYSTEM_CONTEXT Context = &SystemContext;
     UNICODE_STRING  Unicode;
     HANDLE          Key;
-    ULONG           RealTimeIsUniversal;
+    ULONG           ValueDword;
+    ULONGLONG       ValueQword;
     NTSTATUS        status;
 
     RtlInitUnicodeString(&Unicode, L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation");
@@ -1192,27 +1193,30 @@ SystemGetTimeInformation(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = RegistryQueryDwordValue(Key, "RealTimeIsUniversal",
-                                     &RealTimeIsUniversal);
-    if (!NT_SUCCESS(status)) {
-        if (status != STATUS_OBJECT_NAME_NOT_FOUND)
-            goto fail2;
-
-        RealTimeIsUniversal = 0;
+    status = RegistryQueryDwordValue(Key, "RealTimeIsUniversal", &ValueDword);
+    if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
+        Context->RealTimeIsUniversal = FALSE;
+        goto done;
+    } else if (NT_SUCCESS(status)) {
+        Context->RealTimeIsUniversal = !!ValueDword;
+        goto done;
     }
 
-    Context->RealTimeIsUniversal = RealTimeIsUniversal ? TRUE : FALSE;
+    status = RegistryQueryQwordValue(Key, "RealTimeIsUniversal", &ValueQword);
+    if (NT_SUCCESS(status)) {
+        Context->RealTimeIsUniversal = !!ValueQword;
+        goto done;
+    }
 
+    status = STATUS_UNSUCCESSFUL;
+    Context->RealTimeIsUniversal = FALSE;
+
+done:
     Info("%s\n", Context->RealTimeIsUniversal ? "TRUE" : "FALSE");
 
     RegistryCloseKey(Key);
 
-    return STATUS_SUCCESS;
-
-fail2:
-    Error("fail2\n");
-
-    RegistryCloseKey(Key);
+    return status;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1318,18 +1322,15 @@ SystemInitialize(
     if (!NT_SUCCESS(status))
         goto fail8;
 
-    status = SystemGetTimeInformation();
+    status = SystemCheckProcessors();
     if (!NT_SUCCESS(status))
         goto fail9;
 
-    status = SystemCheckProcessors();
+    status = SystemGetTimeInformation();
     if (!NT_SUCCESS(status))
-        goto fail10;
+        Error("Cannot read RealTimeIsUniversal (%08x)\n", status);
 
     return STATUS_SUCCESS;
-
-fail10:
-    Error("fail10\n");
 
 fail9:
     Error("fail9\n");
