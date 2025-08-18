@@ -67,12 +67,13 @@ EmulatedTeardown(
 
 extern NTSTATUS
 EmulatedAddObject(
-    _In_ PXENFILT_EMULATED_CONTEXT      Context,
-    _In_ PSTR                           DeviceID,
-    _In_ PSTR                           InstanceID,
-    _In_opt_ PSTR                       CompatibleIDs,
-    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
-    _Outptr_ PXENFILT_EMULATED_OBJECT   *EmulatedObject
+    _In_ PXENFILT_EMULATED_CONTEXT          Context,
+    _In_ PSTR                               DeviceID,
+    _In_ PSTR                               InstanceID,
+    _In_opt_ PSTR                           CompatibleIDs,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE       Type,
+    _In_ XENBUS_EMULATED_ACTIVATION_STATUS  ForceActivate,
+    _Outptr_ PXENFILT_EMULATED_OBJECT       *EmulatedObject
     );
 
 extern VOID

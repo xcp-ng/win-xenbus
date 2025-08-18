@@ -478,13 +478,15 @@ FdoEnumerate(
     for (Index = 0; Index < Count; Index++) {
 #pragma warning(suppress:6385)  // Reading invalid data from 'PhysicalDeviceObject'
         if (PhysicalDeviceObject[Index] != NULL) {
-            XENBUS_EMULATED_ACTIVATION_STATUS   ForceActivate =
-                                                XENBUS_EMULATED_ACTIVATE_NEUTRAL;
+            XENBUS_EMULATED_ACTIVATION_STATUS   ForceActivate;
 
             if (Precedence > 0)
                 ForceActivate = Index == ActiveIndex ?
                                 XENBUS_EMULATED_FORCE_ACTIVATED :
                                 XENBUS_EMULATED_FORCE_DEACTIVATED;
+            else
+                ForceActivate = XENBUS_EMULATED_ACTIVATE_NEUTRAL;
+
             (VOID) PdoCreate(Fdo,
                              PhysicalDeviceObject[Index],
                              Fdo->Type,

@@ -45,9 +45,10 @@
 #define MAXNAMELEN  128
 
 typedef struct _XENFILT_EMULATED_DEVICE_DATA {
-    CHAR    DeviceID[MAXNAMELEN];
-    CHAR    InstanceID[MAXNAMELEN];
-    CHAR    CompatibleID[MAXNAMELEN];
+    CHAR                                DeviceID[MAXNAMELEN];
+    CHAR                                InstanceID[MAXNAMELEN];
+    CHAR                                CompatibleID[MAXNAMELEN];
+    XENBUS_EMULATED_ACTIVATION_STATUS   ForceActivate;
 } XENFILT_EMULATED_DEVICE_DATA, *PXENFILT_EMULATED_DEVICE_DATA;
 
 typedef struct _XENFILT_EMULATED_DISK_DATA {
@@ -222,16 +223,17 @@ fail1:
 
 NTSTATUS
 EmulatedAddObject(
-    _In_ PXENFILT_EMULATED_CONTEXT      Context,
-    _In_ PSTR                           DeviceID,
-    _In_ PSTR                           InstanceID,
-    _In_opt_ PSTR                       CompatibleIDs,
-    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type,
-    _Outptr_ PXENFILT_EMULATED_OBJECT   *EmulatedObject
+    _In_ PXENFILT_EMULATED_CONTEXT          Context,
+    _In_ PSTR                               DeviceID,
+    _In_ PSTR                               InstanceID,
+    _In_opt_ PSTR                           CompatibleIDs,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE       Type,
+    _In_ XENBUS_EMULATED_ACTIVATION_STATUS  ForceActivate,
+    _Outptr_ PXENFILT_EMULATED_OBJECT       *EmulatedObject
     )
 {
-    KIRQL                               Irql;
-    NTSTATUS                            status;
+    KIRQL                                   Irql;
+    NTSTATUS                                status;
 
     Trace("====>\n");
 
@@ -267,6 +269,8 @@ EmulatedAddObject(
         goto fail2;
 
     (*EmulatedObject)->Type = Type;
+    if (Type == XENFILT_EMULATED_OBJECT_TYPE_PCI)
+        (*EmulatedObject)->Data.Device.ForceActivate = ForceActivate;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
     InsertTailList(&Context->List, &(*EmulatedObject)->ListEntry);
@@ -302,36 +306,66 @@ EmulatedRemoveObject(
     __EmulatedFree(EmulatedObject);
 }
 
-static BOOLEAN
-EmulatedIsDevicePresent(
-    _In_ PINTERFACE             Interface,
-    _In_ PSTR                   DeviceID,
-    _In_opt_ PSTR               InstanceID
+static inline BOOLEAN
+EmulatedDeviceMatchesDeviceID(
+    _In_ PXENFILT_EMULATED_DEVICE_DATA  Device,
+    _In_opt_ PSTR                       DeviceID
     )
 {
-    PXENFILT_EMULATED_CONTEXT   Context = Interface->Context;
-    KIRQL                       Irql;
-    PLIST_ENTRY                 ListEntry;
+    // EmulatedIsDevicePresent: DeviceID == NULL matches the force-activated device
+    if (DeviceID)
+        return _stricmp(DeviceID, Device->DeviceID) == 0;
+    else
+        return Device->ForceActivate == XENBUS_EMULATED_FORCE_ACTIVATED;
+}
+
+static inline BOOLEAN
+EmulatedDeviceMatchesInstanceID(
+    _In_ PXENFILT_EMULATED_DEVICE_DATA  Device,
+    _In_opt_ PSTR                       InstanceID
+    )
+{
+    // EmulatedIsDevicePresent: InstanceID == NULL matches any device instance
+    return InstanceID == NULL || _stricmp(InstanceID, Device->InstanceID) == 0;
+}
+
+static BOOLEAN
+EmulatedIsDevicePresent(
+    _In_ PINTERFACE                                 Interface,
+    _In_opt_ PSTR                                   DeviceID,
+    _In_opt_ PSTR                                   InstanceID,
+    _Out_opt_ PXENBUS_EMULATED_ACTIVATION_STATUS    IsForceActivated
+    )
+{
+    PXENFILT_EMULATED_CONTEXT                       Context = Interface->Context;
+    KIRQL                                           Irql;
+    PLIST_ENTRY                                     ListEntry;
 
     Trace("====> (%s %s)\n",
-          DeviceID,
+          (DeviceID != NULL) ? DeviceID : "ACTIVE",
           (InstanceID != NULL) ? InstanceID : "ANY");
+
+    if (IsForceActivated)
+        *IsForceActivated = XENBUS_EMULATED_ACTIVATE_NEUTRAL;
 
     KeAcquireSpinLock(&Context->Lock, &Irql);
 
     ListEntry = Context->List.Flink;
     while (ListEntry != &Context->List) {
-        PXENFILT_EMULATED_OBJECT    EmulatedObject;
+        PXENFILT_EMULATED_OBJECT        EmulatedObject;
+        PXENFILT_EMULATED_DEVICE_DATA   Device;
 
         EmulatedObject = CONTAINING_RECORD(ListEntry,
                                            XENFILT_EMULATED_OBJECT,
                                            ListEntry);
+        Device = &EmulatedObject->Data.Device;
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_PCI &&
-            _stricmp(DeviceID, EmulatedObject->Data.Device.DeviceID) == 0 &&
-            (InstanceID == NULL ||
-             _stricmp(InstanceID, EmulatedObject->Data.Device.InstanceID) == 0)) {
+            EmulatedDeviceMatchesDeviceID(Device, DeviceID) &&
+            EmulatedDeviceMatchesInstanceID(Device, InstanceID)) {
             Trace("FOUND\n");
+            if (IsForceActivated)
+                *IsForceActivated = Device->ForceActivate;
             break;
         }
 
@@ -343,6 +377,16 @@ EmulatedIsDevicePresent(
     Trace("<====\n");
 
     return (ListEntry != &Context->List) ? TRUE : FALSE;
+}
+
+static BOOLEAN
+EmulatedIsDevicePresentVersion1(
+    _In_ PINTERFACE             Interface,
+    _In_ PSTR                   DeviceID,
+    _In_opt_ PSTR               InstanceID
+    )
+{
+    return EmulatedIsDevicePresent(Interface, DeviceID, InstanceID, NULL);
 }
 
 static BOOLEAN
@@ -454,12 +498,20 @@ static struct _XENFILT_EMULATED_INTERFACE_V1 EmulatedInterfaceVersion1 = {
     { sizeof (struct _XENFILT_EMULATED_INTERFACE_V1), 1, NULL, NULL, NULL },
     EmulatedAcquire,
     EmulatedRelease,
-    EmulatedIsDevicePresent,
+    EmulatedIsDevicePresentVersion1,
     EmulatedIsDiskPresentVersion1
 };
 
 static struct _XENFILT_EMULATED_INTERFACE_V2 EmulatedInterfaceVersion2 = {
     { sizeof (struct _XENFILT_EMULATED_INTERFACE_V2), 2, NULL, NULL, NULL },
+    EmulatedAcquire,
+    EmulatedRelease,
+    EmulatedIsDevicePresentVersion1,
+    EmulatedIsDiskPresent
+};
+
+static struct _XENFILT_EMULATED_INTERFACE_V3 EmulatedInterfaceVersion3 = {
+    { sizeof (struct _XENFILT_EMULATED_INTERFACE_V3), 3, NULL, NULL, NULL },
     EmulatedAcquire,
     EmulatedRelease,
     EmulatedIsDevicePresent,
@@ -534,6 +586,23 @@ EmulatedGetInterface(
             break;
 
         *EmulatedInterface = EmulatedInterfaceVersion2;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 3: {
+        struct _XENFILT_EMULATED_INTERFACE_V3   *EmulatedInterface;
+
+        EmulatedInterface = (struct _XENFILT_EMULATED_INTERFACE_V3 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENFILT_EMULATED_INTERFACE_V3))
+            break;
+
+        *EmulatedInterface = EmulatedInterfaceVersion3;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
