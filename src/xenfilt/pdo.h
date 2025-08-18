@@ -80,9 +80,10 @@ PdoGetDeviceObject(
 
 extern NTSTATUS
 PdoCreate(
-    _In_ PXENFILT_FDO                   Fdo,
-    _In_ PDEVICE_OBJECT                 PhysicalDeviceObject,
-    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
+    _In_ PXENFILT_FDO                       Fdo,
+    _In_ PDEVICE_OBJECT                     PhysicalDeviceObject,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE       Type,
+    _In_ XENBUS_EMULATED_ACTIVATION_STATUS  ForceActivate
     );
 
 extern VOID

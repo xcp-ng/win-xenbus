@@ -54,6 +54,13 @@ DriverGetActive(
     _Outptr_result_z_ PSTR  *Value
     );
 
+_On_failure_(_Post_satisfies_(*Precedence == 0))
+extern NTSTATUS
+DriverGetPrecedence(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PULONG        Precedence
+    );
+
 typedef enum _XENFILT_FILTER_STATE {
     XENFILT_FILTER_ENABLED = 0,
     XENFILT_FILTER_PENDING,

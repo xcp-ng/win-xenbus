@@ -249,15 +249,16 @@ __PdoGetFdo(
 
 static NTSTATUS
 PdoSetDeviceInformation(
-    _In_ PXENFILT_PDO   Pdo
+    _In_ PXENFILT_PDO                       Pdo,
+    _In_ XENBUS_EMULATED_ACTIVATION_STATUS  ForceActivate
     )
 {
-    PXENFILT_DX         Dx = Pdo->Dx;
-    PSTR                DeviceID;
-    PSTR                ActiveDeviceID;
-    PSTR                InstanceID;
-    PSTR                LocationInformation;
-    NTSTATUS            status;
+    PXENFILT_DX                             Dx = Pdo->Dx;
+    PSTR                                    DeviceID;
+    PSTR                                    ActiveDeviceID;
+    PSTR                                    InstanceID;
+    PSTR                                    LocationInformation;
+    NTSTATUS                                status;
 
     status = DriverQueryId(Pdo->LowerDeviceObject,
                            BusQueryDeviceID,
@@ -265,19 +266,23 @@ PdoSetDeviceInformation(
     if (!NT_SUCCESS(status))
         goto fail1;
 
-    status = DriverGetActive("DeviceID",
-                             &ActiveDeviceID);
-    if (NT_SUCCESS(status)) {
-        Pdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ?
-                      TRUE :
-                      FALSE;
-
-        ExFreePool(ActiveDeviceID);
+    if (ForceActivate != XENBUS_EMULATED_ACTIVATE_NEUTRAL) {
+        Pdo->Active = ForceActivate == XENBUS_EMULATED_FORCE_ACTIVATED;
     } else {
-        Pdo->Active = FALSE;
+        status = DriverGetActive("DeviceID",
+                                &ActiveDeviceID);
+        if (NT_SUCCESS(status)) {
+            Pdo->Active = (_stricmp(DeviceID, ActiveDeviceID) == 0) ?
+                        TRUE :
+                        FALSE;
+
+            ExFreePool(ActiveDeviceID);
+        } else {
+            Pdo->Active = FALSE;
+        }
     }
 
-    if (Pdo->Active) {
+    if (Pdo->Active && ForceActivate == XENBUS_EMULATED_ACTIVATE_NEUTRAL) {
         status = DriverGetActive("InstanceID",
                                  &InstanceID);
         if (!NT_SUCCESS(status))
@@ -1620,18 +1625,19 @@ PdoSuspend(
 
 NTSTATUS
 PdoCreate(
-    _In_ PXENFILT_FDO                   Fdo,
-    _In_ PDEVICE_OBJECT                 PhysicalDeviceObject,
-    _In_ XENFILT_EMULATED_OBJECT_TYPE   Type
+    _In_ PXENFILT_FDO                       Fdo,
+    _In_ PDEVICE_OBJECT                     PhysicalDeviceObject,
+    _In_ XENFILT_EMULATED_OBJECT_TYPE       Type,
+    _In_ XENBUS_EMULATED_ACTIVATION_STATUS  ForceActivate
     )
 {
-    PDEVICE_OBJECT                      LowerDeviceObject;
-    ULONG                               DeviceType;
-    PDEVICE_OBJECT                      FilterDeviceObject;
-    PXENFILT_DX                         Dx;
-    PXENFILT_PDO                        Pdo;
-    PSTR                                CompatibleIDs;
-    NTSTATUS                            status;
+    PDEVICE_OBJECT                          LowerDeviceObject;
+    ULONG                                   DeviceType;
+    PDEVICE_OBJECT                          FilterDeviceObject;
+    PXENFILT_DX                             Dx;
+    PXENFILT_PDO                            Pdo;
+    PSTR                                    CompatibleIDs;
+    NTSTATUS                                status;
 
     ASSERT(Type != XENFILT_EMULATED_OBJECT_TYPE_UNKNOWN);
 
@@ -1680,7 +1686,7 @@ PdoCreate(
     Pdo->LowerDeviceObject = LowerDeviceObject;
     Pdo->Type = Type;
 
-    status = PdoSetDeviceInformation(Pdo);
+    status = PdoSetDeviceInformation(Pdo, ForceActivate);
     if (!NT_SUCCESS(status))
         goto fail4;
 

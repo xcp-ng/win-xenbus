@@ -42,6 +42,16 @@
 
 #ifndef _WINDLL
 
+/*! \typedef XENBUS_EMULATED_ACTIVATION_STATUS
+    \brief If the device was force-activated, force-deactivated or
+           otherwise.
+*/
+typedef enum _XENBUS_EMULATED_ACTIVATION_STATUS {
+    XENBUS_EMULATED_ACTIVATE_NEUTRAL = 0,
+    XENBUS_EMULATED_FORCE_ACTIVATED = 1,
+    XENBUS_EMULATED_FORCE_DEACTIVATED = 2,
+} XENBUS_EMULATED_ACTIVATION_STATUS, *PXENBUS_EMULATED_ACTIVATION_STATUS;
+
 /*! \typedef XENFILT_EMULATED_ACQUIRE
     \brief Acquire a reference to the EMULATED interface
 
