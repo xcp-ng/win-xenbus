@@ -1420,8 +1420,7 @@ PdoQueryId(
 
         status = RtlStringCbPrintfW(Buffer,
                                     Id.MaximumLength,
-                                    L"XENBUS\\VEN_%hs&DEV_%hs",
-                                    __PdoGetVendorName(Pdo),
+                                    L"XENBUS\\VEN_" VENDOR_PREFIX_STR "&DEV_%hs",
                                     __PdoGetName(Pdo));
         ASSERT(NT_SUCCESS(status));
 
