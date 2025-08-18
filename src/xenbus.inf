@@ -66,16 +66,15 @@ xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dl
 %Vendor%=Inst,NT@INF_ARCH@
 
 [Inst.NT@INF_ARCH@]
-; DisplayName		Section		DeviceID
-; -----------		-------		--------
-
-%XenBusName_VEND%	=XenBus_Inst,	PCI\VEN_5853&DEV_@VENDOR_DEVICE_ID@&SUBSYS_@VENDOR_DEVICE_ID@5853&REV_01
-%XenBusName_0002%	=XenBus_Inst,	PCI\VEN_5853&DEV_0002
-%XenBusName_0001%	=XenBus_Inst,	PCI\VEN_5853&DEV_0001
+%XenBusName%=XenBus_Inst,\
+PCI\VEN_5853&DEV_@VENDOR_DEVICE_ID@&SUBSYS_@VENDOR_DEVICE_ID@5853&REV_01,\
+PCI\VEN_5853&DEV_0002,\
+PCI\VEN_5853&DEV_0001
 
 [XenBus_Inst] 
 CopyFiles=XenBus_CopyFiles
 CopyFiles=Monitor_CopyFiles
+FeatureScore=0xFE
 
 [XenBus_Inst.Services]
 AddService=xenbus_monitor,%SPSVCSINST_STARTSERVICE%,Monitor_Service,Monitor_EventLog
@@ -149,9 +148,6 @@ HKR,,TypesSupported,0x00010001,7
 Vendor="@VENDOR_NAME@" 
 DiskDesc="@PRODUCT_NAME@ PV Bus Package" 
 XenBusName="@PRODUCT_NAME@ PV Bus"
-XenBusName_VEND="@PRODUCT_NAME@ PV Bus (@VENDOR_DEVICE_ID@)"
-XenBusName_0002="@PRODUCT_NAME@ PV Bus (0002)"
-XenBusName_0001="@PRODUCT_NAME@ PV Bus (0001)"
 XenFiltName="@PRODUCT_NAME@ Generic Bus Filter"
 MonitorName="@PRODUCT_NAME@ PV Driver Monitor"
 MonitorDesc="Provides support for @PRODUCT_NAME@ PV drivers"
