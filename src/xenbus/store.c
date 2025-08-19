@@ -1100,6 +1100,51 @@ RtlCaptureStackBackTrace(
     );
 
 static NTSTATUS
+StoreCheckPathLength(
+    _In_opt_ PSTR   Prefix,
+    _In_ PSTR       Node
+    )
+{
+    size_t          MaximumLength;
+    size_t          Length;
+
+    if (Prefix != NULL) {
+        MaximumLength = (Prefix[0] == '/' || Prefix[0] == '\0') ?
+                    XENSTORE_ABS_PATH_MAX :
+                    XENSTORE_REL_PATH_MAX;
+
+        Length = strlen(Prefix);
+        if (Length > MaximumLength)
+            goto fail1;
+        MaximumLength -= Length;
+
+        if (MaximumLength < 1)
+            goto fail2;
+        MaximumLength -= 1;
+    } else {
+        MaximumLength = Node[0] == '/' ?
+                            XENSTORE_ABS_PATH_MAX :
+                            XENSTORE_REL_PATH_MAX;
+    }
+
+    Length = strlen(Node);
+    if (Length > MaximumLength)
+        goto fail3;
+    MaximumLength -= Length;
+
+    if (MaximumLength < 1)
+        goto fail4;
+
+    return STATUS_SUCCESS;
+
+fail4:
+fail3:
+fail2:
+fail1:
+    return STATUS_INVALID_BUFFER_SIZE;
+}
+
+static NTSTATUS
 StoreRead(
     _In_ PINTERFACE                     Interface,
     _In_opt_ PXENBUS_STORE_TRANSACTION  Transaction,
@@ -1115,6 +1160,10 @@ StoreRead(
     PXENBUS_STORE_RESPONSE              Response;
     PXENBUS_STORE_BUFFER                Buffer;
     NTSTATUS                            status;
+
+    status = StoreCheckPathLength(Prefix, Node);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     (VOID) RtlCaptureStackBackTrace(1, 1, &Caller, NULL);
 
@@ -1145,23 +1194,23 @@ StoreRead(
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail2;
+        goto fail3;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     Buffer = StoreCopyPayload(Context, Response, Caller);
 
     status = STATUS_NO_MEMORY;
     if (Buffer == NULL)
-        goto fail4;
+        goto fail5;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
@@ -1170,14 +1219,15 @@ StoreRead(
 
     return STATUS_SUCCESS;
 
+fail5:
 fail4:
-fail3:
     StoreFreeResponse(Response);
 
+fail3:
 fail2:
-fail1:
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
+fail1:
     return status;
 }
 
@@ -1245,9 +1295,9 @@ fail3:
     StoreFreeResponse(Response);
 
 fail2:
-fail1:
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
+fail1:
     return status;
 }
 
@@ -1326,6 +1376,10 @@ StorePrintf(
     va_list                             Arguments;
     NTSTATUS                            status;
 
+    status = StoreCheckPathLength(Prefix, Node);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
     va_start(Arguments, Format);
     status = StoreVPrintf(Interface,
                             Transaction,
@@ -1335,6 +1389,9 @@ StorePrintf(
                             Arguments);
     va_end(Arguments);
 
+    return status;
+
+fail1:
     return status;
 }
 
@@ -1351,6 +1408,10 @@ StoreRemove(
     KIRQL                               Irql;
     PXENBUS_STORE_RESPONSE              Response;
     NTSTATUS                            status;
+
+    status = StoreCheckPathLength(Prefix, Node);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     RtlZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST));
 
@@ -1379,30 +1440,31 @@ StoreRemove(
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail2;
+        goto fail3;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return STATUS_SUCCESS;
 
-fail3:
+fail4:
     StoreFreeResponse(Response);
 
+fail3:
 fail2:
-fail1:
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
+fail1:
     return status;
 }
 
@@ -1422,6 +1484,10 @@ StoreDirectory(
     PXENBUS_STORE_RESPONSE              Response;
     PXENBUS_STORE_BUFFER                Buffer;
     NTSTATUS                            status;
+
+    status = StoreCheckPathLength(Prefix, Node);
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     (VOID) RtlCaptureStackBackTrace(1, 1, &Caller, NULL);
 
@@ -1452,27 +1518,27 @@ StoreDirectory(
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail2;
+        goto fail3;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     Buffer = StoreCopyPayload(Context, Response, Caller);
 
     status = STATUS_NO_MEMORY;
     if (Buffer == NULL)
-        goto fail4;
+        goto fail5;
 
     status = STATUS_OBJECT_PATH_NOT_FOUND;
     if (Buffer->Length == 0)
-        goto fail5;
+        goto fail6;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
@@ -1481,17 +1547,18 @@ StoreDirectory(
 
     return STATUS_SUCCESS;
 
-fail5:
+fail6:
     StoreFreePayload(Context, Buffer);
 
+fail5:
 fail4:
-fail3:
     StoreFreeResponse(Response);
 
+fail3:
 fail2:
-fail1:
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
+fail1:
     return status;
 }
 
@@ -1672,11 +1739,15 @@ StoreWatchAdd(
     KIRQL                           Irql;
     NTSTATUS                        status;
 
+    status = StoreCheckPathLength(Prefix, Node);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
     *Watch = __StoreAllocate(sizeof (XENBUS_STORE_WATCH));
 
     status = STATUS_NO_MEMORY;
     if (*Watch == NULL)
-        goto fail1;
+        goto fail2;
 
     (*Watch)->Magic = STORE_WATCH_MAGIC;
     (VOID) RtlCaptureStackBackTrace(1, 1, &(*Watch)->Caller, NULL);
@@ -1690,7 +1761,7 @@ StoreWatchAdd(
 
     status = STATUS_NO_MEMORY;
     if (Path == NULL)
-        goto fail2;
+        goto fail3;
 
     status = (Prefix == NULL) ?
              RtlStringCbPrintfA(Path, Length, "%s", Node) :
@@ -1736,24 +1807,24 @@ StoreWatchAdd(
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail3;
+        goto fail4;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail5;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return STATUS_SUCCESS;
 
-fail4:
-    Error("fail4\n");
+fail5:
+    Error("fail5\n");
 
     StoreFreeResponse(Response);
 
-fail3:
-    Error("fail3\n");
+fail4:
+    Error("fail4\n");
 
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
@@ -1770,14 +1841,17 @@ fail3:
 
     __StoreFree(Path);
 
-fail2:
-    Error("fail2\n");
+fail3:
+    Error("fail3\n");
 
     (*Watch)->Caller = NULL;
     (*Watch)->Magic = 0;
 
     ASSERT(IsZeroMemory(*Watch, sizeof (XENBUS_STORE_WATCH)));
     __StoreFree(*Watch);
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -2057,11 +2131,15 @@ StorePermissionsSet(
     PSTR                                PermissionString;
     PSTR                                Segment;
 
+    status = StoreCheckPathLength(Prefix, Node);
+    if (!NT_SUCCESS(status))
+        goto fail1;
+
     PermissionString = __StoreAllocate(XENSTORE_PAYLOAD_MAX);
 
     status = STATUS_NO_MEMORY;
     if (PermissionString == NULL)
-        goto fail1;
+        goto fail2;
 
     if (Prefix == NULL)
         Length = (ULONG)strlen(Node) + sizeof (CHAR);
@@ -2071,7 +2149,7 @@ StorePermissionsSet(
     Path = __StoreAllocate(Length);
 
     if (Path == NULL)
-        goto fail2;
+        goto fail3;
 
     status = (Prefix == NULL) ?
              RtlStringCbPrintfA(Path, Length, "%s", Node) :
@@ -2088,7 +2166,7 @@ StorePermissionsSet(
                                          Length,
                                          &Used);
         if (!NT_SUCCESS(status))
-            goto fail3;
+            goto fail4;
 
         Segment += Used;
         Length -= Used;
@@ -2108,17 +2186,17 @@ StorePermissionsSet(
     KeReleaseSpinLock(&Context->Lock, Irql);
 
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail5;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail5;
+        goto fail6;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail7;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
@@ -2128,9 +2206,12 @@ StorePermissionsSet(
 
     return STATUS_SUCCESS;
 
+fail7:
+    Error("fail7\n");
+    StoreFreeResponse(Response);
+
 fail6:
     Error("fail6\n");
-    StoreFreeResponse(Response);
 
 fail5:
     Error("fail5\n");
@@ -2138,16 +2219,16 @@ fail5:
 fail4:
     Error("fail4\n");
 
-fail3:
-    Error("fail3\n");
-
     __StoreFree(Path);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
-fail2:
-    Error("fail2\n");
+fail3:
+    Error("fail3\n");
 
     __StoreFree(PermissionString);
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
