@@ -154,8 +154,8 @@ __Bug(
 
 static __inline BOOLEAN
 _IsZeroMemory(
-    _In_ const PSTR     Caller,
-    _In_ const PSTR     Name,
+    _In_ PCSTR          Caller,
+    _In_ PCSTR          Name,
     _In_ PVOID          Buffer,
     _In_ ULONG          Length
     )
@@ -178,8 +178,8 @@ _IsZeroMemory(
 
 static __inline BOOLEAN
 _IsZeroMemory(
-    _In_ const PSTR     Caller,
-    _In_ const PSTR     Name,
+    _In_ PCSTR          Caller,
+    _In_ PCSTR          Name,
     _In_ PVOID          Buffer,
     _In_ ULONG          Length
     )
