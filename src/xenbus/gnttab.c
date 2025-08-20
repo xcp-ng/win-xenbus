@@ -1139,6 +1139,9 @@ GnttabInitialize(
 fail2:
     Error("fail2\n");
 
+    __GnttabFree(*Context);
+    *Context = NULL;
+
 fail1:
     Error("fail1 (%08x)\n", status);
 
