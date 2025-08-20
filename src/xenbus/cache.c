@@ -1275,6 +1275,9 @@ fail2:
     RtlZeroMemory(&(*Context)->DebugInterface,
                   sizeof (XENBUS_DEBUG_INTERFACE));
 
+    __CacheFree(*Context);
+    *Context = NULL;
+
 fail1:
     Error("fail1 (%08x)\n", status);
 
