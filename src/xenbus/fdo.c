@@ -2002,9 +2002,7 @@ FdoFilterResourceRequirements(
         status = KeGetProcessorNumberFromIndex(Index, &ProcNumber);
         ASSERT(NT_SUCCESS(status));
 
-        if (RtlIsNtDdiVersionAvailable(NTDDI_WIN7))
-            Interrupt.u.Interrupt.Group = ProcNumber.Group;
-
+        Interrupt.u.Interrupt.Group = ProcNumber.Group;
         Interrupt.u.Interrupt.TargetedProcessors = (KAFFINITY)1 << ProcNumber.Number;
         List->Descriptors[List->Count++] = Interrupt;
     }
