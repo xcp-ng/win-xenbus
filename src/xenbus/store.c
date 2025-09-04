@@ -1595,18 +1595,18 @@ StoreTransactionStart(
                                  NULL, 0);
 
     KeReleaseSpinLock(&Context->Lock, Irql);
-
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail2;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail2;
+        goto fail3;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail3;
+        goto fail4;
 
     (*Transaction)->Id = (uint32_t)strtoul(Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Data,
                                            NULL,
@@ -1623,11 +1623,14 @@ StoreTransactionStart(
 
     return STATUS_SUCCESS;
 
-fail3:
-    Error("fail3\n");
+fail4:
+    Error("fail4\n");
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
+
+fail3:
+    Error("fail3\n");
 
 fail2:
     Error("fail2\n");
@@ -1677,17 +1680,18 @@ StoreTransactionEnd(
 
     KeReleaseSpinLock(&Context->Lock, Irql);
 
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail1;
+        goto fail2;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status) && status != STATUS_RETRY)
-        goto fail2;
+        goto fail3;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
@@ -1711,12 +1715,19 @@ done:
 
     return status;
 
-fail2:
+fail3:
+    Error("fail3\n");
+
     ASSERT3U(status, !=, STATUS_RETRY);
 
     StoreFreeResponse(Response);
 
+fail2:
+    Error("fail2\n");
+
 fail1:
+    Error("fail1 (%08x)\n", status);
+
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return status;
@@ -1802,30 +1813,31 @@ StoreWatchAdd(
 
     KeReleaseSpinLock(&Context->Lock, Irql);
 
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail4;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail4;
+        goto fail5;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
     return STATUS_SUCCESS;
 
-fail5:
-    Error("fail5\n");
+fail6:
+    Error("fail6\n");
 
     StoreFreeResponse(Response);
 
-fail4:
-    Error("fail4\n");
+fail5:
+    Error("fail5\n");
 
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
@@ -1841,6 +1853,9 @@ fail4:
     (*Watch)->Path = NULL;
 
     __StoreFree(Path);
+
+fail4:
+    Error("fail4\n");
 
 fail3:
     Error("fail3\n");
@@ -1906,17 +1921,18 @@ StoreWatchRemove(
 
     KeReleaseSpinLock(&Context->Lock, Irql);
 
-    ASSERT(NT_SUCCESS(status));
+    if (!NT_SUCCESS(status))
+        goto fail1;
 
     Response = StoreSubmitRequest(Context, &Request);
 
     status = STATUS_NO_MEMORY;
     if (Response == NULL)
-        goto fail1;
+        goto fail2;
 
     status = StoreCheckResponse(Response);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
@@ -1944,10 +1960,13 @@ done:
 
     return STATUS_SUCCESS;
 
-fail2:
-    Error("fail2\n");
+fail3:
+    Error("fail3\n");
 
     StoreFreeResponse(Response);
+
+fail2:
+    Error("fail2\n");
 
 fail1:
     Error("fail1 (%08x)\n", status);
