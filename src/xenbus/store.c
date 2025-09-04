@@ -1629,14 +1629,15 @@ fail3:
     StoreFreeResponse(Response);
     ASSERT(IsZeroMemory(&Request, sizeof (XENBUS_STORE_REQUEST)));
 
+fail2:
+    Error("fail2\n");
+
     (*Transaction)->Caller = NULL;
     (*Transaction)->Magic = 0;
 
     ASSERT(IsZeroMemory(*Transaction, sizeof (XENBUS_STORE_TRANSACTION)));
     __StoreFree(*Transaction);
-
-fail2:
-    Error("fail2\n");
+    *Transaction = NULL;
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -1849,6 +1850,7 @@ fail3:
 
     ASSERT(IsZeroMemory(*Watch, sizeof (XENBUS_STORE_WATCH)));
     __StoreFree(*Watch);
+    *Watch = NULL;
 
 fail2:
     Error("fail2\n");
