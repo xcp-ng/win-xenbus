@@ -464,6 +464,7 @@ FdoEnumerate(
     for (Index = 0; Index < Count; Index++) {
         ULONG   ThisPrecedence;
 
+#pragma warning(suppress:6385)  // Reading invalid data from 'PhysicalDeviceObject'
         if (PhysicalDeviceObject[Index] != NULL) {
             status = DriverGetPrecedence(PhysicalDeviceObject[Index],
                                          &ThisPrecedence);
