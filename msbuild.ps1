@@ -8,7 +8,8 @@ param(
 	[string]$Arch,
 	[Parameter(Mandatory = $true)]
 	[string]$Type,
-	[string]$SignMode = "TestSign"
+	[string]$SignMode = "TestSign",
+	[switch]$CodeAnalysis
 )
 
 Function Run-MSBuild {
@@ -151,10 +152,10 @@ $solutionpath = Resolve-Path $SolutionDir
 Set-ExecutionPolicy -Scope CurrentUser -Force Bypass
 
 if ($Type -eq "free") {
-	Run-MSBuild $solutionpath "xenbus.sln" $configuration["free"] $platform[$Arch]
+	Run-MSBuild $solutionpath "xenbus.sln" $configuration["free"] $platform[$Arch] -CodeAnalysis:$CodeAnalysis
 }
 elseif ($Type -eq "checked") {
-	Run-MSBuild $solutionpath "xenbus.sln" $configuration["checked"] $platform[$Arch]
+	Run-MSBuild $solutionpath "xenbus.sln" $configuration["checked"] $platform[$Arch] -CodeAnalysis:$CodeAnalysis
 }
 elseif ($Type -eq "codeql") {
 	$archivepath = "xenbus"
