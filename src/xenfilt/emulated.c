@@ -47,8 +47,8 @@
 typedef struct _XENFILT_EMULATED_DEVICE_DATA {
     CHAR                                DeviceID[MAXNAMELEN];
     CHAR                                InstanceID[MAXNAMELEN];
-    CHAR                                CompatibleID[MAXNAMELEN];
     XENBUS_EMULATED_ACTIVATION_STATUS   ForceActivate;
+    BOOLEAN                             IsEmulatedNvme;
 } XENFILT_EMULATED_DEVICE_DATA, *PXENFILT_EMULATED_DEVICE_DATA;
 
 typedef struct _XENFILT_EMULATED_DISK_DATA {
@@ -100,7 +100,6 @@ EmulatedSetObjectDeviceData(
     )
 {
     ULONG                               Index;
-    PSTR                                LastMatch;
     NTSTATUS                            status;
 
     status = STATUS_INVALID_PARAMETER;
@@ -123,7 +122,6 @@ EmulatedSetObjectDeviceData(
         goto done;
 
     Index = 0;
-    LastMatch = CompatibleIDs;
     for (;;) {
         ULONG   Length;
 
@@ -131,16 +129,16 @@ EmulatedSetObjectDeviceData(
         if (Length == 0)
             break;
 
-        LastMatch = &CompatibleIDs[Index];
+        // 8086:5845 and 1B36:0010 are the IDs of the QEMU NVMe controller when
+        // "use-intel-id" is on and off respectively.
+        if (_stricmp(&CompatibleIDs[Index], "PCI\\VEN_8086&DEV_5845") == 0 ||
+            _stricmp(&CompatibleIDs[Index], "PCI\\VEN_1B36&DEV_0010") == 0) {
+            EmulatedObject->Data.Device.IsEmulatedNvme = TRUE;
+            break;
+        }
 
         Index += Length + 1;
     }
-
-    status = RtlStringCbPrintfA(EmulatedObject->Data.Device.CompatibleID,
-                                MAXNAMELEN,
-                                "%s",
-                                LastMatch);
-    ASSERT(NT_SUCCESS(status));
 
 done:
     return STATUS_SUCCESS;
@@ -418,8 +416,7 @@ EmulatedIsDiskPresent(
         }
 
         if (EmulatedObject->Type == XENFILT_EMULATED_OBJECT_TYPE_PCI &&
-            _stricmp("PCI\\CC_0108", EmulatedObject->Data.Device.CompatibleID) == 0 &&
-            Index <= 3) {
+            EmulatedObject->Data.Device.IsEmulatedNvme) {
             Trace("FOUND\n");
             break;
         }
