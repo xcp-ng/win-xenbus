@@ -16,6 +16,7 @@
     <IncludePath>$(IncludePath)</IncludePath>
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <EnableInf2cat>false</EnableInf2cat>
+    <SpectreMitigation>Spectre</SpectreMitigation>
   </PropertyGroup>
   <PropertyGroup>
     <CustomBuildAfterTargets>Link</CustomBuildAfterTargets>
