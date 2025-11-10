@@ -356,6 +356,7 @@ SharedInfoGetTime(
     ULONGLONG                       NanoSeconds;
     ULONGLONG                       Timestamp;
     ULONGLONG                       Tsc;
+    ULONGLONG                       Age;
     ULONGLONG                       SystemTime;
     ULONG                           TscSystemMul;
     CHAR                            TscShift;
@@ -404,10 +405,19 @@ SharedInfoGetTime(
     KeLowerIrql(Irql);
 
     // Number of elapsed ticks since timestamp was captured
-    Tsc -= Timestamp;
+    Age = Tsc - Timestamp;
+    if (TscShift < 0)
+        Age >>= -TscShift;
+    else
+        Age <<= TscShift;
+#ifdef _X86_
+    Age = (Age * TscSystemMul) >> 32;
+#else
+    Age = UnsignedMultiplyExtract128(Age, TscSystemMul, 32);
+#endif
 
     // Time in nanoseconds since boot
-    SystemTime += ((Tsc << TscShift) * TscSystemMul) >> 32;
+    SystemTime += Age;
 
     Trace("WALLCLOCK TIME AT BOOT: Seconds = %llu NanoSeconds = %llu\n",
           Seconds,
