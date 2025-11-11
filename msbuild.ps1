@@ -110,7 +110,8 @@ Function Run-CodeQL {
 		[string]$Name,
 		[string]$Configuration,
 		[string]$Platform,
-		[string]$SearchPath
+		[string]$SearchPath,
+		[string]$QueryFile
 	)
 
 	$projpath = Resolve-Path (Join-Path $SolutionPath $Name)
@@ -154,8 +155,10 @@ Function Run-CodeQL {
 	$c += " database"
 	$c += " analyze "
 	$c += $database
-	$c += " windows_driver_recommended.qls"
+	$c += " "
+	$c += $QueryFile
 	$c += " --format=sarifv2.1.0"
+	$c += " --threads=0"
 	$c += " --output="
 	$c += $sarif
 	$c += " --search-path="
@@ -199,8 +202,22 @@ if ($Type -eq "codeql") {
 	}
 	New-Item -ItemType Directory "database"
 
+	$queryfile = "windows_driver_recommended.qls"
+	Try {
+		$ver = New-Object System.Version((& "codeql" "--version")[0].Split(" ")[-1] + "0")
+		Write-Host -ForegroundColor Cyan "INFO: CodeQL version " $ver
+		$minver = New-Object System.Version("2.20.1.0")
+		if ($ver -ge $minver) {
+			$queryfile = "mustfix.qls"
+		}
+	} Catch {
+	}
+	if (-not [string]::IsNullOrEmpty($Env:CODEQL_QUERY_FILE)) {
+		$queryfile = $Env:CODEQL_QUERY_FILE
+		Write-Host -ForegroundColor Cyan "INFO: Overwriting codeql query file to " $queryfile
+	}
 	ForEach ($project in $ProjectList) {
-		Run-CodeQL $solutionpath $project $configuration["codeql"] $platform[$Arch] $searchpath
+		Run-CodeQL $solutionpath $project $configuration["codeql"] $platform[$Arch] $searchpath $queryfile
 	}
 	Copy-Item -Path (Join-Path -Path $SolutionPath -ChildPath "*.sarif") -Destination $archivepath
 }
