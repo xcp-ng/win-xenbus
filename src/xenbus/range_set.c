@@ -237,15 +237,15 @@ found:
     return STATUS_SUCCESS;
 
 fail3:
-    Error("fail3\n");
+    Trace("fail3\n");
 
 fail2:
-    Error("fail2\n");
+    Trace("fail2\n");
 
     KeReleaseSpinLock(&RangeSet->Lock, Irql);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
+    Trace("fail1 (%08x)\n", status);
 
     return status;
 }
