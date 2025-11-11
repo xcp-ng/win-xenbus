@@ -744,14 +744,20 @@ LogReadLogLevel(
     PANSI_STRING        Values;
     ULONG               Type;
     ULONG               Index;
+    BOOLEAN             SquashError;
     NTSTATUS            status;
+
+    SquashError = FALSE;
 
     status = RegistryQuerySzValue(Key,
                                   Name,
                                   &Type,
                                   &Values);
-    if (!NT_SUCCESS(status))
+    if (!NT_SUCCESS(status)) {
+        if (status == STATUS_OBJECT_NAME_NOT_FOUND)
+            SquashError = TRUE;
         goto fail1;
+    }
 
     status = STATUS_INVALID_PARAMETER;
     if (Type != REG_MULTI_SZ)
@@ -780,7 +786,8 @@ fail2:
     RegistryFreeSzValue(Values);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
+    if (!SquashError)
+        Error("fail1 (%08x)\n", status);
 
     *LogLevel = LOG_LEVEL_NONE;
 
