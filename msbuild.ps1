@@ -9,7 +9,8 @@ param(
 	[Parameter(Mandatory = $true)]
 	[string]$Type,
 	[string]$SignMode = "TestSign",
-	[switch]$CodeAnalysis
+	[switch]$CodeAnalysis,
+	[switch]$Kasan
 )
 
 #
@@ -30,7 +31,8 @@ Function Run-MSBuild {
 		[string]$Platform,
 		[string]$Target = "Build",
 		[string]$Inputs = "",
-		[switch]$CodeAnalysis
+		[switch]$CodeAnalysis,
+		[switch]$Kasan
 	)
 
 	$c = "msbuild.exe"
@@ -45,6 +47,9 @@ Function Run-MSBuild {
 	if ($CodeAnalysis) {
 		$c += "/p:RunCodeAnalysis=true "
 		$c += "/p:EnablePREFast=true "
+	}
+	if ($Kasan) {
+		$c += "/p:EnableKASAN=true "
 	}
 
 	$c += Join-Path -Path $SolutionPath -ChildPath $Name
@@ -187,7 +192,7 @@ if (-Not (Test-Path -Path $archivepath)) {
 }
 
 if (($Type -eq "free") -or ($Type -eq "checked")) {
-	Run-MSBuild $solutionpath $SolutionName $configuration[$Type] $platform[$Arch] -CodeAnalysis:$CodeAnalysis
+	Run-MSBuild $solutionpath $SolutionName $configuration[$Type] $platform[$Arch] -CodeAnalysis:$CodeAnalysis -Kasan:$Kasan
 }
 
 if ($Type -eq "codeql") {
