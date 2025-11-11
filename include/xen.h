@@ -574,6 +574,12 @@ ConfigClearActive(
     );
 
 XEN_API
+VOID
+ConfigFreeActive(
+    _In_ PSTR   Value
+    );
+
+XEN_API
 NTSTATUS
 ConfigRequestReboot(
     _In_ HANDLE     ParametersKey,
@@ -585,6 +591,12 @@ NTSTATUS
 ConfigQuerySystemStartOption(
     _In_ PSTR               Key,
     _Outptr_ PANSI_STRING   *Option
+    );
+
+XEN_API
+VOID
+ConfigFreeSzValue(
+    _In_ PANSI_STRING       Array
     );
 
 #endif  // _XEN_H

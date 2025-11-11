@@ -46,6 +46,7 @@
 #include "util.h"
 
 #define MAXNAMELEN  128
+#define CONFIG_TAG  'GFCX'
 
 //
 // The canonical location for active device information is the XENFILT
@@ -88,7 +89,7 @@ ConfigGetActive(
         goto fail2;
 
     Length = Ansi[0].Length + sizeof (CHAR);
-    *Value = __AllocatePoolWithTag(PagedPool, Length, 'SUB');
+    *Value = __AllocatePoolWithTag(PagedPool, Length, CONFIG_TAG);
 
     status = STATUS_NO_MEMORY;
     if (*Value == NULL)
@@ -305,7 +306,7 @@ ConfigUpdateActive(
 
     status = ConfigGetActive("InstanceID", &ActiveInstanceID);
     if (NT_SUCCESS(status)) {
-        ExFreePool(ActiveInstanceID);
+        ConfigFreeActive(ActiveInstanceID);
     } else {
         RtlInitAnsiString(&Ansi[0], InstanceID);
 
@@ -319,7 +320,7 @@ ConfigUpdateActive(
 
     status = ConfigGetActive("LocationInformation", &ActiveLocationInformation);
     if (NT_SUCCESS(status)) {
-        ExFreePool(ActiveLocationInformation);
+        ConfigFreeActive(ActiveLocationInformation);
     } else {
         RtlInitAnsiString(&Ansi[0], LocationInformation);
 
@@ -409,6 +410,15 @@ fail1:
 }
 
 XEN_API
+VOID
+ConfigFreeActive(
+    _In_ PSTR   Value
+    )
+{
+    __FreePoolWithTag(Value, CONFIG_TAG);
+}
+
+XEN_API
 NTSTATUS
 ConfigRequestReboot(
     _In_ HANDLE     ParametersKey,
@@ -495,4 +505,13 @@ ConfigQuerySystemStartOption(
     )
 {
     return RegistryQuerySystemStartOption(Key, Option);
+}
+
+XEN_API
+VOID
+ConfigFreeSzValue(
+    _In_ PANSI_STRING       Array
+    )
+{
+    RegistryFreeSzValue(Array);
 }

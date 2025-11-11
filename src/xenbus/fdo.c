@@ -806,7 +806,7 @@ fallback:
         if (Fdo->Active)
             (VOID) ConfigUpdateActive(DeviceID, InstanceID, LocationInformation);
 
-        ExFreePool(ActiveDeviceID);
+        ConfigFreeActive(ActiveDeviceID);
     } else {
         status = ConfigSetActive(DeviceID, InstanceID, LocationInformation);
         if (NT_SUCCESS(status))
@@ -5746,7 +5746,7 @@ FdoBalloonInitialize(
     else if (strcmp(Value, "ON") != 0)
         Warning("UNRECOGNIZED VALUE OF %s: %s\n", Key, Value);
 
-    RegistryFreeSzValue(Option);
+    ConfigFreeSzValue(Option);
 
 done:
     return Enabled ?
@@ -5782,7 +5782,7 @@ FdoSetWatchdog(
 
     Value = strtoul(Option->Buffer + sizeof (Key) - 1, NULL, 0);
 
-    RegistryFreeSzValue(Option);
+    ConfigFreeSzValue(Option);
 
     if (Value && Value < 10) {
         Warning("%us TOO SHORT (ROUNDING UP TO 10s)\n");

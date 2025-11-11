@@ -175,7 +175,7 @@ UnplugBootEmulated(
     else if (strcmp(Value, "FALSE") != 0)
         Warning("UNRECOGNIZED VALUE OF %s: %s\n", KeyName, Value);
 
-    RegistryFreeSzValue(Option);
+    ConfigFreeSzValue(Option);
 
 done:
     ReleaseMutex(&Context->Mutex);
