@@ -76,6 +76,9 @@ CopyFiles=XenBus_CopyFiles
 CopyFiles=Monitor_CopyFiles
 FeatureScore=0xFE
 
+[XenBus_Inst.HW]
+AddReg = XenBus_Interrupts
+
 [XenBus_Inst.Services]
 AddService=xenbus_monitor,%SPSVCSINST_STARTSERVICE%,Monitor_Service,Monitor_EventLog
 AddService=xenbus,%SPSVCINST_ASSOCSERVICE%,XenBus_Service
@@ -88,7 +91,7 @@ StartType=%SERVICE_BOOT_START%
 ErrorControl=%SERVICE_ERROR_NORMAL% 
 ServiceBinary=%12%\xenbus.sys 
 LoadOrderGroup="Boot Bus Extender"
-AddReg = XenBus_Parameters, XenBus_Interrupts, XenBus_Unplug
+AddReg = XenBus_Parameters, XenBus_Unplug
 
 [XenBus_Parameters]
 HKR,"Parameters",,0x00000010
