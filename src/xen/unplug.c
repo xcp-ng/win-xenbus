@@ -49,6 +49,12 @@
 
 #define UNPLUG_TAG  'LPNU'
 
+#define UNPLUG_FLAGS_IDE_SCSI_DISKS   0x0001
+#define UNPLUG_FLAGS_ALL_NICS         0x0002
+#define UNPLUG_FLAGS_AUX_IDE_DISKS    0x0004  // ignored if UNPLUG_FLAGS_IDE_SCSI_DISKS is set
+#define UNPLUG_FLAGS_NVME_DISKS       0x0008
+#define UNPLUG_FLAGS_ALL_DISKS        (UNPLUG_FLAGS_IDE_SCSI_DISKS | UNPLUG_FLAGS_NVME_DISKS)
+
 typedef struct _UNPLUG_DATA {
     PSTR        Name;
     BOOLEAN     Found;
@@ -116,19 +122,19 @@ UnplugDeviceType(
     case UNPLUG_DISKS:
         if (Context->BootEmulated) {
 #pragma prefast(suppress:28138)
-            WRITE_PORT_USHORT((PUSHORT)0x10, 0x0004);
+            WRITE_PORT_USHORT((PUSHORT)0x10, UNPLUG_FLAGS_AUX_IDE_DISKS);
 
             LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: AUX DISKS\n");
         } else {
 #pragma prefast(suppress:28138)
-            WRITE_PORT_USHORT((PUSHORT)0x10, 0x0001);
+            WRITE_PORT_USHORT((PUSHORT)0x10, UNPLUG_FLAGS_ALL_DISKS);
 
             LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: DISKS\n");
         }
         break;
     case UNPLUG_NICS:
 #pragma prefast(suppress:28138)
-        WRITE_PORT_USHORT((PUSHORT)0x10, 0x0002);
+        WRITE_PORT_USHORT((PUSHORT)0x10, UNPLUG_FLAGS_ALL_NICS);
 
         LogPrintf(LOG_LEVEL_WARNING, "UNPLUG: NICS\n");
         break;
