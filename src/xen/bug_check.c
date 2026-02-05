@@ -309,71 +309,71 @@ BugCheckDumpContext(
                   Context->EFlags);
 
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RDI = %016X\n",
+                  "%s|BUGCHECK: - RDI = %016llX\n",
                   __MODULE__,
                   Context->Rdi);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RSI = %016X\n",
+                  "%s|BUGCHECK: - RSI = %016llX\n",
                   __MODULE__,
                   Context->Rsi);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RBX = %016X\n",
+                  "%s|BUGCHECK: - RBX = %016llX\n",
                   __MODULE__,
                   Context->Rbx);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RDX = %016X\n",
+                  "%s|BUGCHECK: - RDX = %016llX\n",
                   __MODULE__,
                   Context->Rdx);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RCX = %016X\n",
+                  "%s|BUGCHECK: - RCX = %016llX\n",
                   __MODULE__,
                   Context->Rcx);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RAX = %016X\n",
+                  "%s|BUGCHECK: - RAX = %016llX\n",
                   __MODULE__,
                   Context->Rax);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RBP = %016X\n",
+                  "%s|BUGCHECK: - RBP = %016llX\n",
                   __MODULE__,
                   Context->Rbp);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RIP = %016X\n",
+                  "%s|BUGCHECK: - RIP = %016llX\n",
                   __MODULE__,
                   Context->Rip);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - RSP = %016X\n",
+                  "%s|BUGCHECK: - RSP = %016llX\n",
                   __MODULE__,
                   Context->Rsp);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R8 = %016X\n",
+                  "%s|BUGCHECK: - R8 = %016llX\n",
                   __MODULE__,
                   Context->R8);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R9 = %016X\n",
+                  "%s|BUGCHECK: - R9 = %016llX\n",
                   __MODULE__,
                   Context->R9);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R10 = %016X\n",
+                  "%s|BUGCHECK: - R10 = %016llX\n",
                   __MODULE__,
                   Context->R10);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R11 = %016X\n",
+                  "%s|BUGCHECK: - R11 = %016llX\n",
                   __MODULE__,
                   Context->R11);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R12 = %016X\n",
+                  "%s|BUGCHECK: - R12 = %016llX\n",
                   __MODULE__,
                   Context->R12);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R13 = %016X\n",
+                  "%s|BUGCHECK: - R13 = %016llX\n",
                   __MODULE__,
                   Context->R13);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R14 = %016X\n",
+                  "%s|BUGCHECK: - R14 = %016llX\n",
                   __MODULE__,
                   Context->R14);
         LogPrintf(LOG_LEVEL_CRITICAL,
-                  "%s|BUGCHECK: - R15 = %016X\n",
+                  "%s|BUGCHECK: - R15 = %016llX\n",
                   __MODULE__,
                   Context->R15);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -572,7 +572,7 @@ BugCheckStackDump(
 
             if (Name != NULL)
                 LogPrintf(LOG_LEVEL_CRITICAL,
-                          "%s|BUGCHECK: %016X: (%016X %016X %016X %016X) %s + %p\n",
+                          "%s|BUGCHECK: %016llX: (%016llX %016llX %016llX %016llX) %s + %p\n",
                           __MODULE__,
                           RSP,
                           Parameter[0],
@@ -583,7 +583,7 @@ BugCheckStackDump(
                           (PVOID)Offset);
             else
                 LogPrintf(LOG_LEVEL_CRITICAL,
-                          "%s|BUGCHECK: %016X: (%016X %016X %016X %016X) %p\n",
+                          "%s|BUGCHECK: %016llX: (%016llX %016llX %016llX %016llX) %p\n",
                           __MODULE__,
                           RSP,
                           Parameter[0],
