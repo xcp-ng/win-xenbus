@@ -1502,7 +1502,7 @@ done:
     free(Context->Question);
     free(Context->Text);
     free(Context->Title);
-    CloseHandle(Context->RequestKey);
+    RegCloseKey(Context->RequestKey);
     free(RequestKeyName);
     CloseHandle(Context->ResponseEvent);
     CloseHandle(Context->RequestEvent);
@@ -1512,7 +1512,7 @@ done:
 
     (VOID) DeregisterEventSource(Context->EventLog);
 
-    CloseHandle(Context->ParametersKey);
+    RegCloseKey(Context->ParametersKey);
     (VOID) RemoveStartOverride("stornvme");
 
     Log("<====");
@@ -1530,7 +1530,7 @@ fail11:
 fail10:
     Log("fail10");
 
-    CloseHandle(Context->RequestKey);
+    RegCloseKey(Context->RequestKey);
 
 fail9:
     Log("fail9");
@@ -1568,7 +1568,7 @@ fail3:
 fail2:
     Log("fail2");
 
-    CloseHandle(Context->ParametersKey);
+    RegCloseKey(Context->ParametersKey);
 
 fail1:
     Error = GetLastError();
