@@ -184,9 +184,9 @@ GetErrorMessage(
                        NULL))
         return NULL;
 
-    for (Index = 0; Message[Index] != '\0'; Index++) {
-        if (Message[Index] == '\r' || Message[Index] == '\n') {
-            Message[Index] = '\0';
+    for (Index = 0; Message[Index] != _T('\0'); Index++) {
+        if (Message[Index] == _T('\r') || Message[Index] == _T('\n')) {
+            Message[Index] = _T('\0');
             break;
         }
     }
@@ -194,14 +194,14 @@ GetErrorMessage(
     return Message;
 }
 
-static PCSTR
+static PCTSTR
 ServiceStateName(
     _In_ DWORD  State
     )
 {
 #define _STATE_NAME(_State) \
     case SERVICE_ ## _State: \
-        return #_State
+        return _T(#_State)
 
     switch (State) {
     _STATE_NAME(START_PENDING);
@@ -212,7 +212,7 @@ ServiceStateName(
         break;
     }
 
-    return "UNKNOWN";
+    return _T("UNKNOWN");
 
 #undef  _STATE_NAME
 }
@@ -304,14 +304,14 @@ MonitorCtrlHandlerEx(
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
-static PCSTR
+static PCTSTR
 WTSStateName(
     _In_ DWORD  State
     )
 {
 #define _STATE_NAME(_State) \
     case WTS ## _State: \
-        return #_State
+        return _T(#_State)
 
     switch (State) {
     _STATE_NAME(Active);
@@ -328,7 +328,7 @@ WTSStateName(
         break;
     }
 
-    return "UNKNOWN";
+    return _T("UNKNOWN");
 
 #undef  _STATE_NAME
 }
@@ -370,7 +370,7 @@ GetPromptTimeout(
     ValueLength = sizeof (Value);
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "PromptTimeout",
+                            _T("PromptTimeout"),
                             NULL,
                             &Type,
                             (LPBYTE)&Value,
@@ -400,7 +400,7 @@ GetDisplayName(
 
     Result = StringCbPrintf(ServiceKeyName,
                             MAX_PATH,
-                            SERVICES_KEY "\\%s",
+                            _T(SERVICES_KEY "\\%s"),
                             DriverName);
     assert(SUCCEEDED(Result));
 
@@ -438,7 +438,7 @@ GetDisplayName(
         goto fail3;
 
     Error = RegQueryValueEx(ServiceKey,
-                            "DisplayName",
+                            _T("DisplayName"),
                             NULL,
                             &Type,
                             (LPBYTE)DisplayName,
@@ -519,10 +519,8 @@ DoPromptForReboot(
 
     Error = ERROR_SUCCESS;
 
-    TitleLength = (DWORD)((_tcslen(Prompt->Title) +
-                           1) * sizeof (TCHAR));
-    TextLength = (DWORD)((_tcslen(Prompt->Text) +
-                           1) * sizeof (TCHAR));
+    TitleLength = (DWORD)(_tcslen(Prompt->Title) + 1);
+    TextLength = (DWORD)(_tcslen(Prompt->Text) + 1);
 
     Success = WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE,
                                    0,
@@ -555,9 +553,9 @@ DoPromptForReboot(
         Success = WTSSendMessage(WTS_CURRENT_SERVER_HANDLE,
                                  SessionId,
                                  Prompt->Title,
-                                 TitleLength,
+                                 TitleLength * sizeof(TCHAR),
                                  Prompt->Text,
-                                 TextLength,
+                                 TextLength * sizeof(TCHAR),
                                  MB_YESNO | MB_ICONEXCLAMATION,
                                  Timeout,
                                  &Response,
@@ -639,25 +637,25 @@ PromptForReboot(
     else
         Description++;
 
-    TextLength = (DWORD)((_tcslen(Description) +
-                          1 + // ' '
-                          _tcslen(Context->Text) +
-                          1 + // ' '
-                          _tcslen(Context->Question) +
-                          1) * sizeof (TCHAR));
+    TextLength = (DWORD)(_tcslen(Description) +
+                         1 + // ' '
+                         _tcslen(Context->Text) +
+                         1 + // ' '
+                         _tcslen(Context->Question) +
+                         1);
 
-    Prompt->Text = calloc(1, TextLength);
+    Prompt->Text = calloc(1, TextLength * sizeof(TCHAR));
     if (Prompt->Text == NULL) {
         Error = ERROR_OUTOFMEMORY;
         goto fail4;
     }
 
-    Result = StringCbPrintf(Prompt->Text,
-                            TextLength,
-                            TEXT("%s %s %s"),
-                            Description,
-                            Context->Text,
-                            Context->Question);
+    Result = StringCchPrintf(Prompt->Text,
+                             TextLength,
+                             TEXT("%s %s %s"),
+                             Description,
+                             Context->Text,
+                             Context->Question);
     assert(SUCCEEDED(Result));
 
     PromptThread = CreateThread(NULL,
@@ -758,7 +756,7 @@ TryAutoReboot(
     Length = sizeof (DWORD);
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "AutoReboot",
+                            _T("AutoReboot"),
                             NULL,
                             &Type,
                             (LPBYTE)&AutoReboot,
@@ -773,7 +771,7 @@ TryAutoReboot(
     Length = sizeof (DWORD);
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "RebootCount",
+                            _T("RebootCount"),
                             NULL,
                             &Type,
                             (LPBYTE)&RebootCount,
@@ -792,7 +790,7 @@ TryAutoReboot(
     ++RebootCount;
 
     (VOID) RegSetValueEx(Context->ParametersKey,
-                         "RebootCount",
+                         _T("RebootCount"),
                          0,
                          REG_DWORD,
                          (const BYTE*)&RebootCount,
@@ -801,7 +799,7 @@ TryAutoReboot(
     (VOID) RegFlushKey(Context->ParametersKey);
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "AutoRebootTimeout",
+                            _T("AutoRebootTimeout"),
                             NULL,
                             &Type,
                             (LPBYTE)&Timeout,
@@ -822,22 +820,22 @@ TryAutoReboot(
     else
         Description++;
 
-    TextLength = (DWORD)((_tcslen(Description) +
-                          1 + // ' '
-                          _tcslen(Context->Text) +
-                          1) * sizeof (TCHAR));
+    TextLength = (DWORD)(_tcslen(Description) +
+                         1 + // ' '
+                         _tcslen(Context->Text) +
+                         1);
 
-    Text = calloc(1, TextLength);
+    Text = calloc(1, TextLength * sizeof(TCHAR));
     if (Text == NULL) {
         SetLastError(ERROR_OUTOFMEMORY);
         goto fail3;
     }
 
-    Result = StringCbPrintf(Text,
-                            TextLength,
-                            TEXT("%s %s"),
-                            Description,
-                            Context->Text);
+    Result = StringCchPrintf(Text,
+                             TextLength,
+                             TEXT("%s %s"),
+                             Description,
+                             Context->Text);
     assert(SUCCEEDED(Result));
 
     free(DisplayName);
@@ -908,9 +906,9 @@ CheckRequestSubKeys(
         goto fail1;
     }
 
-    SubKeyLength = MaxSubKeyLength + sizeof (TCHAR);
+    SubKeyLength = MaxSubKeyLength + 1;
 
-    SubKeyName = calloc(1, SubKeyLength);
+    SubKeyName = calloc(1, SubKeyLength * sizeof(TCHAR));
     if (SubKeyName == NULL)
         goto fail2;
 
@@ -919,8 +917,8 @@ CheckRequestSubKeys(
         DWORD   Type;
         DWORD   Reboot;
 
-        SubKeyLength = MaxSubKeyLength + sizeof (TCHAR);
-        memset(SubKeyName, 0, SubKeyLength);
+        SubKeyLength = MaxSubKeyLength + 1;
+        memset(SubKeyName, 0, SubKeyLength * sizeof(TCHAR));
 
         Error = RegEnumKeyEx(Context->RequestKey,
                              Index,
@@ -947,7 +945,7 @@ CheckRequestSubKeys(
 
         Length = sizeof (DWORD);
         Error = RegQueryValueEx(SubKey,
-                                "Reboot",
+                                _T("Reboot"),
                                 NULL,
                                 &Type,
                                 (LPBYTE)&Reboot,
@@ -964,7 +962,7 @@ loop:
     }
 
     Error = RegDeleteValue(Context->ParametersKey,
-                           "RebootCount");
+                           _T("RebootCount"));
     if (Error == ERROR_SUCCESS)
         (VOID) RegFlushKey(Context->ParametersKey);
 
@@ -1113,7 +1111,7 @@ GetRequestKeyName(
 {
     PMONITOR_CONTEXT            Context = &MonitorContext;
     DWORD                       MaxValueLength;
-    DWORD                       RequestKeyNameLength;
+    DWORD                       RequestKeyNameSize;
     DWORD                       Type;
     HRESULT                     Error;
 
@@ -1134,18 +1132,18 @@ GetRequestKeyName(
         goto fail1;
     }
 
-    RequestKeyNameLength = MaxValueLength + sizeof (TCHAR);
+    RequestKeyNameSize = (MaxValueLength + 1) * sizeof(TCHAR);
 
-    *RequestKeyName = calloc(1, RequestKeyNameLength);
+    *RequestKeyName = calloc(1, RequestKeyNameSize);
     if (*RequestKeyName == NULL)
         goto fail2;
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "RequestKey",
+                            _T("RequestKey"),
                             NULL,
                             &Type,
                             (LPBYTE)(*RequestKeyName),
-                            &RequestKeyNameLength);
+                            &RequestKeyNameSize);
     if (Error != ERROR_SUCCESS) {
         SetLastError(Error);
         goto fail3;
@@ -1191,9 +1189,9 @@ GetDialogParameters(
 {
     PMONITOR_CONTEXT    Context = &MonitorContext;
     DWORD               MaxValueLength;
-    DWORD               TitleLength;
-    DWORD               TextLength;
-    DWORD               QuestionLength;
+    DWORD               TitleSize;
+    DWORD               TextSize;
+    DWORD               QuestionSize;
     DWORD               Type;
     HRESULT             Error;
 
@@ -1214,18 +1212,18 @@ GetDialogParameters(
         goto fail1;
     }
 
-    TitleLength = MaxValueLength + sizeof (TCHAR);
+    TitleSize = (MaxValueLength + 1) * sizeof(TCHAR);
 
-    Context->Title = calloc(1, TitleLength);
+    Context->Title = calloc(1, TitleSize);
     if (Context == NULL)
         goto fail2;
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "DialogTitle",
+                            _T("DialogTitle"),
                             NULL,
                             &Type,
                             (LPBYTE)Context->Title,
-                            &TitleLength);
+                            &TitleSize);
     if (Error != ERROR_SUCCESS) {
         SetLastError(Error);
         goto fail3;
@@ -1236,18 +1234,18 @@ GetDialogParameters(
         goto fail4;
     }
 
-    TextLength = MaxValueLength + sizeof (TCHAR);
+    TextSize = (MaxValueLength + 1) * sizeof (TCHAR);
 
-    Context->Text = calloc(1, TextLength);
+    Context->Text = calloc(1, TextSize);
     if (Context == NULL)
         goto fail5;
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "DialogText",
+                            _T("DialogText"),
                             NULL,
                             &Type,
                             (LPBYTE)Context->Text,
-                            &TextLength);
+                            &TextSize);
     if (Error != ERROR_SUCCESS) {
         SetLastError(Error);
         goto fail6;
@@ -1258,18 +1256,18 @@ GetDialogParameters(
         goto fail7;
     }
 
-    QuestionLength = MaxValueLength + sizeof (TCHAR);
+    QuestionSize = (MaxValueLength + 1) * sizeof (TCHAR);
 
-    Context->Question = calloc(1, QuestionLength);
+    Context->Question = calloc(1, QuestionSize);
     if (Context == NULL)
         goto fail8;
 
     Error = RegQueryValueEx(Context->ParametersKey,
-                            "DialogQuestion",
+                            _T("DialogQuestion"),
                             NULL,
                             &Type,
                             (LPBYTE)Context->Question,
-                            &QuestionLength);
+                            &QuestionSize);
     if (Error != ERROR_SUCCESS) {
         SetLastError(Error);
         goto fail9;
@@ -1336,10 +1334,10 @@ RemoveStartOverride(
     TCHAR               KeyName[MAX_PATH];
     HRESULT             Error;
 
-    Error = StringCbPrintf(KeyName,
-                           MAX_PATH,
-                           SERVICES_KEY "\\%s\\StartOverride",
-                           DriverName);
+    Error = StringCchPrintf(KeyName,
+                            MAX_PATH,
+                            _T(SERVICES_KEY "\\%s\\StartOverride"),
+                            DriverName);
     assert(SUCCEEDED(Error));
 
     Error = RegDeleteKey(HKEY_LOCAL_MACHINE, KeyName);
@@ -1381,10 +1379,10 @@ MonitorMain(
 
     LogInfo("====>");
 
-    (VOID) RemoveStartOverride("stornvme");
+    (VOID) RemoveStartOverride(_T("stornvme"));
 
     Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                         PARAMETERS_KEY(__MODULE__),
+                         _T(PARAMETERS_KEY(__MODULE__)),
                          0,
                          KEY_READ,
                          &Context->ParametersKey);
@@ -1395,7 +1393,7 @@ MonitorMain(
     if (!Success)
         goto fail2;
 
-    Context->Service = RegisterServiceCtrlHandlerEx(MONITOR_NAME,
+    Context->Service = RegisterServiceCtrlHandlerEx(_T(MONITOR_NAME),
                                                     MonitorCtrlHandlerEx,
                                                     NULL);
     if (Context->Service == NULL)
@@ -1528,7 +1526,7 @@ done:
     ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
 
     RegCloseKey(Context->ParametersKey);
-    (VOID) RemoveStartOverride("stornvme");
+    (VOID) RemoveStartOverride(_T("stornvme"));
 
     LogInfo("<====");
 
@@ -1618,8 +1616,8 @@ MonitorCreate(
         goto fail2;
 
     Service = CreateService(SCManager,
-                            MONITOR_NAME,
-                            MONITOR_DISPLAYNAME,
+                            _T(MONITOR_NAME),
+                            _T(MONITOR_DISPLAYNAME),
                             SERVICE_ALL_ACCESS,
                             SERVICE_WIN32_OWN_PROCESS,
                             SERVICE_AUTO_START,
@@ -1683,7 +1681,7 @@ MonitorDelete(
         goto fail1;
 
     Service = OpenService(SCManager,
-                          MONITOR_NAME,
+                          _T(MONITOR_NAME),
                           SERVICE_ALL_ACCESS);
 
     if (Service == NULL)
@@ -1740,21 +1738,21 @@ MonitorEntry(
     )
 {
     SERVICE_TABLE_ENTRY Table[] = {
-        { MONITOR_NAME, MonitorMain },
+        { _T(MONITOR_NAME), MonitorMain },
         { NULL, NULL }
     };
     HRESULT             Error;
 
     LogInfo("%s (%s) ====>",
-            MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR,
-            DAY_STR "/" MONTH_STR "/" YEAR_STR);
+            _T(MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR),
+            _T(DAY_STR "/" MONTH_STR "/" YEAR_STR));
 
     if (!StartServiceCtrlDispatcher(Table))
         goto fail1;
 
     LogInfo("%s (%s) <====",
-            MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR,
-            DAY_STR "/" MONTH_STR "/" YEAR_STR);
+            _T(MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR),
+            _T(DAY_STR "/" MONTH_STR "/" YEAR_STR));
 
     return TRUE;
 
@@ -1775,7 +1773,7 @@ int CALLBACK
 _tWinMain(
     _In_        HINSTANCE   Current,
     _In_opt_    HINSTANCE   Previous,
-    _In_        LPSTR       CmdLine,
+    _In_        LPTSTR      CmdLine,
     _In_        int         CmdShow
     )
 {
