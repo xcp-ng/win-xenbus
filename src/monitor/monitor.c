@@ -42,6 +42,8 @@
 #include <assert.h>
 #include <TraceLoggingProvider.h>
 #include <winmeta.h>
+#include <setupapi.h>
+#include <devguid.h>
 
 #include <version.h>
 
@@ -1326,7 +1328,7 @@ fail1:
     return FALSE;
 }
 
-static BOOL
+static VOID
 RemoveStartOverride(
     _In_ PTSTR          DriverName
     )
@@ -1334,17 +1336,61 @@ RemoveStartOverride(
     TCHAR               KeyName[MAX_PATH];
     HRESULT             Error;
 
+    LogInfo("%s", DriverName);
+
     Error = StringCchPrintf(KeyName,
                             MAX_PATH,
                             _T(SERVICES_KEY "\\%s\\StartOverride"),
                             DriverName);
     assert(SUCCEEDED(Error));
 
-    Error = RegDeleteKey(HKEY_LOCAL_MACHINE, KeyName);
-    if (Error != ERROR_SUCCESS)
+    (VOID) RegDeleteKey(HKEY_LOCAL_MACHINE, KeyName);
+}
+
+static VOID
+RemoveStartOverrideForClass(
+    _In_ const GUID*    Guid
+    )
+{
+    HRESULT             Error;
+    HDEVINFO            DevInfo;
+    DWORD               Index;
+    SP_DEVINFO_DATA     DevInfoData;
+
+    DevInfo = SetupDiGetClassDevs(Guid,
+                                  NULL,
+                                  NULL,
+                                  0);
+    if (DevInfo == INVALID_HANDLE_VALUE)
         goto fail1;
 
-    return TRUE;
+    memset(&DevInfoData, 0, sizeof(DevInfoData));
+    DevInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+
+    for (Index = 0;
+         SetupDiEnumDeviceInfo(DevInfo, Index, &DevInfoData);
+         ++Index) {
+        TCHAR           Buffer[MAX_PATH];
+        memset(Buffer, 0, sizeof(Buffer));
+
+        if (SetupDiGetDeviceRegistryProperty(DevInfo,
+                                             &DevInfoData,
+                                             SPDRP_SERVICE,
+                                             NULL,
+                                             (PBYTE)Buffer,
+                                             sizeof(Buffer),
+                                             NULL)) {
+            Buffer[MAX_PATH - 1] = _T('\0');
+            RemoveStartOverride(Buffer);
+        }
+
+        memset(&DevInfoData, 0, sizeof(DevInfoData));
+        DevInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+    }
+
+    SetupDiDestroyDeviceInfoList(DevInfo);
+
+    return;
 
 fail1:
     Error = GetLastError();
@@ -1355,8 +1401,6 @@ fail1:
         LogError("fail1 (%s)", Message);
         LocalFree(Message);
     }
-
-    return FALSE;
 }
 
 VOID WINAPI
@@ -1379,7 +1423,7 @@ MonitorMain(
 
     LogInfo("====>");
 
-    (VOID) RemoveStartOverride(_T("stornvme"));
+    RemoveStartOverrideForClass(&GUID_DEVCLASS_SCSIADAPTER);
 
     Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
                          _T(PARAMETERS_KEY(__MODULE__)),
@@ -1523,10 +1567,10 @@ done:
     CloseHandle(Context->RequestEvent);
     CloseHandle(Context->StopEvent);
 
-    ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
-
     RegCloseKey(Context->ParametersKey);
-    (VOID) RemoveStartOverride(_T("stornvme"));
+    RemoveStartOverrideForClass(&GUID_DEVCLASS_SCSIADAPTER);
+
+    ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
 
     LogInfo("<====");
 
