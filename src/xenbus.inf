@@ -51,7 +51,6 @@ xen.sys=0,,
 xenbus.sys=0,,
 xenfilt.sys=0,,
 xenbus_monitor.exe=0,,
-xenbus_monitor.dll=0,,
 
 [XenBus_CopyFiles]
 xen.sys
@@ -60,7 +59,6 @@ xenfilt.sys
 
 [Monitor_CopyFiles]
 xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.exe,xenbus_monitor.exe
-xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll,xenbus_monitor.dll
 
 [Manufacturer] 
 %Vendor%=Inst,NT@INF_ARCH@
@@ -80,7 +78,7 @@ FeatureScore=0xFE
 AddReg = XenBus_Interrupts
 
 [XenBus_Inst.Services]
-AddService=xenbus_monitor,%SPSVCSINST_STARTSERVICE%,Monitor_Service,Monitor_EventLog
+AddService=xenbus_monitor,%SPSVCSINST_STARTSERVICE%,Monitor_Service
 AddService=xenbus,%SPSVCINST_ASSOCSERVICE%,XenBus_Service
 AddService=xenfilt,,XenFilt_Service,
 
@@ -147,13 +145,6 @@ HKR,"Parameters","RequestKey",0x00000000,%RequestKey%
 HKR,"Parameters","DialogTitle",0x00000000,%DialogTitle%
 HKR,"Parameters","DialogText",0x00000000,%DialogText%
 HKR,"Parameters","DialogQuestion",0x00000000,%DialogQuestion%
-
-[Monitor_EventLog]
-AddReg=Monitor_EventLog_AddReg
-
-[Monitor_EventLog_AddReg]
-HKR,,EventMessageFile,0x00020000,"%%SystemRoot%%\System32\xenbus_monitor_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll"
-HKR,,TypesSupported,0x00010001,7
 
 [Strings] 
 
