@@ -205,8 +205,6 @@ SuspendEarly(
     if (Cpu != 0)
         return;
 
-    HypercallPopulate();
-
     UnplugDevices();
 
     for (ListEntry = Context->EarlyList.Flink;

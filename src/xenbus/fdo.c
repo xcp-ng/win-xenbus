@@ -3831,8 +3831,6 @@ FdoS4ToS3(
 
     LogResume();
 
-    HypercallPopulate();
-
     UnplugDevices();
 
 not_active:

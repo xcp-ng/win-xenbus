@@ -40,7 +40,7 @@
 
 #include <public/xen.h>
 
-extern VOID
+extern NTSTATUS
 HypercallInitialize(
     VOID
     );

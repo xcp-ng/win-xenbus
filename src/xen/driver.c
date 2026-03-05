@@ -621,31 +621,33 @@ DllInitialize(
 
     __DriverSetMemoryKey(MemoryKey);
 
-    HypercallInitialize();
-
-    status = AcpiInitialize();
+    status = HypercallInitialize();
     if (!NT_SUCCESS(status))
         goto fail8;
 
-    status = SystemInitialize();
+    status = AcpiInitialize();
     if (!NT_SUCCESS(status))
         goto fail9;
 
-    status = BugCheckInitialize();
+    status = SystemInitialize();
     if (!NT_SUCCESS(status))
         goto fail10;
 
-    status = ModuleInitialize();
+    status = BugCheckInitialize();
     if (!NT_SUCCESS(status))
         goto fail11;
 
-    status = ProcessInitialize();
+    status = ModuleInitialize();
     if (!NT_SUCCESS(status))
         goto fail12;
 
-    status = UnplugInitialize();
+    status = ProcessInitialize();
     if (!NT_SUCCESS(status))
         goto fail13;
+
+    status = UnplugInitialize();
+    if (!NT_SUCCESS(status))
+        goto fail14;
 
     RegistryCloseKey(ServiceKey);
 
@@ -653,35 +655,38 @@ DllInitialize(
 
     return STATUS_SUCCESS;
 
+fail14:
+    Error("fail14\n");
+
+    ProcessTeardown();
+
 fail13:
     Error("fail13\n");
 
-    ProcessTeardown();
+    ModuleTeardown();
 
 fail12:
     Error("fail12\n");
 
-    ModuleTeardown();
+    BugCheckTeardown();
 
 fail11:
     Error("fail11\n");
 
-    BugCheckTeardown();
+    SystemTeardown();
 
 fail10:
     Error("fail10\n");
 
-    SystemTeardown();
+    AcpiTeardown();
 
 fail9:
     Error("fail9\n");
 
-    AcpiTeardown();
+    HypercallTeardown();
 
 fail8:
     Error("fail8\n");
-
-    HypercallTeardown();
 
     RegistryCloseKey(MemoryKey);
     __DriverSetMemoryKey(NULL);

@@ -76,14 +76,6 @@ XenTouch(
     _In_ ULONG      BuildNumber
     );
 
-// HYPERCALL
-
-XEN_API
-VOID
-HypercallPopulate(
-    VOID
-    );
-
 // HVM
 
 _Check_return_
