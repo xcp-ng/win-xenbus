@@ -30,6 +30,9 @@
  * SUCH DAMAGE.
  */
 
+#undef  XEN_API
+#define XEN_API __declspec(dllexport)
+
 #include <ntddk.h>
 #include <xen.h>
 #include <intrin.h>
@@ -188,6 +191,7 @@ __Hypercall(
             Value = hypercall2_vmmcall(ord, arg1, arg2);
             break;
         default:
+            Value = 0;
             BUG("NO HYPERCALL INSTRUCTION");
         }
         break;
@@ -206,13 +210,14 @@ __Hypercall(
             Value = hypercall3_vmmcall(ord, arg1, arg2, arg3);
             break;
         default:
+            Value = 0;
             BUG("NO HYPERCALL INSTRUCTION");
         }
         break;
     }
     default:
-        ASSERT(FALSE);
         Value = 0;
+        BUG("INVALID HYPERCALL ARGUMENT COUNT");
     }
     va_end(Arguments);
 
