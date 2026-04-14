@@ -17,9 +17,6 @@
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <EnableInf2cat>false</EnableInf2cat>
   </PropertyGroup>
-  <PropertyGroup>
-    <CustomBuildAfterTargets>Link</CustomBuildAfterTargets>
-  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalOptions>/ZH:SHA_256 %(AdditionalOptions)</AdditionalOptions>
@@ -54,21 +51,12 @@
     <ClCompile>
       <PreprocessorDefinitions>__x86_64__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <CustomBuildStep>
-      <Outputs>$(TargetDir)$(TargetName).dll</Outputs>
-      <Inputs>$(IntDir)$(TargetName).res</Inputs>
-      <Command>link -machine:x64 -dll -noentry -out:%(Outputs) %(Inputs)</Command>
-    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />
     <FilesToPackage Include="$(OutDir)$(TargetName).pdb" />
     <FilesToPackage Include="$(OutDir)$(TargetName).map" />
-    <FilesToPackage Include="$(OutDir)$(TargetName).dll" />
     <FilesToPackage Include="@(Inf->'%(CopyOutput)')" Condition="'@(Inf)'!=''" />
-  </ItemGroup>
-  <ItemGroup>
-    <MessageCompile Include="..\..\src\monitor\messages.mc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\monitor\monitor.c" />

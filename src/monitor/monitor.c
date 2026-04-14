@@ -47,8 +47,6 @@
 
 #include <version.h>
 
-#include "messages.h"
-
 #define stringify_literal(_text) #_text
 #define stringify(_text) stringify_literal(_text)
 #define __MODULE__ stringify(PROJECT)

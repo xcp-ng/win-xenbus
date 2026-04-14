@@ -54,4 +54,3 @@
 #define VER_FILESUBTYPE		    VFT2_UNKNOWN
 
 #include "common.ver"
-#include "messages.rc"
