@@ -47,4 +47,13 @@ typedef USHORT  uint16_t;
 typedef ULONG   uint32_t;
 typedef ULONG64 uint64_t;
 
+#define xen_mb()    KeMemoryBarrier()
+#if defined(_M_IX86) || defined(_M_X64)
+#define xen_wmb()   KeMemoryBarrierWithoutFence()
+#define xen_rmb()   KeMemoryBarrierWithoutFence()
+#else
+#define xen_wmb()   KeMemoryBarrier()
+#define xen_rmb()   KeMemoryBarrier()
+#endif
+
 #endif  // _XEN_TYPES_H
