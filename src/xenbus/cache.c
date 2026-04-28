@@ -623,7 +623,6 @@ again:
         Slab = CONTAINING_RECORD(ListEntry, XENBUS_CACHE_SLAB, ListEntry);
 
         Object = CacheGetObjectFromSlab(Slab);
-        ASSERT(Object != NULL);
 
         //
         // If the slab is now fully occupied, ove the cursor on to the next
