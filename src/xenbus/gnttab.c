@@ -816,7 +816,7 @@ GnttabDebugCallback(
         PXENBUS_GNTTAB_FRAME    Frame = &Context->Frame[Index];
         PHYSICAL_ADDRESS        Address;
 
-        Address.QuadPart = MmGetMdlPfnArray(Frame->Mdl)[0] << PAGE_SHIFT;
+        Address.QuadPart = (LONGLONG)MmGetMdlPfnArray(Frame->Mdl)[0] << PAGE_SHIFT;
 
         XENBUS_DEBUG(Printf,
                     &Context->DebugInterface,
