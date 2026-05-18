@@ -57,8 +57,6 @@ __AcquireHighLock(
     while (InterlockedCompareExchange(Lock, LOCK_MAGIC, 0) != 0)
         _mm_pause();
 
-    KeMemoryBarrier();
-
     return Irql;
 }
 
@@ -75,8 +73,6 @@ ReleaseHighLock(
     _In_  _IRQL_restores_ KIRQL     Irql
     )
 {
-    KeMemoryBarrier();
-
     InterlockedExchange(Lock, 0);
     KeLowerIrql(Irql);
 }
