@@ -166,7 +166,7 @@ _IsZeroMemory(
     while (Offset < Length) {
         if (*((PUCHAR)Buffer + Offset) != 0) {
             Error("%s: non-zero byte in %s (0x%p+0x%x)\n", Caller, Name, Buffer, Offset);
-            return FALSE;
+            return TRUE;
         }
         Offset++;
     }
