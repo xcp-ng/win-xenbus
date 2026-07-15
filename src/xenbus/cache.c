@@ -457,10 +457,10 @@ fail3:
     __CacheFree(Slab);
 
 fail2:
-    Error("fail2\n");
+    Error("fail2 (%08x)\n", status);
 
 fail1:
-    Error("fail1 (%08x)\n", status);
+    Trace("fail1 (%08x)\n", status);
 
     return status;
 }
