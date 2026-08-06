@@ -50,6 +50,7 @@ RtlRandomEx (
 #define XENBUS_CACHE_MAGAZINE_SLOTS   6
 
 typedef struct _XENBUS_CACHE_MAGAZINE {
+    ULONG   Count;
     PVOID   Slot[XENBUS_CACHE_MAGAZINE_SLOTS];
 } XENBUS_CACHE_MAGAZINE, *PXENBUS_CACHE_MAGAZINE;
 
@@ -167,20 +168,16 @@ CacheGetObjectFromMagazine(
     _In_ PXENBUS_CACHE_MAGAZINE Magazine
     )
 {
-    ULONG                       Index;
+    PVOID                       Object;
 
-    for (Index = 0; Index < XENBUS_CACHE_MAGAZINE_SLOTS; Index++) {
-        PVOID   Object;
+    if (Magazine->Count == 0)
+        return NULL;
 
-        if (Magazine->Slot[Index] != NULL) {
-            Object = Magazine->Slot[Index];
-            Magazine->Slot[Index] = NULL;
+    Object = Magazine->Slot[--Magazine->Count];
+    Magazine->Slot[Magazine->Count] = NULL;
 
-            return Object;
-        }
-    }
-
-    return NULL;
+    ASSERT(Object != NULL);
+    return Object;
 }
 
 static NTSTATUS
@@ -189,16 +186,15 @@ CachePutObjectToMagazine(
     _In_ PVOID                  Object
     )
 {
-    ULONG                       Index;
+    ASSERT(Object != NULL);
 
-    for (Index = 0; Index < XENBUS_CACHE_MAGAZINE_SLOTS; Index++) {
-        if (Magazine->Slot[Index] == NULL) {
-            Magazine->Slot[Index] = Object;
-            return STATUS_SUCCESS;
-        }
-    }
+    if (Magazine->Count == XENBUS_CACHE_MAGAZINE_SLOTS)
+        return STATUS_UNSUCCESSFUL;
 
-    return STATUS_UNSUCCESSFUL;
+    ASSERT(Magazine->Slot[Magazine->Count] == NULL);
+    Magazine->Slot[Magazine->Count++] = Object;
+
+    return STATUS_SUCCESS;
 }
 
 static PXENBUS_CACHE_MASK
