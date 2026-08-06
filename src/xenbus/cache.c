@@ -424,8 +424,6 @@ CacheCreateSlab(
     if (Slab == NULL)
         goto fail2;
 
-    RtlZeroMemory(Slab, NumberOfBytes);
-
     Slab->Magic = XENBUS_CACHE_SLAB_MAGIC;
     Slab->Cache = Cache;
 
