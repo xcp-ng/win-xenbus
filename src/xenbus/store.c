@@ -491,7 +491,7 @@ StoreVerifyHeader(
         Valid = FALSE;
     }
 
-    if (Header->len >= XENSTORE_PAYLOAD_MAX) {
+    if (Header->len > XENSTORE_PAYLOAD_MAX) {
         Error("ILLEGAL LENGTH 0x%08x\n", Header->len);
         Valid = FALSE;
     }
@@ -520,6 +520,10 @@ StoreReceiveResponse(
     ASSERT(StoreVerifyHeader(&Response->Header));
 
     if (Response->Header.len == 0)
+        goto done;
+
+    status = STATUS_INVALID_BUFFER_SIZE;
+    if (Response->Header.len > XENSTORE_PAYLOAD_MAX)
         goto done;
 
     Response->Segment[XENBUS_STORE_RESPONSE_PAYLOAD_SEGMENT].Length = Response->Header.len;
