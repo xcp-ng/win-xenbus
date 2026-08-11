@@ -1215,7 +1215,7 @@ GetDialogParameters(
     TitleSize = (MaxValueLength + 1) * sizeof(TCHAR);
 
     Context->Title = calloc(1, TitleSize);
-    if (Context == NULL)
+    if (Context->Title == NULL)
         goto fail2;
 
     Error = RegQueryValueEx(Context->ParametersKey,
@@ -1237,7 +1237,7 @@ GetDialogParameters(
     TextSize = (MaxValueLength + 1) * sizeof (TCHAR);
 
     Context->Text = calloc(1, TextSize);
-    if (Context == NULL)
+    if (Context->Text == NULL)
         goto fail5;
 
     Error = RegQueryValueEx(Context->ParametersKey,
@@ -1259,7 +1259,7 @@ GetDialogParameters(
     QuestionSize = (MaxValueLength + 1) * sizeof (TCHAR);
 
     Context->Question = calloc(1, QuestionSize);
-    if (Context == NULL)
+    if (Context->Question == NULL)
         goto fail8;
 
     Error = RegQueryValueEx(Context->ParametersKey,
