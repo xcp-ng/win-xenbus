@@ -545,6 +545,7 @@ LogDebugPrint(
 {
     PLOG_CONTEXT        Context = &LogContext;
     KIRQL               Irql;
+    ULONG               Length;
     PLOG_SLOT           Slot;
 
     UNREFERENCED_PARAMETER(ComponentId);
@@ -571,9 +572,14 @@ LogDebugPrint(
 
     Slot = &Context->Slot[Context->Pending++];
 
+    // truncate long log lines - avoid buffer overrun on Slot->Buffer
+    Length = Ansi->Length >= LOG_BUFFER_SIZE ?
+                            LOG_BUFFER_SIZE - 1:
+                            Ansi->Length;
+
     Slot->Level = 1 << Level;
-    RtlCopyMemory(Slot->Buffer, Ansi->Buffer, Ansi->Length);
-    Slot->Offset = Ansi->Length;
+    RtlCopyMemory(Slot->Buffer, Ansi->Buffer, Length);
+    Slot->Offset = Length;
 
     ReleaseHighLock(&Context->Lock, Irql);
 
