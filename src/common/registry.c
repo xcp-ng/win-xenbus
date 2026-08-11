@@ -1453,29 +1453,36 @@ RegistryAnsiToSz(
     NTSTATUS                        status;
 
     Length = Ansi->Length + 1;
+
+    status = STATUS_BUFFER_OVERFLOW;
+    if (Length * sizeof(WCHAR) > MAXUSHORT)
+        goto fail1;
+
     Partial = __RegistryAllocate(FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) +
                                  Length * sizeof (WCHAR));
 
     status = STATUS_NO_MEMORY;
     if (Partial == NULL)
-        goto fail1;
+        goto fail2;
 
     Partial->TitleIndex = 0;
     Partial->Type = REG_SZ;
     Partial->DataLength = Length * sizeof (WCHAR);
 
-    Unicode.MaximumLength = (UCHAR)Partial->DataLength;
+    Unicode.MaximumLength = (USHORT)Partial->DataLength;
     Unicode.Buffer = (PWCHAR)Partial->Data;
     Unicode.Length = 0;
 
     status = RtlAnsiStringToUnicodeString(&Unicode, Ansi, FALSE);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     return Partial;
 
-fail2:
+fail3:
     __RegistryFree(Partial);
+
+fail2:
 
 fail1:
     return NULL;
@@ -1496,12 +1503,16 @@ RegistryAnsiToMultiSz(
     for (Index = 0; Ansi[Index].Buffer != NULL; Index++)
         Length += Ansi[Index].Length + 1;
 
+    status = STATUS_BUFFER_OVERFLOW;
+    if (Length * sizeof(WCHAR) > MAXUSHORT)
+        goto fail1;
+
     Partial = __RegistryAllocate(FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) +
                                Length * sizeof (WCHAR));
 
     status = STATUS_NO_MEMORY;
     if (Partial == NULL)
-        goto fail1;
+        goto fail2;
 
     Partial->TitleIndex = 0;
     Partial->Type = REG_MULTI_SZ;
@@ -1514,7 +1525,7 @@ RegistryAnsiToMultiSz(
     for (Index = 0; Ansi[Index].Buffer != NULL; Index++) {
         status = RtlAnsiStringToUnicodeString(&Unicode, &Ansi[Index], FALSE);
         if (!NT_SUCCESS(status))
-            goto fail2;
+            goto fail3;
 
         Length = Unicode.Length / sizeof (WCHAR);
 
@@ -1527,8 +1538,10 @@ RegistryAnsiToMultiSz(
 
     return Partial;
 
-fail2:
+fail3:
     __RegistryFree(Partial);
+
+fail2:
 
 fail1:
     return NULL;
