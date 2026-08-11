@@ -83,7 +83,7 @@ InitializeHighLock(
     _In_ PHIGH_LOCK Lock
     )
 {
-    RtlZeroMemory(&Lock, sizeof (HIGH_LOCK));
+    RtlZeroMemory(Lock, sizeof (HIGH_LOCK));
 }
 
 #endif  // _COMMON_HIGH_H
