@@ -194,8 +194,6 @@ done:
 fail1:
     Error("fail1 (%08x)\n", status);
 
-    XENBUS_SHARED_INFO(Release, &Context->SharedInfoInterface);
-
     --Context->References;
     ASSERT3U(Context->References, ==, 0);
     KeReleaseSpinLock(&Context->Lock, Irql);
