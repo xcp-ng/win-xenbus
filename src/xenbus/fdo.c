@@ -3387,7 +3387,7 @@ FdoPciHoleFree(
                               Count);
     ASSERT(NT_SUCCESS(status));
 
-    ExFreePool(Mdl);
+    IoFreeMdl(Mdl);
 }
 
 static PMDL
