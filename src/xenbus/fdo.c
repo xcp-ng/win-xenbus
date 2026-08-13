@@ -5783,7 +5783,7 @@ FdoSetWatchdog(
     ConfigFreeSzValue(Option);
 
     if (Value && Value < 10) {
-        Warning("%us TOO SHORT (ROUNDING UP TO 10s)\n");
+        Warning("%us TOO SHORT (ROUNDING UP TO 10s)\n", Value);
         Value = 10;
     }
 

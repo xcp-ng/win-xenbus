@@ -821,6 +821,7 @@ GnttabDebugCallback(
         XENBUS_DEBUG(Printf,
                     &Context->DebugInterface,
                      "[%u] Address = %08x.%08x\n",
+                     Index,
                      Address.HighPart,
                      Address.LowPart);
     }

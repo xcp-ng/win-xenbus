@@ -760,7 +760,6 @@ BugCheckSystemThreadExceptionNotHandled(
                       "%s|BUGCHECK: %08X AT %p\n",
                       __MODULE__,
                       Code,
-                      Name,
                       Address);
 
         BugCheckDumpExceptionRecord(Exception);
@@ -803,7 +802,6 @@ BugCheckKernelModeExceptionNotHandled(
                       "%s|BUGCHECK: %08X AT %p\n",
                       __MODULE__,
                       Code,
-                      Name,
                       Address);
 
         LogPrintf(LOG_LEVEL_CRITICAL,
