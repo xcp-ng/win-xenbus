@@ -1657,7 +1657,10 @@ DmaGetAdapter(
         break;
 
     default:
-        ASSERT(FALSE);
+        Error("Unknown DMA operations size %lu\n",
+              Context->LowerOperations->Size);
+        status = STATUS_NOT_SUPPORTED;
+        goto fail3;
     }
 
     // Copy in the requisite number of operations
@@ -1687,6 +1690,11 @@ DmaGetAdapter(
 
 done:
     return Adapter;
+
+fail3:
+    Error("fail3\n");
+
+    DmaDestroyContext(Context);
 
 fail2:
     Error("fail2\n");
