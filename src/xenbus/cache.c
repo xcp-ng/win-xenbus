@@ -901,10 +901,10 @@ fail5:
 
     (*Cache)->MagazineCount = 0;
 
-    CacheSpill(*Cache, 0);
-
 fail4:
     Error("fail4\n");
+
+    CacheSpill(*Cache, 0);
 
 fail3:
     Error("fail3\n");
