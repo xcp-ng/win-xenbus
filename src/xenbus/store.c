@@ -623,21 +623,24 @@ StoreParseWatchEvent(
 {
     PSTR            End;
 
+    if (Data == NULL || Length == 0)
+        goto fail1;
+
     *Path = Data;
-    while (*Data != '\0' && Length != 0) {
+    while (Length != 0 && *Data != '\0') {
         Data++;
         --Length;
     }
 
     if (Length != TOKEN_LENGTH + 1)
-        goto fail1;
+        goto fail2;
 
     // Skip over the NUL
     Data++;
     --Length;
 
     if (Data[Length - 1] != '\0')
-        goto fail2;
+        goto fail3;
 
     if (strncmp(Data, "TOK|", 4) != 0) {
         Warning("UNRECOGNIZED PRE-AMBLE: %02X%02X%02X%02X\n",
@@ -646,22 +649,25 @@ StoreParseWatchEvent(
                 Data[2],
                 Data[3]);
 
-        goto fail3;
+        goto fail4;
     }
 
     Data += 4;
     *Caller = (PVOID)(ULONG_PTR)_strtoui64(Data, &End, 16);
 
     if (*End != '|')
-        goto fail4;
+        goto fail5;
 
     Data = End + 1;
     *Id = (USHORT)strtoul(Data, &End, 16);
 
     if (*End != '\0')
-        goto fail5;
+        goto fail6;
 
     return STATUS_SUCCESS;
+
+fail6:
+    Error("fail6\n");
 
 fail5:
     Error("fail5\n");
