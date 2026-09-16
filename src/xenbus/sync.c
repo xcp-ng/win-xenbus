@@ -170,7 +170,7 @@ __SyncProcessorDisableInterrupts(
     while (++Attempts <= 1000) {
         KeMemoryBarrier();
 
-        if (Context->CompletionCount == Context->ProcessorCount)
+        if (Context->CompletionCount >= Context->ProcessorCount)
             break;
 
         _mm_pause();
@@ -180,7 +180,7 @@ __SyncProcessorDisableInterrupts(
         Old = Context->CompletionCount;
         New = Old - 1;
 
-        if (Old == Context->ProcessorCount)
+        if (Old >= Context->ProcessorCount)
             break;
     } while (InterlockedCompareExchange(&Context->CompletionCount, New, Old) != Old);
 
@@ -189,8 +189,10 @@ __SyncProcessorDisableInterrupts(
         status = STATUS_UNSUCCESSFUL;
     }
 
-    if (NT_SUCCESS(status))
+    if (NT_SUCCESS(status)) {
         _disable();
+        InterlockedIncrement(&Context->CompletionCount);
+    }
 
     return status;
 }
@@ -237,8 +239,8 @@ __SyncProcessorRunLate(
 }
 
 static FORCEINLINE VOID
-__SyncWait(
-    VOID
+__SyncWaitTarget(
+    LONG            Target
     )
 {
     PSYNC_CONTEXT   Context = &SyncContext;
@@ -246,11 +248,21 @@ __SyncWait(
     for (;;) {
         KeMemoryBarrier();
 
-        if (Context->CompletionCount == Context->ProcessorCount)
+        if (Context->CompletionCount == Target)
             break;
 
         _mm_pause();
     }
+}
+
+static FORCEINLINE VOID
+__SyncWait(
+    VOID
+    )
+{
+    PSYNC_CONTEXT   Context = &SyncContext;
+
+    __SyncWaitTarget(Context->ProcessorCount);
 }
 
 _Use_decl_annotations_
@@ -418,8 +430,10 @@ SyncDisableInterrupts(
     for (;;) {
         status = __SyncProcessorDisableInterrupts(Irql);
         _Analysis_assume_(NT_SUCCESS(status));
-        if (NT_SUCCESS(status))
+        if (NT_SUCCESS(status)) {
+            __SyncWaitTarget(2 * Context->ProcessorCount);
             return status;
+        }
 
         LogPrintf(LOG_LEVEL_WARNING, "SYNC: RE-TRY\n");
     }
