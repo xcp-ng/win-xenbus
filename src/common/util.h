@@ -41,6 +41,11 @@
 #define	P2ROUNDUP(_t, _x, _a)   \
         (-(-((_t)(_x)) & -(((_t)(_a)))))
 
+#define TIME_US(_us)            ((_us) * 10ll)
+#define TIME_MS(_ms)            (TIME_US((_ms) * 1000ll))
+#define TIME_S(_s)              (TIME_MS((_s) * 1000ll))
+#define TIME_RELATIVE(_t)       (-(_t))
+
 static FORCEINLINE LONG
 __ffs(
     _In_ unsigned long long mask

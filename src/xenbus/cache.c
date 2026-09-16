@@ -1056,11 +1056,6 @@ CacheDebugCallback(
     }
 }
 
-#define TIME_US(_us)        ((_us) * 10)
-#define TIME_MS(_ms)        (TIME_US((_ms) * 1000))
-#define TIME_S(_s)          (TIME_MS((_s) * 1000))
-#define TIME_RELATIVE(_t)   (-(_t))
-
 #define XENBUS_CACHE_MONITOR_PERIOD 5
 
 static NTSTATUS

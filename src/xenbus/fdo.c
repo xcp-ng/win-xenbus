@@ -1642,11 +1642,6 @@ loop:
     return STATUS_SUCCESS;
 }
 
-#define TIME_US(_us)            ((_us) * 10ll)
-#define TIME_MS(_ms)            (TIME_US((_ms) * 1000ll))
-#define TIME_S(_s)              (TIME_MS((_s) * 1000ll))
-#define TIME_RELATIVE(_t)       (-(_t))
-
 static FORCEINLINE NTSTATUS
 __FdoBalloonSetActive(
     _In_ PXENBUS_FDO        Fdo

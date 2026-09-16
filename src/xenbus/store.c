@@ -909,11 +909,6 @@ StoreDpc(
     __StorePoll(Context);
 }
 
-#define TIME_US(_us)        ((_us) * 10)
-#define TIME_MS(_ms)        (TIME_US((_ms) * 1000))
-#define TIME_S(_s)          (TIME_MS((_s) * 1000))
-#define TIME_RELATIVE(_t)   (-(_t))
-
 #define XENBUS_STORE_POLL_PERIOD 5
 
 static PXENBUS_STORE_RESPONSE
@@ -1993,11 +1988,6 @@ StorePoll(
 {
     __StorePoll(Interface->Context);
 }
-
-#define TIME_US(_us)        ((_us) * 10)
-#define TIME_MS(_ms)        (TIME_US((_ms) * 1000))
-#define TIME_S(_s)          (TIME_MS((_s) * 1000))
-#define TIME_RELATIVE(_t)   (-(_t))
 
 #define XENBUS_STORE_WATCHDOG_PERIOD 15
 
