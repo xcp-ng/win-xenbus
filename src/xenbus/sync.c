@@ -284,21 +284,22 @@ SyncWorker(
 
     Request = SYNC_REQUEST_NONE;
     for (;;) {
-        NTSTATUS status;
+        SYNC_REQUEST    Next;
+        NTSTATUS        status;
 
-        KeMemoryBarrier();
+        Next = ReadAcquire((LONG *)&Context->Request);
 
-        if (Context->Request == SYNC_REQUEST_EXIT)
+        if (Next == SYNC_REQUEST_EXIT)
             break;
 
-        if (Context->Request == Request) {
+        if (Next == Request) {
             _mm_pause();
             continue;
         }
 
         status = STATUS_SUCCESS;
 
-        switch (Context->Request) {
+        switch (Next) {
         case SYNC_REQUEST_DISABLE_INTERRUPTS:
             status = __SyncProcessorDisableInterrupts(&Irql);
             break;
@@ -321,7 +322,7 @@ SyncWorker(
         }
 
         if (NT_SUCCESS(status))
-            Request = Context->Request;
+            Request = Next;
     }
 
     ASSERT3U(KeGetCurrentIrql(), ==, DISPATCH_LEVEL);
