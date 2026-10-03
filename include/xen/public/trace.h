@@ -1,23 +1,6 @@
+/* SPDX-License-Identifier: MIT */
 /******************************************************************************
  * include/public/trace.h
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
  *
  * Mark Williamson, (C) 2004 Intel Research Cambridge
  * Copyright (C) 2005 Bin Ren
@@ -78,12 +61,13 @@
 /* #define XEN_SCHEDULER_SEDF 2 (Removed) */
 #define TRC_SCHED_ARINC653 3
 #define TRC_SCHED_RTDS     4
+#define TRC_SCHED_SNULL    5
 
 /* Per-scheduler tracing */
 #define TRC_SCHED_CLASS_EVT(_c, _e) \
   ( ( TRC_SCHED_CLASS | \
       ((TRC_SCHED_##_c << TRC_SCHED_ID_SHIFT) & TRC_SCHED_ID_MASK) ) + \
-    (_e & TRC_SCHED_EVT_MASK) )
+    ((_e) & TRC_SCHED_EVT_MASK) )
 
 /* Trace classes for DOM0 operations */
 #define TRC_DOM0_DOMOPS     0x00041000   /* Domains manipulations */
@@ -115,6 +99,7 @@
 #define TRC_SCHED_SWITCH_INFPREV (TRC_SCHED_VERBOSE + 14)
 #define TRC_SCHED_SWITCH_INFNEXT (TRC_SCHED_VERBOSE + 15)
 #define TRC_SCHED_SHUTDOWN_CODE  (TRC_SCHED_VERBOSE + 16)
+#define TRC_SCHED_SWITCH_INFCONT (TRC_SCHED_VERBOSE + 17)
 
 #define TRC_DOM0_DOM_ADD         (TRC_DOM0_DOMOPS + 1)
 #define TRC_DOM0_DOM_REM         (TRC_DOM0_DOMOPS + 2)
@@ -172,7 +157,7 @@
  */
 #define TRC_PV_HYPERCALL_V2_ARG_32(i) (0x1 << (20 + 2*(i)))
 #define TRC_PV_HYPERCALL_V2_ARG_64(i) (0x2 << (20 + 2*(i)))
-#define TRC_PV_HYPERCALL_V2_ARG_MASK  (0xfff00000)
+#define TRC_PV_HYPERCALL_V2_ARG_MASK  0xfff00000U
 
 #define TRC_SHADOW_NOT_SHADOW                 (TRC_SHADOW +  1)
 #define TRC_SHADOW_FAST_PROPAGATE             (TRC_SHADOW +  2)
@@ -193,8 +178,10 @@
 /* trace events per subclass */
 #define TRC_HVM_NESTEDFLAG      (0x400)
 #define TRC_HVM_VMENTRY         (TRC_HVM_ENTRYEXIT + 0x01)
-#define TRC_HVM_VMEXIT          (TRC_HVM_ENTRYEXIT + 0x02)
-#define TRC_HVM_VMEXIT64        (TRC_HVM_ENTRYEXIT + TRC_64_FLAG + 0x02)
+#define TRC_HVM_VMX_EXIT        (TRC_HVM_ENTRYEXIT + 0x02)
+#define TRC_HVM_VMX_EXIT64      (TRC_HVM_ENTRYEXIT + TRC_64_FLAG + 0x02)
+#define TRC_HVM_SVM_EXIT        (TRC_HVM_ENTRYEXIT + 0x03)
+#define TRC_HVM_SVM_EXIT64      (TRC_HVM_ENTRYEXIT + TRC_64_FLAG + 0x03)
 #define TRC_HVM_PF_XEN          (TRC_HVM_HANDLER + 0x01)
 #define TRC_HVM_PF_XEN64        (TRC_HVM_HANDLER + TRC_64_FLAG + 0x01)
 #define TRC_HVM_PF_INJECT       (TRC_HVM_HANDLER + 0x02)
@@ -233,6 +220,8 @@
 #define TRC_HVM_TRAP             (TRC_HVM_HANDLER + 0x23)
 #define TRC_HVM_TRAP_DEBUG       (TRC_HVM_HANDLER + 0x24)
 #define TRC_HVM_VLAPIC           (TRC_HVM_HANDLER + 0x25)
+#define TRC_HVM_XCR_READ64      (TRC_HVM_HANDLER + TRC_64_FLAG + 0x26)
+#define TRC_HVM_XCR_WRITE64     (TRC_HVM_HANDLER + TRC_64_FLAG + 0x27)
 
 #define TRC_HVM_IOPORT_WRITE    (TRC_HVM_HANDLER + 0x216)
 #define TRC_HVM_IOMEM_WRITE     (TRC_HVM_HANDLER + 0x217)

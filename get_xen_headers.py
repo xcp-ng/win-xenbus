@@ -71,6 +71,7 @@ if __name__ == '__main__':
     copy_file(working, 'public', 'version.h')
     copy_file(working, 'public', 'features.h')
     copy_file(working, 'public', 'errno.h')
+    copy_file(working, 'public', 'vcpu.h')
 
     copy_file(working, 'xen', 'errno.h')
 
