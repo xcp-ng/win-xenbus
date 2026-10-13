@@ -201,13 +201,12 @@ __AllocatePages(
 
     LowAddress.QuadPart = 0ull;
     HighAddress.QuadPart = ~0ull;
+    SkipBytes.QuadPart = 0ull;
     TotalBytes = (SIZE_T)PAGE_SIZE * Count;
 
     if (Contiguous) {
-        SkipBytes.QuadPart = TotalBytes;
         Flags = MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS;
     } else {
-        SkipBytes.QuadPart = 0ull;
         Flags = MM_ALLOCATE_FULLY_REQUIRED;
     }
 
