@@ -571,8 +571,7 @@ GnttabRevokeForeignAccess(
 
     flags = (volatile SHORT *)&Frame->Entry[Index].flags;
 
-    Attempt = 0;
-    while (Attempt++ < 100) {
+    for (Attempt = 0; Attempt < 100; Attempt++) {
         uint16_t    Old;
         uint16_t    New;
 
