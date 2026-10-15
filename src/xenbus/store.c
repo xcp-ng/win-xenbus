@@ -1007,7 +1007,7 @@ StoreCheckResponse(
         for (Index = 0;
              Index < sizeof (xsd_errors) / sizeof (xsd_errors[0]);
              Index++) {
-            struct xsd_errors   *Entry = &xsd_errors[Index];
+            const struct xsd_errors *Entry = &xsd_errors[Index];
 
             if (strncmp(Error, Entry->errstring, Length) == 0) {
                 ERRNO_TO_STATUS(Entry->errnum, status);
