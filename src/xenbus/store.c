@@ -459,7 +459,6 @@ StoreIgnoreHeaderType(
     case XS_IS_DOMAIN_INTRODUCED:
     case XS_RESUME:
     case XS_SET_TARGET:
-    case XS_RESTRICT:
         return TRUE;
     default:
         return FALSE;
