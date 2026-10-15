@@ -1,30 +1,11 @@
+/* SPDX-License-Identifier: MIT */
 /******************************************************************************
  * arch-x86/xen.h
- * 
+ *
  * Guest OS interface to x86 Xen.
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
  *
  * Copyright (c) 2004-2006, K A Fraser
  */
-
-#include "../xen.h"
 
 #ifndef __XEN_PUBLIC_ARCH_X86_XEN_H__
 #define __XEN_PUBLIC_ARCH_X86_XEN_H__
@@ -53,18 +34,29 @@
 #define __XEN_GUEST_HANDLE(name)        __guest_handle_ ## name
 #define XEN_GUEST_HANDLE(name)          __XEN_GUEST_HANDLE(name)
 #define XEN_GUEST_HANDLE_PARAM(name)    XEN_GUEST_HANDLE(name)
-#define set_xen_guest_handle_raw(hnd, val)  do { (hnd).p = val; } while (0)
+#define set_xen_guest_handle_raw(hnd, val)  do { (hnd).p = (val); } while (0)
 #define set_xen_guest_handle(hnd, val) set_xen_guest_handle_raw(hnd, val)
 
 #if defined(__i386__)
+# ifdef __XEN__
+__DeFiNe__ __DECL_REG_LO8(which) uint32_t e ## which ## x
+__DeFiNe__ __DECL_REG_LO16(name) union { uint32_t e ## name; }
+# endif
 #include "xen-x86_32.h"
+# ifdef __XEN__
+__UnDeF__ __DECL_REG_LO8
+__UnDeF__ __DECL_REG_LO16
+__DeFiNe__ __DECL_REG_LO8(which) e ## which ## x
+__DeFiNe__ __DECL_REG_LO16(name) e ## name
+# endif
 #elif defined(__x86_64__)
 #include "xen-x86_64.h"
 #endif
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 typedef ULONG_PTR xen_pfn_t;
 #define PRI_xen_pfn "lx"
+#define PRIu_xen_pfn "lu"
 #endif
 
 #define XEN_HAVE_PV_GUEST_ENTRY 1
@@ -105,7 +97,7 @@ typedef ULONG_PTR xen_pfn_t;
 /* Maximum number of virtual CPUs in legacy multi-processor guests. */
 #define XEN_LEGACY_MAX_VCPUS 32
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 typedef ULONG_PTR xen_ulong_t;
 #define PRI_xen_ulong "lx"
@@ -132,6 +124,12 @@ typedef ULONG_PTR xen_ulong_t;
  *  Level == 1: Kernel may enter
  *  Level == 2: Kernel may enter
  *  Level == 3: Everyone may enter
+ *
+ * Note: For compatibility with kernels not setting up exception handlers
+ *       early enough, Xen will avoid trying to inject #GP (and hence crash
+ *       the domain) when an RDMSR would require this, but no handler was
+ *       set yet. The precise conditions are implementation specific, and
+ *       new code may not rely on such behavior anyway.
  */
 #define TI_GET_DPL(_ti)      ((_ti)->flags & 3)
 #define TI_GET_IF(_ti)       ((_ti)->flags & 4)
@@ -149,23 +147,19 @@ DEFINE_XEN_GUEST_HANDLE(trap_info_t);
 typedef uint64_t tsc_timestamp_t; /* RDTSC timestamp */
 
 /*
- * The following is all CPU context. Note that the fpu_ctxt block is filled 
+ * The following is all CPU context. Note that the fpu_ctxt block is filled
  * in by FXSAVE if the CPU has feature FXSR; otherwise FSAVE is used.
  *
- * Also note that when calling DOMCTL_setvcpucontext and VCPU_initialise
- * for HVM and PVH guests, not all information in this structure is updated:
+ * Also note that when calling DOMCTL_setvcpucontext for HVM guests, not all
+ * information in this structure is updated, the fields read include: fpu_ctxt
+ * (if VGCT_I387_VALID is set), flags, user_regs and debugreg[*].
  *
- * - For HVM guests, the structures read include: fpu_ctxt (if
- * VGCT_I387_VALID is set), flags, user_regs, debugreg[*]
- *
- * - PVH guests are the same as HVM guests, but additionally use ctrlreg[3] to
- * set cr3. All other fields not used should be set to 0.
+ * Note: VCPUOP_initialise for HVM guests is non-symetric with
+ * DOMCTL_setvcpucontext, and uses struct vcpu_hvm_context from hvm/hvm_vcpu.h
  */
 struct vcpu_guest_context {
     /* FPU registers come first so they can be aligned for FXSAVE/FXRSTOR. */
     struct { char x[512]; } fpu_ctxt;       /* User-level FPU registers     */
-#define VGCF_I387_VALID                (1<<0)
-#define VGCF_IN_KERNEL                 (1<<2)
 #define _VGCF_i387_valid               0
 #define VGCF_i387_valid                (1<<_VGCF_i387_valid)
 #define _VGCF_in_kernel                2
@@ -177,7 +171,18 @@ struct vcpu_guest_context {
 #define _VGCF_online                   5
 #define VGCF_online                    (1<<_VGCF_online)
     ULONG_PTR flags;                    /* VGCF_* flags                 */
+
+    /*
+     * Outside of Xen, regs type stays named cpu_user_regs for backwards
+     * compatibility.  Inside Xen, the type called cpu_user_regs is different,
+     * and the public API type is renamed to guest_user_regs.
+     */
+#ifdef __XEN__
+    struct guest_user_regs user_regs;       /* User-level CPU registers     */
+#else
     struct cpu_user_regs user_regs;         /* User-level CPU registers     */
+#endif
+
     struct trap_info trap_ctxt[256];        /* Virtual IDT                  */
     ULONG_PTR ldt_base, ldt_ents;       /* LDT (linear address, # ents) */
     ULONG_PTR gdt_frames[16], gdt_ents; /* GDT (machine frames, # ents) */
@@ -283,17 +288,52 @@ struct xen_arch_domainconfig {
 #define XEN_X86_EMU_IOMMU           (1U<<_XEN_X86_EMU_IOMMU)
 #define _XEN_X86_EMU_PIT            8
 #define XEN_X86_EMU_PIT             (1U<<_XEN_X86_EMU_PIT)
+#define _XEN_X86_EMU_USE_PIRQ       9
+#define XEN_X86_EMU_USE_PIRQ        (1U<<_XEN_X86_EMU_USE_PIRQ)
+#define _XEN_X86_EMU_VPCI           10
+#define XEN_X86_EMU_VPCI            (1U<<_XEN_X86_EMU_VPCI)
 
 #define XEN_X86_EMU_ALL             (XEN_X86_EMU_LAPIC | XEN_X86_EMU_HPET |  \
                                      XEN_X86_EMU_PM | XEN_X86_EMU_RTC |      \
                                      XEN_X86_EMU_IOAPIC | XEN_X86_EMU_PIC |  \
                                      XEN_X86_EMU_VGA | XEN_X86_EMU_IOMMU |   \
-                                     XEN_X86_EMU_PIT)
+                                     XEN_X86_EMU_PIT | XEN_X86_EMU_USE_PIRQ |\
+                                     XEN_X86_EMU_VPCI)
     uint32_t emulation_flags;
+
+/*
+ * Select whether to use a relaxed behavior for accesses to MSRs not explicitly
+ * handled by Xen instead of injecting a #GP to the guest. Note this option
+ * doesn't allow the guest to read or write to the underlying MSR.
+ */
+#define XEN_X86_MSR_RELAXED (1u << 0)
+    uint32_t misc_flags;
 };
+
+/* Max  XEN_X86_* constant. Used for ABI checking. */
+#define XEN_X86_MISC_FLAGS_MAX XEN_X86_MSR_RELAXED
+
 #endif
 
-#endif /* !__ASSEMBLY__ */
+/*
+ * Representations of architectural CPUID and MSR information.  Used as the
+ * serialised version of Xen's internal representation.
+ */
+typedef struct xen_cpuid_leaf {
+#define XEN_CPUID_NO_SUBLEAF 0xffffffffu
+    uint32_t leaf, subleaf;
+    uint32_t a, b, c, d;
+} xen_cpuid_leaf_t;
+DEFINE_XEN_GUEST_HANDLE(xen_cpuid_leaf_t);
+
+typedef struct xen_msr_entry {
+    uint32_t idx;
+    uint32_t flags; /* Reserved MBZ. */
+    uint64_t val;
+} xen_msr_entry_t;
+DEFINE_XEN_GUEST_HANDLE(xen_msr_entry_t);
+
+#endif /* !__ASSEMBLER__ */
 
 /*
  * ` enum neg_errnoval
@@ -317,13 +357,20 @@ struct xen_arch_domainconfig {
  * Prefix forces emulation of some non-trapping instructions.
  * Currently only CPUID.
  */
-#ifdef __ASSEMBLY__
+#ifdef __ASSEMBLER__
 #define XEN_EMULATE_PREFIX .byte 0x0f,0x0b,0x78,0x65,0x6e ;
 #define XEN_CPUID          XEN_EMULATE_PREFIX cpuid
 #else
 #define XEN_EMULATE_PREFIX ".byte 0x0f,0x0b,0x78,0x65,0x6e ; "
 #define XEN_CPUID          XEN_EMULATE_PREFIX "cpuid"
 #endif
+
+/*
+ * Debug console IO port, also called "port E9 hack". Each character written
+ * to this IO port will be printed on the hypervisor console, subject to log
+ * level restrictions.
+ */
+#define XEN_HVM_DEBUGCONS_IOPORT 0xe9
 
 #endif /* __XEN_PUBLIC_ARCH_X86_XEN_H__ */
 

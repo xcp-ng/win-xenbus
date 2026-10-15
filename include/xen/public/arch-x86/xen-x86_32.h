@@ -1,25 +1,8 @@
+/* SPDX-License-Identifier: MIT */
 /******************************************************************************
  * xen-x86_32.h
- * 
+ *
  * Guest OS interface to x86 32-bit Xen.
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
  *
  * Copyright (c) 2004-2007, K A Fraser
  */
@@ -29,7 +12,7 @@
 
 /*
  * Hypercall interface:
- *  Input:  %ebx, %ecx, %edx, %esi, %edi, %ebp (arguments 1-6)
+ *  Input:  %ebx, %ecx, %edx, %esi, %edi (arguments 1-5)
  *  Output: %eax
  * Access is via hypercall page (set up by guest loader or via a Xen MSR):
  *  call hypercall_page + hypercall-number * 32
@@ -107,32 +90,66 @@
 #define XEN_GUEST_HANDLE_64(name) __XEN_GUEST_HANDLE_64(name)
 #endif
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
+
+#if defined(XEN_GENERATING_COMPAT_HEADERS)
+/* nothing */
+#elif defined(__XEN__) || defined(__XEN_TOOLS__)
+/* Anonymous unions include all permissible names (e.g., al/ah/ax/eax). */
+#define __DECL_REG_LO8(which) union { \
+    uint32_t e ## which ## x; \
+    uint16_t which ## x; \
+    struct { \
+        uint8_t which ## l; \
+        uint8_t which ## h; \
+    }; \
+}
+#define __DECL_REG_LO16(name) union { \
+    uint32_t e ## name, _e ## name; \
+    uint16_t name; \
+}
+#else
+/* Other sources must always use the proper 32-bit name (e.g., eax). */
+#define __DECL_REG_LO8(which) uint32_t e ## which ## x
+#define __DECL_REG_LO16(name) uint32_t e ## name
+#endif
+
+#ifdef __XEN__
+#define cpu_user_regs guest_user_regs
+#endif
 
 struct cpu_user_regs {
-    uint32_t ebx;
-    uint32_t ecx;
-    uint32_t edx;
-    uint32_t esi;
-    uint32_t edi;
-    uint32_t ebp;
-    uint32_t eax;
+    __DECL_REG_LO8(b);
+    __DECL_REG_LO8(c);
+    __DECL_REG_LO8(d);
+    __DECL_REG_LO16(si);
+    __DECL_REG_LO16(di);
+    __DECL_REG_LO16(bp);
+    __DECL_REG_LO8(a);
     uint16_t error_code;    /* private */
     uint16_t entry_vector;  /* private */
-    uint32_t eip;
+    __DECL_REG_LO16(ip);
     uint16_t cs;
     uint8_t  saved_upcall_mask;
     uint8_t  _pad0;
-    uint32_t eflags;        /* eflags.IF == !saved_upcall_mask */
-    uint32_t esp;
+    __DECL_REG_LO16(flags); /* eflags.IF == !saved_upcall_mask */
+    __DECL_REG_LO16(sp);
     uint16_t ss, _pad1;
     uint16_t es, _pad2;
     uint16_t ds, _pad3;
     uint16_t fs, _pad4;
     uint16_t gs, _pad5;
 };
+
+#ifdef __XEN__
+#undef cpu_user_regs
+#else
 typedef struct cpu_user_regs cpu_user_regs_t;
 DEFINE_XEN_GUEST_HANDLE(cpu_user_regs_t);
+#endif
+
+#undef __DECL_REG_LO8
+#undef __DECL_REG_LO16
 
 /*
  * Page-directory addresses above 4GB do not fit into architectural %cr3.
@@ -154,7 +171,7 @@ struct xen_callback {
 };
 typedef struct xen_callback xen_callback_t;
 
-#endif /* !__ASSEMBLY__ */
+#endif /* !__ASSEMBLER__ */
 
 #endif /* __XEN_PUBLIC_ARCH_X86_XEN_X86_32_H__ */
 
