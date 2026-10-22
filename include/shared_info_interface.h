@@ -139,7 +139,7 @@ typedef VOID
 (*XENBUS_SHARED_INFO_GET_TIME)(
     _In_ PINTERFACE         Interface,
     _Out_ PLARGE_INTEGER    Time,
-    _Out_ PBOOLEAN          Local
+    _Out_opt_ PBOOLEAN      Local
     );
 
 // {7E73C34F-1640-4649-A8F3-263BC930A004}
