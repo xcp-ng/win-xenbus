@@ -44,7 +44,7 @@ typedef struct _MUTEX {
 
 static FORCEINLINE VOID
 InitializeMutex(
-    _In_ PMUTEX Mutex
+    _Out_ PMUTEX    Mutex
     )
 {
     RtlZeroMemory(Mutex, sizeof (MUTEX));
@@ -55,7 +55,7 @@ InitializeMutex(
 static FORCEINLINE BOOLEAN
 _IRQL_requires_max_(PASSIVE_LEVEL)
 TryAcquireMutex(
-    _In_ PMUTEX     Mutex
+    _Inout_ PMUTEX  Mutex
     )
 {
     LARGE_INTEGER   Timeout;
@@ -82,10 +82,10 @@ TryAcquireMutex(
 static FORCEINLINE VOID
 _IRQL_requires_max_(PASSIVE_LEVEL)
 AcquireMutex(
-    _In_ PMUTEX Mutex
+    _Inout_ PMUTEX  Mutex
     )
 {
-    NTSTATUS    status;
+    NTSTATUS        status;
 
     status = KeWaitForSingleObject(&Mutex->Event,
                                    Executive,
@@ -102,7 +102,7 @@ AcquireMutex(
 static FORCEINLINE VOID
 _IRQL_requires_max_(PASSIVE_LEVEL)
 ReleaseMutex(
-    _In_ PMUTEX Mutex
+    _Inout_ PMUTEX  Mutex
     )
 {
     ASSERT3P(Mutex->Owner, ==, KeGetCurrentThread());

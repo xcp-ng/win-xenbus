@@ -1169,17 +1169,17 @@ fail1:
 
 NTSTATUS
 RegistryQueryBinaryValue(
-    _In_ HANDLE                     Key,
-    _In_ PSTR                       Name,
-    _Outptr_ PVOID                  *Buffer,
-    _Out_ PULONG                    Length
+    _In_ HANDLE                                 Key,
+    _In_ PSTR                                   Name,
+    _Outptr_result_bytebuffer_(*Length) PVOID   *Buffer,
+    _Out_ PULONG                                Length
     )
 {
-    ANSI_STRING                     Ansi;
-    UNICODE_STRING                  Unicode;
-    PKEY_VALUE_PARTIAL_INFORMATION  Partial;
-    ULONG                           Size;
-    NTSTATUS                        status;
+    ANSI_STRING                                 Ansi;
+    UNICODE_STRING                              Unicode;
+    PKEY_VALUE_PARTIAL_INFORMATION              Partial;
+    ULONG                                       Size;
+    NTSTATUS                                    status;
 
     RtlInitAnsiString(&Ansi, Name);
 
@@ -1256,7 +1256,7 @@ NTSTATUS
 RegistryUpdateBinaryValue(
     _In_ HANDLE                     Key,
     _In_ PSTR                       Name,
-    _In_ PVOID                      Buffer,
+    _In_reads_bytes_(Length) PVOID  Buffer,
     _In_ ULONG                      Length
     )
 {
@@ -1444,7 +1444,7 @@ fail1:
 
 static PKEY_VALUE_PARTIAL_INFORMATION
 RegistryAnsiToSz(
-    PANSI_STRING                    Ansi
+    _In_ PANSI_STRING               Ansi
     )
 {
     ULONG                           Length;
@@ -1490,7 +1490,7 @@ fail1:
 
 static PKEY_VALUE_PARTIAL_INFORMATION
 RegistryAnsiToMultiSz(
-    PANSI_STRING                    Ansi
+    _In_ PANSI_STRING               Ansi
     )
 {
     ULONG                           Length;

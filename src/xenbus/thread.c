@@ -66,7 +66,7 @@ __ThreadFree(
 
 static FORCEINLINE VOID
 __ThreadWake(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     )
 {
     KeSetEvent(&Thread->Event, IO_NO_INCREMENT, FALSE);
@@ -74,7 +74,7 @@ __ThreadWake(
 
 VOID
 ThreadWake(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     )
 {
     __ThreadWake(Thread);
@@ -82,7 +82,7 @@ ThreadWake(
 
 static FORCEINLINE VOID
 __ThreadAlert(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     )
 {
     Thread->Alerted = TRUE;
@@ -91,7 +91,7 @@ __ThreadAlert(
 
 VOID
 ThreadAlert(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     )
 {
     __ThreadAlert(Thread);
@@ -205,7 +205,7 @@ ThreadIsAlerted(
 
 VOID
 ThreadJoin(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     )
 {
     LONG                References;

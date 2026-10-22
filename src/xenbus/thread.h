@@ -59,17 +59,17 @@ ThreadIsAlerted(
 
 extern VOID
 ThreadWake(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     );
 
 extern VOID
 ThreadAlert(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     );
 
 extern VOID
 ThreadJoin(
-    _In_ PXENBUS_THREAD Thread
+    _Inout_ PXENBUS_THREAD  Thread
     );
 
 #endif  // _XENBUS_THREAD_H
