@@ -132,6 +132,26 @@ typedef NTSTATUS
     _Outptr_ PXENBUS_GNTTAB_ENTRY   *Entry
     );
 
+/*! \typedef XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS_V2
+    \brief Revoke foreign access and return the \a Entry to the \a Cache
+
+    \param Interface The interface header
+    \param Cache The grant table cache handle
+    \param Locked If mutually exclusive access to the cache is already
+    guaranteed then set this to TRUE
+    \param Entry The grant table entry handle
+
+    If the foreign domain is still accessing the granted page, this retries
+    for a while before giving up.
+*/
+typedef NTSTATUS
+(*XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS_V2)(
+    _In_ PINTERFACE                 Interface,
+    _In_ PXENBUS_GNTTAB_CACHE       Cache,
+    _In_ BOOLEAN                    Locked,
+    _In_ PXENBUS_GNTTAB_ENTRY       Entry
+    );
+
 /*! \typedef XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS
     \brief Revoke foreign access and return the \a Entry to the \a Cache
 
@@ -140,6 +160,12 @@ typedef NTSTATUS
     \param Locked If mutually exclusive access to the cache is already
     guaranteed then set this to TRUE
     \param Entry The grant table entry handle
+    \return STATUS_DEVICE_BUSY if the foreign domain is still accessing the
+    granted page
+
+    This does not wait for the foreign domain. On failure, foreign access
+    remains in effect and \a Entry remains valid: the caller must keep the
+    granted page alive, and should retry the revocation later.
 */
 typedef NTSTATUS
 (*XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS)(
@@ -239,16 +265,16 @@ DEFINE_GUID(GUID_XENBUS_GNTTAB_INTERFACE,
     \ingroup interfaces
 */
 struct _XENBUS_GNTTAB_INTERFACE_V2 {
-    INTERFACE                           Interface;
-    XENBUS_GNTTAB_ACQUIRE               GnttabAcquire;
-    XENBUS_GNTTAB_RELEASE               GnttabRelease;
-    XENBUS_GNTTAB_CREATE_CACHE_V1       GnttabCreateCacheVersion1;
-    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS GnttabPermitForeignAccess;
-    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS GnttabRevokeForeignAccess;
-    XENBUS_GNTTAB_GET_REFERENCE         GnttabGetReference;
-    XENBUS_GNTTAB_DESTROY_CACHE         GnttabDestroyCache;
-    XENBUS_GNTTAB_MAP_FOREIGN_PAGES     GnttabMapForeignPages;
-    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES   GnttabUnmapForeignPages;
+    INTERFACE                               Interface;
+    XENBUS_GNTTAB_ACQUIRE                   GnttabAcquire;
+    XENBUS_GNTTAB_RELEASE                   GnttabRelease;
+    XENBUS_GNTTAB_CREATE_CACHE_V1           GnttabCreateCacheVersion1;
+    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS     GnttabPermitForeignAccess;
+    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS_V2  GnttabRevokeForeignAccessVersion2;
+    XENBUS_GNTTAB_GET_REFERENCE             GnttabGetReference;
+    XENBUS_GNTTAB_DESTROY_CACHE             GnttabDestroyCache;
+    XENBUS_GNTTAB_MAP_FOREIGN_PAGES         GnttabMapForeignPages;
+    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES       GnttabUnmapForeignPages;
 };
 
 /*! \struct _XENBUS_GNTTAB_INTERFACE_V3
@@ -256,17 +282,17 @@ struct _XENBUS_GNTTAB_INTERFACE_V2 {
     \ingroup interfaces
 */
 struct _XENBUS_GNTTAB_INTERFACE_V3 {
-    INTERFACE                           Interface;
-    XENBUS_GNTTAB_ACQUIRE               GnttabAcquire;
-    XENBUS_GNTTAB_RELEASE               GnttabRelease;
-    XENBUS_GNTTAB_CREATE_CACHE_V1       GnttabCreateCacheVersion1;
-    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS GnttabPermitForeignAccess;
-    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS GnttabRevokeForeignAccess;
-    XENBUS_GNTTAB_GET_REFERENCE         GnttabGetReference;
-    XENBUS_GNTTAB_QUERY_REFERENCE       GnttabQueryReference;
-    XENBUS_GNTTAB_DESTROY_CACHE         GnttabDestroyCache;
-    XENBUS_GNTTAB_MAP_FOREIGN_PAGES     GnttabMapForeignPages;
-    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES   GnttabUnmapForeignPages;
+    INTERFACE                               Interface;
+    XENBUS_GNTTAB_ACQUIRE                   GnttabAcquire;
+    XENBUS_GNTTAB_RELEASE                   GnttabRelease;
+    XENBUS_GNTTAB_CREATE_CACHE_V1           GnttabCreateCacheVersion1;
+    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS     GnttabPermitForeignAccess;
+    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS_V2  GnttabRevokeForeignAccessVersion2;
+    XENBUS_GNTTAB_GET_REFERENCE             GnttabGetReference;
+    XENBUS_GNTTAB_QUERY_REFERENCE           GnttabQueryReference;
+    XENBUS_GNTTAB_DESTROY_CACHE             GnttabDestroyCache;
+    XENBUS_GNTTAB_MAP_FOREIGN_PAGES         GnttabMapForeignPages;
+    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES       GnttabUnmapForeignPages;
 };
 
 /*! \struct _XENBUS_GNTTAB_INTERFACE_V4
@@ -274,6 +300,24 @@ struct _XENBUS_GNTTAB_INTERFACE_V3 {
     \ingroup interfaces
 */
 struct _XENBUS_GNTTAB_INTERFACE_V4 {
+    INTERFACE                               Interface;
+    XENBUS_GNTTAB_ACQUIRE                   GnttabAcquire;
+    XENBUS_GNTTAB_RELEASE                   GnttabRelease;
+    XENBUS_GNTTAB_CREATE_CACHE              GnttabCreateCache;
+    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS     GnttabPermitForeignAccess;
+    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS_V2  GnttabRevokeForeignAccessVersion2;
+    XENBUS_GNTTAB_GET_REFERENCE             GnttabGetReference;
+    XENBUS_GNTTAB_QUERY_REFERENCE           GnttabQueryReference;
+    XENBUS_GNTTAB_DESTROY_CACHE             GnttabDestroyCache;
+    XENBUS_GNTTAB_MAP_FOREIGN_PAGES         GnttabMapForeignPages;
+    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES       GnttabUnmapForeignPages;
+};
+
+/*! \struct _XENBUS_GNTTAB_INTERFACE_V5
+    \brief GNTTAB interface version 5
+    \ingroup interfaces
+*/
+struct _XENBUS_GNTTAB_INTERFACE_V5 {
     INTERFACE                           Interface;
     XENBUS_GNTTAB_ACQUIRE               GnttabAcquire;
     XENBUS_GNTTAB_RELEASE               GnttabRelease;
@@ -287,7 +331,7 @@ struct _XENBUS_GNTTAB_INTERFACE_V4 {
     XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES   GnttabUnmapForeignPages;
 };
 
-typedef struct _XENBUS_GNTTAB_INTERFACE_V4 XENBUS_GNTTAB_INTERFACE, *PXENBUS_GNTTAB_INTERFACE;
+typedef struct _XENBUS_GNTTAB_INTERFACE_V5 XENBUS_GNTTAB_INTERFACE, *PXENBUS_GNTTAB_INTERFACE;
 
 /*! \def XENBUS_GNTTAB
     \brief Macro at assist in method invocation
@@ -298,6 +342,6 @@ typedef struct _XENBUS_GNTTAB_INTERFACE_V4 XENBUS_GNTTAB_INTERFACE, *PXENBUS_GNT
 #endif  // _WINDLL
 
 #define XENBUS_GNTTAB_INTERFACE_VERSION_MIN 2
-#define XENBUS_GNTTAB_INTERFACE_VERSION_MAX 4
+#define XENBUS_GNTTAB_INTERFACE_VERSION_MAX 5
 
 #endif  // _XENBUS_GNTTAB_INTERFACE_H
