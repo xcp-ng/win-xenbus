@@ -43,6 +43,8 @@
 #include "dbg_print.h"
 #include "assert.h"
 #include "util.h"
+#include "driver.h"
+#include "registry.h"
 
 #define CONSOLE_WAKEUP_MAGIC 'EKAW'
 
@@ -71,6 +73,7 @@ struct _XENBUS_CONSOLE_CONTEXT {
     XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_SUSPEND_CALLBACK    SuspendCallbackLate;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
+    BOOLEAN                     UseConsole;
     BOOLEAN                     Enabled;
 };
 
@@ -692,13 +695,17 @@ ConsoleAcquire(
 
     Trace("====>\n");
 
+    status = STATUS_NOT_SUPPORTED;
+    if (!Context->UseConsole)
+        goto fail1;
+
     status = XENBUS_GNTTAB(Acquire, &Context->GnttabInterface);
     if (!NT_SUCCESS(status))
-        goto fail1;
+        goto fail2;
 
     status = ConsoleGetAddress(Context, &Address);
     if (!NT_SUCCESS(status))
-        goto fail2;
+        goto fail3;
 
     Context->Address = Address;
     Context->Shared = (struct xencons_interface *)MmMapIoSpace(Context->Address,
@@ -706,19 +713,19 @@ ConsoleAcquire(
                                                                MmCached);
     status = STATUS_UNSUCCESSFUL;
     if (Context->Shared == NULL)
-        goto fail3;
+        goto fail4;
 
     status = XENBUS_EVTCHN(Acquire, &Context->EvtchnInterface);
     if (!NT_SUCCESS(status))
-        goto fail4;
+        goto fail5;
 
     status = ConsoleEnable(Context);
     if (!NT_SUCCESS(status))
-        goto fail5;
+        goto fail6;
 
     status = XENBUS_SUSPEND(Acquire, &Context->SuspendInterface);
     if (!NT_SUCCESS(status))
-        goto fail6;
+        goto fail7;
 
     status = XENBUS_SUSPEND(Register,
                             &Context->SuspendInterface,
@@ -727,11 +734,11 @@ ConsoleAcquire(
                             Context,
                             &Context->SuspendCallbackLate);
     if (!NT_SUCCESS(status))
-        goto fail7;
+        goto fail8;
 
     status = XENBUS_DEBUG(Acquire, &Context->DebugInterface);
     if (!NT_SUCCESS(status))
-        goto fail8;
+        goto fail9;
 
     status = XENBUS_DEBUG(Register,
                           &Context->DebugInterface,
@@ -740,7 +747,7 @@ ConsoleAcquire(
                           Context,
                           &Context->DebugCallback);
     if (!NT_SUCCESS(status))
-        goto fail9;
+        goto fail10;
 
     Trace("<====\n");
 
@@ -749,49 +756,52 @@ done:
 
     return STATUS_SUCCESS;
 
-fail9:
-    Error("fail9\n");
+fail10:
+    Error("fail10\n");
 
     XENBUS_DEBUG(Release, &Context->DebugInterface);
 
-fail8:
-    Error("fail8\n");
+fail9:
+    Error("fail9\n");
 
     XENBUS_SUSPEND(Deregister,
                    &Context->SuspendInterface,
                    Context->SuspendCallbackLate);
     Context->SuspendCallbackLate = NULL;
 
+fail8:
+    Error("fail8\n");
+
+    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
+
 fail7:
     Error("fail7\n");
 
-    XENBUS_SUSPEND(Release, &Context->SuspendInterface);
+    ConsoleDisable(Context);
 
 fail6:
     Error("fail6\n");
 
-    ConsoleDisable(Context);
+    XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
 
 fail5:
     Error("fail5\n");
 
-    XENBUS_EVTCHN(Release, &Context->EvtchnInterface);
+    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
+    Context->Shared = NULL;
 
 fail4:
     Error("fail4\n");
 
-    MmUnmapIoSpace(Context->Shared, PAGE_SIZE);
-    Context->Shared = NULL;
+    Context->Address.QuadPart = 0;
 
 fail3:
     Error("fail3\n");
 
-    Context->Address.QuadPart = 0;
+    XENBUS_GNTTAB(Release, &Context->GnttabInterface);
 
 fail2:
     Error("fail2\n");
-
-    XENBUS_GNTTAB(Release, &Context->GnttabInterface);
 
 fail1:
     Error("fail1 (%08x)\n", status);
@@ -872,6 +882,8 @@ ConsoleInitialize(
     _Outptr_ PXENBUS_CONSOLE_CONTEXT    *Context
     )
 {
+    HANDLE                              ParametersKey;
+    ULONG                               UseConsole;
     NTSTATUS                            status;
 
     Trace("====>\n");
@@ -916,6 +928,19 @@ ConsoleInitialize(
     InitializeListHead(&(*Context)->WakeupList);
 
     KeInitializeDpc(&(*Context)->Dpc, ConsoleDpc, *Context);
+
+    ParametersKey = DriverGetParametersKey();
+
+    status = RegistryQueryDwordValue(ParametersKey,
+                                     "UseConsole",
+                                     &UseConsole);
+    if (!NT_SUCCESS(status))
+        UseConsole = 1;
+
+    (*Context)->UseConsole = (UseConsole != 0) ? TRUE : FALSE;
+
+    if (!(*Context)->UseConsole)
+        Info("DISABLED\n");
 
     (*Context)->Fdo = Fdo;
 
@@ -988,6 +1013,7 @@ ConsoleTeardown(
     Context->Dpcs = 0;
     Context->Events = 0;
 
+    Context->UseConsole = FALSE;
     Context->Fdo = NULL;
 
     RtlZeroMemory(&Context->Dpc, sizeof (KDPC));
