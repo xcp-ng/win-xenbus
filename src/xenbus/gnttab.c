@@ -548,7 +548,7 @@ fail1:
 }
 
 static NTSTATUS
-GnttabRevokeForeignAccess(
+GnttabTryRevokeForeignAccess(
     _In_ PINTERFACE             Interface,
     _In_ PXENBUS_GNTTAB_CACHE   Cache,
     _In_ BOOLEAN                Locked,
@@ -559,8 +559,6 @@ GnttabRevokeForeignAccess(
     PXENBUS_GNTTAB_FRAME        Frame;
     ULONG                       Index;
     volatile SHORT              *flags;
-    ULONG                       Attempt;
-    NTSTATUS                    status;
 
     ASSERT3U(Entry->Magic, ==, XENBUS_GNTTAB_ENTRY_MAGIC);
     ASSERT3U(Entry->Reference, >=, XENBUS_GNTTAB_RESERVED_ENTRY_COUNT);
@@ -571,24 +569,20 @@ GnttabRevokeForeignAccess(
 
     flags = (volatile SHORT *)&Frame->Entry[Index].flags;
 
-    for (Attempt = 0; Attempt < 100; Attempt++) {
+    for (;;) {
         uint16_t    Old;
         uint16_t    New;
 
         Old = *flags;
-        Old &= ~(GTF_reading | GTF_writing);
+
+        if (Old & (GTF_reading | GTF_writing))
+            return STATUS_DEVICE_BUSY;
 
         New = Old & ~GTF_permit_access;
 
         if (InterlockedCompareExchange16(flags, New, Old) == Old)
             break;
-
-        SchedYield();
     }
-
-    status = STATUS_UNSUCCESSFUL;
-    if (Attempt == 100)
-        goto fail1;
 
     RtlZeroMemory(&Frame->Entry[Index], sizeof (grant_entry_v1_t));
     RtlZeroMemory(&Entry->Entry, sizeof (grant_entry_v1_t));
@@ -598,6 +592,35 @@ GnttabRevokeForeignAccess(
                  Cache->Cache,
                  Entry,
                  Locked);
+
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+GnttabRevokeForeignAccessVersion2(
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_GNTTAB_CACHE   Cache,
+    _In_ BOOLEAN                Locked,
+    _In_ PXENBUS_GNTTAB_ENTRY   Entry
+    )
+{
+    ULONG                       Attempt;
+    NTSTATUS                    status;
+
+    for (Attempt = 0; Attempt < 100; Attempt++) {
+        status = GnttabTryRevokeForeignAccess(Interface,
+                                              Cache,
+                                              Locked,
+                                              Entry);
+        if (NT_SUCCESS(status))
+            break;
+
+        SchedYield();
+    }
+
+    status = STATUS_UNSUCCESSFUL;
+    if (Attempt == 100)
+        goto fail1;
 
     return STATUS_SUCCESS;
 
@@ -1044,7 +1067,7 @@ static struct _XENBUS_GNTTAB_INTERFACE_V2   GnttabInterfaceVersion2 = {
     GnttabRelease,
     GnttabCreateCacheVersion1,
     GnttabPermitForeignAccess,
-    GnttabRevokeForeignAccess,
+    GnttabRevokeForeignAccessVersion2,
     GnttabGetReference,
     GnttabDestroyCache,
     GnttabMapForeignPages,
@@ -1057,7 +1080,7 @@ static struct _XENBUS_GNTTAB_INTERFACE_V3   GnttabInterfaceVersion3 = {
     GnttabRelease,
     GnttabCreateCacheVersion1,
     GnttabPermitForeignAccess,
-    GnttabRevokeForeignAccess,
+    GnttabRevokeForeignAccessVersion2,
     GnttabGetReference,
     GnttabQueryReference,
     GnttabDestroyCache,
@@ -1071,7 +1094,21 @@ static struct _XENBUS_GNTTAB_INTERFACE_V4   GnttabInterfaceVersion4 = {
     GnttabRelease,
     GnttabCreateCache,
     GnttabPermitForeignAccess,
-    GnttabRevokeForeignAccess,
+    GnttabRevokeForeignAccessVersion2,
+    GnttabGetReference,
+    GnttabQueryReference,
+    GnttabDestroyCache,
+    GnttabMapForeignPages,
+    GnttabUnmapForeignPages
+};
+
+static struct _XENBUS_GNTTAB_INTERFACE_V5   GnttabInterfaceVersion5 = {
+    { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V5), 5, NULL, NULL, NULL },
+    GnttabAcquire,
+    GnttabRelease,
+    GnttabCreateCache,
+    GnttabPermitForeignAccess,
+    GnttabTryRevokeForeignAccess,
     GnttabGetReference,
     GnttabQueryReference,
     GnttabDestroyCache,
@@ -1205,6 +1242,23 @@ GnttabGetInterface(
             break;
 
         *GnttabInterface = GnttabInterfaceVersion4;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 5: {
+        struct _XENBUS_GNTTAB_INTERFACE_V5  *GnttabInterface;
+
+        GnttabInterface = (struct _XENBUS_GNTTAB_INTERFACE_V5 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_GNTTAB_INTERFACE_V5))
+            break;
+
+        *GnttabInterface = GnttabInterfaceVersion5;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
