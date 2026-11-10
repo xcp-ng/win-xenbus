@@ -53,6 +53,11 @@ typedef struct _XENBUS_GNTTAB_ENTRY XENBUS_GNTTAB_ENTRY, *PXENBUS_GNTTAB_ENTRY;
 */
 typedef struct _XENBUS_GNTTAB_CACHE XENBUS_GNTTAB_CACHE, *PXENBUS_GNTTAB_CACHE;
 
+/*! \typedef XENBUS_GNTTAB_MAPPING
+    \brief Mapping handle for a contiguous range of foreign pages
+*/
+typedef struct _XENBUS_GNTTAB_MAPPING XENBUS_GNTTAB_MAPPING, *PXENBUS_GNTTAB_MAPPING;
+
 /*! \typedef XENBUS_GNTTAB_ACQUIRE
     \brief Acquire a reference to the GNTTAB interface
 
@@ -197,19 +202,24 @@ typedef VOID
     _In_ PXENBUS_GNTTAB_CACHE   Cache
     );
 
-/*! \typedef XENBUS_GNTTAB_MAP_FOREIGN_PAGES
+/*! \typedef XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V1
     \brief Map foreign memory pages into the system address space
 
     \param Interface The interface header
     \param Domain The domid of the foreign domain that granted the pages
-    \param NumberPages Number of pages to map
+    \param NumberPages Number of pages to map (1 to XENBUS_GNTTAB_MAP_COUNT_MAX)
     \param References Array of grant reference numbers shared by the foreign domain
     \param ReadOnly If TRUE, pages are mapped with read-only access
-    \param Address The physical address that the foreign pages are mapped under
-*/
+    \param Address Receives the physical address that the foreign pages
+    are mapped under, or zero if no mapping was allocated
 
+    On a page-level failure, successfully mapped pages are unmapped and Address
+    is set to zero.
+
+    All hypercall-level failures are fatal.
+*/
 typedef NTSTATUS
-(*XENBUS_GNTTAB_MAP_FOREIGN_PAGES)(
+(*XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V1)(
     _In_ PINTERFACE             Interface,
     _In_ USHORT                 Domain,
     _In_ ULONG                  NumberPages,
@@ -218,16 +228,135 @@ typedef NTSTATUS
     _Out_ PHYSICAL_ADDRESS      *Address
     );
 
-/*! \typedef XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES
+// Total mapping size is limited by the MDL byte count (less than 4 GiB).
+#define XENBUS_GNTTAB_MAP_COUNT_MAX  0xFFFFF
+
+// Maximum number of pages accepted by the map/unmap functions.
+#define XENBUS_GNTTAB_MAP_BATCH_COUNT_MAX  256
+
+/*! \typedef XENBUS_GNTTAB_CREATE_MAPPING
+    \brief Create an empty mapping for a contiguous range of foreign pages
+
+    \param Interface The interface header
+    \param Domain The domid of the foreign domain that granted the pages
+    \param NumberPages Total page count (1 to XENBUS_GNTTAB_MAP_COUNT_MAX)
+    \param ReadOnly If TRUE, pages will be mapped with read-only access
+    \param Mapping Receives the mapping handle, or NULL on failure
+
+    Use XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V2 to populate the mapping.
+    Domain and ReadOnly are constant for the lifetime of the mapping.
+    The mapping remains allocated until it's freed by
+    XENBUS_GNTTAB_DESTROY_MAPPING.
+*/
+_IRQL_requires_(PASSIVE_LEVEL)
+typedef NTSTATUS
+(*XENBUS_GNTTAB_CREATE_MAPPING)(
+    _In_ PINTERFACE                  Interface,
+    _In_ USHORT                      Domain,
+    _In_ ULONG                       NumberPages,
+    _In_ BOOLEAN                     ReadOnly,
+    _Outptr_ PXENBUS_GNTTAB_MAPPING  *Mapping
+    );
+
+/*! \typedef XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V2
+    \brief Map a batch of foreign pages within an existing mapping
+
+    \param Interface The interface header
+    \param Mapping The mapping handle
+    \param Offset Index of the first page within the mapping
+    \param NumberPages Batch size (1 to XENBUS_GNTTAB_MAP_BATCH_COUNT_MAX)
+    \param References Array of grant reference numbers shared by the foreign domain
+    \param Results One status per page, in reference order, set only after
+    a successful hypercall
+    \return The first failed page hypervisor error, or an error processing the batch
+
+    The batch must not contain any pages that are already mapped.
+    Successful pages remain mapped on partial failure, the caller is responsible
+    for managing page state. Failed pages may be retried using their offsets.
+
+    All hypercall-level failures are fatal.
+*/
+_IRQL_requires_(PASSIVE_LEVEL)
+typedef NTSTATUS
+(*XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V2)(
+    _In_ PINTERFACE                      Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING          Mapping,
+    _In_ ULONG                           Offset,
+    _In_ ULONG                           NumberPages,
+    _In_reads_(NumberPages) PULONG       References,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
+    );
+
+/*! \typedef XENBUS_GNTTAB_GET_MAPPING_ADDRESS
+    \brief Get the base address of a fully mapped memory range
+
+    \param Interface The interface header
+    \param Mapping The mapping handle
+    \param Address Receives the physical address, or zero on failure
+
+    All pages in the memory range must be successfully mapped.
+*/
+_IRQL_requires_(PASSIVE_LEVEL)
+typedef NTSTATUS
+(*XENBUS_GNTTAB_GET_MAPPING_ADDRESS)(
+    _In_ PINTERFACE              Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING  Mapping,
+    _Out_ PPHYSICAL_ADDRESS      Address
+    );
+
+/*! \typedef XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V1
     \brief Unmap foreign memory pages from the system address space
 
     \param Interface The interface header
     \param Address The physical address that the foreign pages are mapped under
+
+    All page-level unmap failures are fatal.
+    All hypercall-level failures are fatal.
 */
 typedef NTSTATUS
-(*XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES)(
-    _In_ PINTERFACE             Interface,
-    _In_ PHYSICAL_ADDRESS       Address
+(*XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V1)(
+    _In_ PINTERFACE        Interface,
+    _In_ PHYSICAL_ADDRESS  Address
+    );
+
+/*! \typedef XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V2
+    \brief Unmap a batch of foreign pages from an existing mapping
+
+    \param Interface The interface header
+    \param Mapping The mapping handle
+    \param Offset Index of the first page within the mapping
+    \param NumberPages Batch size (1 to XENBUS_GNTTAB_MAP_BATCH_COUNT_MAX)
+    \param Results One status per page, in batch order, set only after
+    a successful hypercall (not mapped pages report STATUS_SUCCESS)
+    \return The first failed page hypervisor error, or an error processing the batch
+
+    The same batch can be retried after a partial failure.
+
+    All hypercall-level failures are fatal.
+*/
+_IRQL_requires_(PASSIVE_LEVEL)
+typedef NTSTATUS
+(*XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V2)(
+    _In_ PINTERFACE                      Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING          Mapping,
+    _In_ ULONG                           Offset,
+    _In_ ULONG                           NumberPages,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
+    );
+
+/*! \typedef XENBUS_GNTTAB_DESTROY_MAPPING
+    \brief Free an empty mapping and invalidate its handle
+
+    \param Interface The interface header
+    \param Mapping The mapping handle
+
+    All pages in the mapping must be already unmapped.
+*/
+_IRQL_requires_(PASSIVE_LEVEL)
+typedef NTSTATUS
+(*XENBUS_GNTTAB_DESTROY_MAPPING)(
+    _In_ PINTERFACE              Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING  Mapping
     );
 
 // {763679C5-E5C2-4A6D-8B88-6BB02EC42D8E}
@@ -239,16 +368,16 @@ DEFINE_GUID(GUID_XENBUS_GNTTAB_INTERFACE,
     \ingroup interfaces
 */
 struct _XENBUS_GNTTAB_INTERFACE_V2 {
-    INTERFACE                           Interface;
-    XENBUS_GNTTAB_ACQUIRE               GnttabAcquire;
-    XENBUS_GNTTAB_RELEASE               GnttabRelease;
-    XENBUS_GNTTAB_CREATE_CACHE_V1       GnttabCreateCacheVersion1;
-    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS GnttabPermitForeignAccess;
-    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS GnttabRevokeForeignAccess;
-    XENBUS_GNTTAB_GET_REFERENCE         GnttabGetReference;
-    XENBUS_GNTTAB_DESTROY_CACHE         GnttabDestroyCache;
-    XENBUS_GNTTAB_MAP_FOREIGN_PAGES     GnttabMapForeignPages;
-    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES   GnttabUnmapForeignPages;
+    INTERFACE                             Interface;
+    XENBUS_GNTTAB_ACQUIRE                 GnttabAcquire;
+    XENBUS_GNTTAB_RELEASE                 GnttabRelease;
+    XENBUS_GNTTAB_CREATE_CACHE_V1         GnttabCreateCacheVersion1;
+    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS   GnttabPermitForeignAccess;
+    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS   GnttabRevokeForeignAccess;
+    XENBUS_GNTTAB_GET_REFERENCE           GnttabGetReference;
+    XENBUS_GNTTAB_DESTROY_CACHE           GnttabDestroyCache;
+    XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V1    GnttabMapForeignPagesV4;
+    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V1  GnttabUnmapForeignPagesV4;
 };
 
 /*! \struct _XENBUS_GNTTAB_INTERFACE_V3
@@ -256,17 +385,17 @@ struct _XENBUS_GNTTAB_INTERFACE_V2 {
     \ingroup interfaces
 */
 struct _XENBUS_GNTTAB_INTERFACE_V3 {
-    INTERFACE                           Interface;
-    XENBUS_GNTTAB_ACQUIRE               GnttabAcquire;
-    XENBUS_GNTTAB_RELEASE               GnttabRelease;
-    XENBUS_GNTTAB_CREATE_CACHE_V1       GnttabCreateCacheVersion1;
-    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS GnttabPermitForeignAccess;
-    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS GnttabRevokeForeignAccess;
-    XENBUS_GNTTAB_GET_REFERENCE         GnttabGetReference;
-    XENBUS_GNTTAB_QUERY_REFERENCE       GnttabQueryReference;
-    XENBUS_GNTTAB_DESTROY_CACHE         GnttabDestroyCache;
-    XENBUS_GNTTAB_MAP_FOREIGN_PAGES     GnttabMapForeignPages;
-    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES   GnttabUnmapForeignPages;
+    INTERFACE                             Interface;
+    XENBUS_GNTTAB_ACQUIRE                 GnttabAcquire;
+    XENBUS_GNTTAB_RELEASE                 GnttabRelease;
+    XENBUS_GNTTAB_CREATE_CACHE_V1         GnttabCreateCacheVersion1;
+    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS   GnttabPermitForeignAccess;
+    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS   GnttabRevokeForeignAccess;
+    XENBUS_GNTTAB_GET_REFERENCE           GnttabGetReference;
+    XENBUS_GNTTAB_QUERY_REFERENCE         GnttabQueryReference;
+    XENBUS_GNTTAB_DESTROY_CACHE           GnttabDestroyCache;
+    XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V1    GnttabMapForeignPagesV4;
+    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V1  GnttabUnmapForeignPagesV4;
 };
 
 /*! \struct _XENBUS_GNTTAB_INTERFACE_V4
@@ -274,20 +403,41 @@ struct _XENBUS_GNTTAB_INTERFACE_V3 {
     \ingroup interfaces
 */
 struct _XENBUS_GNTTAB_INTERFACE_V4 {
-    INTERFACE                           Interface;
-    XENBUS_GNTTAB_ACQUIRE               GnttabAcquire;
-    XENBUS_GNTTAB_RELEASE               GnttabRelease;
-    XENBUS_GNTTAB_CREATE_CACHE          GnttabCreateCache;
-    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS GnttabPermitForeignAccess;
-    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS GnttabRevokeForeignAccess;
-    XENBUS_GNTTAB_GET_REFERENCE         GnttabGetReference;
-    XENBUS_GNTTAB_QUERY_REFERENCE       GnttabQueryReference;
-    XENBUS_GNTTAB_DESTROY_CACHE         GnttabDestroyCache;
-    XENBUS_GNTTAB_MAP_FOREIGN_PAGES     GnttabMapForeignPages;
-    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES   GnttabUnmapForeignPages;
+    INTERFACE                             Interface;
+    XENBUS_GNTTAB_ACQUIRE                 GnttabAcquire;
+    XENBUS_GNTTAB_RELEASE                 GnttabRelease;
+    XENBUS_GNTTAB_CREATE_CACHE            GnttabCreateCache;
+    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS   GnttabPermitForeignAccess;
+    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS   GnttabRevokeForeignAccess;
+    XENBUS_GNTTAB_GET_REFERENCE           GnttabGetReference;
+    XENBUS_GNTTAB_QUERY_REFERENCE         GnttabQueryReference;
+    XENBUS_GNTTAB_DESTROY_CACHE           GnttabDestroyCache;
+    XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V1    GnttabMapForeignPagesV4;
+    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V1  GnttabUnmapForeignPagesV4;
 };
 
-typedef struct _XENBUS_GNTTAB_INTERFACE_V4 XENBUS_GNTTAB_INTERFACE, *PXENBUS_GNTTAB_INTERFACE;
+/*! \struct _XENBUS_GNTTAB_INTERFACE_V5
+    \brief GNTTAB interface version 5
+    \ingroup interfaces
+*/
+struct _XENBUS_GNTTAB_INTERFACE_V5 {
+    INTERFACE                             Interface;
+    XENBUS_GNTTAB_ACQUIRE                 GnttabAcquire;
+    XENBUS_GNTTAB_RELEASE                 GnttabRelease;
+    XENBUS_GNTTAB_CREATE_CACHE            GnttabCreateCache;
+    XENBUS_GNTTAB_PERMIT_FOREIGN_ACCESS   GnttabPermitForeignAccess;
+    XENBUS_GNTTAB_REVOKE_FOREIGN_ACCESS   GnttabRevokeForeignAccess;
+    XENBUS_GNTTAB_GET_REFERENCE           GnttabGetReference;
+    XENBUS_GNTTAB_QUERY_REFERENCE         GnttabQueryReference;
+    XENBUS_GNTTAB_DESTROY_CACHE           GnttabDestroyCache;
+    XENBUS_GNTTAB_CREATE_MAPPING          GnttabCreateMapping;
+    XENBUS_GNTTAB_MAP_FOREIGN_PAGES_V2    GnttabMapForeignPages;
+    XENBUS_GNTTAB_GET_MAPPING_ADDRESS     GnttabGetMappingAddress;
+    XENBUS_GNTTAB_UNMAP_FOREIGN_PAGES_V2  GnttabUnmapForeignPages;
+    XENBUS_GNTTAB_DESTROY_MAPPING         GnttabDestroyMapping;
+};
+
+typedef struct _XENBUS_GNTTAB_INTERFACE_V5 XENBUS_GNTTAB_INTERFACE, *PXENBUS_GNTTAB_INTERFACE;
 
 /*! \def XENBUS_GNTTAB
     \brief Macro at assist in method invocation
@@ -298,6 +448,6 @@ typedef struct _XENBUS_GNTTAB_INTERFACE_V4 XENBUS_GNTTAB_INTERFACE, *PXENBUS_GNT
 #endif  // _WINDLL
 
 #define XENBUS_GNTTAB_INTERFACE_VERSION_MIN 2
-#define XENBUS_GNTTAB_INTERFACE_VERSION_MAX 4
+#define XENBUS_GNTTAB_INTERFACE_VERSION_MAX 5
 
 #endif  // _XENBUS_GNTTAB_INTERFACE_H

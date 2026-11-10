@@ -42,6 +42,7 @@
 #include "assert.h"
 #include "util.h"
 #include "hash_table.h"
+#include "mutex.h"
 
 #define XENBUS_GNTTAB_ENTRY_PER_FRAME      (PAGE_SIZE / sizeof (grant_entry_v1_t))
 
@@ -74,6 +75,18 @@ typedef struct _XENBUS_GNTTAB_MAP_ENTRY {
     ULONG   MapHandles[1];
 } XENBUS_GNTTAB_MAP_ENTRY, *PXENBUS_GNTTAB_MAP_ENTRY;
 
+struct _XENBUS_GNTTAB_MAPPING {
+    PXENBUS_GNTTAB_CONTEXT  Context;
+    MUTEX                   Mutex;
+    PMDL                    Mdl;
+    PHYSICAL_ADDRESS        Address;
+    ULONG                   NumberPages;
+    ULONG                   NumberMapped;
+    USHORT                  Domain;
+    BOOLEAN                 ReadOnly;
+    PULONG                  MapHandles;
+};
+
 typedef struct _XENBUS_GNTTAB_FRAME {
     PMDL                        Mdl;
     grant_entry_v1_t            *Entry;
@@ -94,6 +107,7 @@ struct _XENBUS_GNTTAB_CONTEXT {
     XENBUS_DEBUG_INTERFACE      DebugInterface;
     PXENBUS_DEBUG_CALLBACK      DebugCallback;
     PXENBUS_HASH_TABLE          MapTable;
+    LONG                        MappingCount;
     LIST_ENTRY                  List;
 };
 
@@ -654,8 +668,10 @@ fail1:
     return status;
 }
 
+C_ASSERT(XENBUS_GNTTAB_MAP_BATCH_COUNT_MAX == XEN_GNTTAB_MAP_BATCH_MAX);
+
 static NTSTATUS
-GnttabMapForeignPages(
+GnttabMapForeignPagesVersion1(
     _In_ PINTERFACE                 Interface,
     _In_ USHORT                     Domain,
     _In_ ULONG                      NumberPages,
@@ -760,7 +776,7 @@ fail1:
 }
 
 static NTSTATUS
-GnttabUnmapForeignPages(
+GnttabUnmapForeignPagesVersion1(
     _In_ PINTERFACE           Interface,
     _In_ PHYSICAL_ADDRESS     StartAddress
     )
@@ -828,6 +844,275 @@ fail1:
     Error("fail1 (%08x)\n", Status);
 
     return Status;
+}
+
+// Resumable batch mappings
+_IRQL_requires_(PASSIVE_LEVEL)
+static NTSTATUS
+GnttabCreateMapping(
+    _In_ PINTERFACE                  Interface,
+    _In_ USHORT                      Domain,
+    _In_ ULONG                       NumberPages,
+    _In_ BOOLEAN                     ReadOnly,
+    _Outptr_ PXENBUS_GNTTAB_MAPPING  *Mapping
+    )
+{
+    PXENBUS_GNTTAB_CONTEXT  Context = Interface->Context;
+    ULONG                   Index;
+    NTSTATUS                Status;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+    *Mapping = NULL;
+
+    Status = STATUS_INVALID_PARAMETER;
+    if (NumberPages == 0 || NumberPages > XENBUS_GNTTAB_MAP_COUNT_MAX)
+        goto fail1;
+
+    Status = STATUS_NO_MEMORY;
+    *Mapping = __GnttabAllocate(sizeof (XENBUS_GNTTAB_MAPPING));
+    if (*Mapping == NULL)
+        goto fail2;
+
+    // Persistent handles can be large, all accesses are at PASSIVE_LEVEL.
+    (*Mapping)->MapHandles = __AllocatePoolWithTag(PagedPool,
+                                                   NumberPages * sizeof (ULONG),
+                                                   XENBUS_GNTTAB_TAG);
+    if ((*Mapping)->MapHandles == NULL)
+        goto fail3;
+
+    for (Index = 0; Index < NumberPages; Index++)
+        (*Mapping)->MapHandles[Index] = XEN_GNTTAB_INVALID_HANDLE;
+
+    (*Mapping)->Mdl = FdoHoleAllocate(Context->Fdo, NumberPages);
+    if ((*Mapping)->Mdl == NULL)
+        goto fail4;
+
+    (*Mapping)->Context = Context;
+    (*Mapping)->NumberPages = NumberPages;
+    (*Mapping)->Domain = Domain;
+    (*Mapping)->ReadOnly = ReadOnly;
+    (*Mapping)->Address.QuadPart = MmGetMdlPfnArray((*Mapping)->Mdl)[0] << PAGE_SHIFT;
+    InitializeMutex(&(*Mapping)->Mutex);
+
+    InterlockedIncrement(&Context->MappingCount);
+
+    return STATUS_SUCCESS;
+
+fail4:
+    Error("fail4\n");
+    __FreePoolWithTag((*Mapping)->MapHandles, XENBUS_GNTTAB_TAG);
+
+fail3:
+    Error("fail3\n");
+    __GnttabFree(*Mapping);
+    *Mapping = NULL;
+
+fail2:
+    Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", Status);
+    return Status;
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+static NTSTATUS
+GnttabMapForeignPages(
+    _In_ PINTERFACE                      Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING          Mapping,
+    _In_ ULONG                           Offset,
+    _In_ ULONG                           NumberPages,
+    _In_reads_(NumberPages) PULONG       References,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
+    )
+{
+    PHYSICAL_ADDRESS  Address;
+    ULONG             Index;
+    NTSTATUS          Status;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    Status = STATUS_INVALID_PARAMETER;
+    if (NumberPages == 0 || NumberPages > XENBUS_GNTTAB_MAP_BATCH_COUNT_MAX || Results == NULL)
+        goto fail1;
+
+    if (Mapping == NULL || Mapping->Context != Interface->Context || References == NULL)
+        goto fail1;
+
+    // Subtraction avoids overflow when the caller supplies an arbitrary offset.
+    if (Offset >= Mapping->NumberPages || NumberPages > Mapping->NumberPages - Offset)
+        goto fail1;
+
+    AcquireMutex(&Mapping->Mutex);
+
+    Status = STATUS_DEVICE_BUSY;
+    for (Index = 0; Index < NumberPages; Index++) {
+        if (Mapping->MapHandles[Offset + Index] != XEN_GNTTAB_INVALID_HANDLE)
+            goto fail2;
+    }
+
+    Address.QuadPart = Mapping->Address.QuadPart + ((ULONGLONG)Offset << PAGE_SHIFT);
+    Status = GrantTableMapForeignPages(Mapping->Domain,
+                                       NumberPages,
+                                       References,
+                                       Address,
+                                       Mapping->ReadOnly,
+                                       &Mapping->MapHandles[Offset],
+                                       Results);
+    if (!NT_SUCCESS(Status))
+        goto fail2;
+
+    for (Index = 0; Index < NumberPages; Index++) {
+        if (NT_SUCCESS(Results[Index])) {
+            ASSERT3U(Mapping->MapHandles[Offset + Index], !=, XEN_GNTTAB_INVALID_HANDLE);
+            Mapping->NumberMapped++;
+        } else if (NT_SUCCESS(Status)) {
+            Status = Results[Index];
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+        goto fail2;
+
+    ReleaseMutex(&Mapping->Mutex);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    ReleaseMutex(&Mapping->Mutex);
+
+fail1:
+    Error("fail1 (%08x)\n", Status);
+
+    return Status;
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+static NTSTATUS
+GnttabGetMappingAddress(
+    _In_ PINTERFACE              Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING  Mapping,
+    _Out_ PPHYSICAL_ADDRESS      Address
+    )
+{
+    NTSTATUS  Status;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+    Address->QuadPart = 0;
+
+    if (Mapping == NULL || Mapping->Context != Interface->Context)
+        return STATUS_INVALID_PARAMETER;
+
+    AcquireMutex(&Mapping->Mutex);
+
+    Status = STATUS_DEVICE_NOT_READY;
+    if (Mapping->NumberMapped == Mapping->NumberPages) {
+        *Address = Mapping->Address;
+        Status = STATUS_SUCCESS;
+    }
+
+    ReleaseMutex(&Mapping->Mutex);
+    return Status;
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+static NTSTATUS
+GnttabUnmapForeignPages(
+    _In_ PINTERFACE                      Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING          Mapping,
+    _In_ ULONG                           Offset,
+    _In_ ULONG                           NumberPages,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
+    )
+{
+    PHYSICAL_ADDRESS  Address;
+    ULONG             Index;
+    NTSTATUS          Status;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    Status = STATUS_INVALID_PARAMETER;
+    if (NumberPages == 0 || NumberPages > XENBUS_GNTTAB_MAP_BATCH_COUNT_MAX || Results == NULL)
+        goto fail1;
+
+    if (Mapping == NULL || Mapping->Context != Interface->Context)
+        goto fail1;
+
+    if (Offset >= Mapping->NumberPages || NumberPages > Mapping->NumberPages - Offset)
+        goto fail1;
+
+    AcquireMutex(&Mapping->Mutex);
+
+    Address.QuadPart = Mapping->Address.QuadPart + ((ULONGLONG)Offset << PAGE_SHIFT);
+    Status = GrantTableUnmapForeignPages(NumberPages,
+                                         &Mapping->MapHandles[Offset],
+                                         Address,
+                                         Results);
+    if (!NT_SUCCESS(Status))
+        goto fail2;
+
+    for (Index = 0; Index < NumberPages; Index++) {
+        // An entirely empty batch succeeds without a hypercall or Results.
+        if (Mapping->MapHandles[Offset + Index] == XEN_GNTTAB_INVALID_HANDLE)
+            continue;
+
+        if (NT_SUCCESS(Results[Index])) {
+            Mapping->MapHandles[Offset + Index] = XEN_GNTTAB_INVALID_HANDLE;
+            ASSERT3U(Mapping->NumberMapped, >, 0);
+            Mapping->NumberMapped--;
+        } else if (NT_SUCCESS(Status)) {
+            Status = Results[Index];
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+        goto fail2;
+
+    ReleaseMutex(&Mapping->Mutex);
+
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2\n");
+
+    ReleaseMutex(&Mapping->Mutex);
+
+fail1:
+    Error("fail1 (%08x)\n", Status);
+
+    return Status;
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+static NTSTATUS
+GnttabDestroyMapping(
+    _In_ PINTERFACE             Interface,
+    _In_ PXENBUS_GNTTAB_MAPPING Mapping
+    )
+{
+    PXENBUS_GNTTAB_CONTEXT Context = Interface->Context;
+
+    ASSERT3U(KeGetCurrentIrql(), ==, PASSIVE_LEVEL);
+
+    if (Mapping == NULL || Mapping->Context != Context)
+        return STATUS_INVALID_PARAMETER;
+
+    AcquireMutex(&Mapping->Mutex);
+    if (Mapping->NumberMapped != 0) {
+        ReleaseMutex(&Mapping->Mutex);
+        return STATUS_DEVICE_BUSY;
+    }
+    ReleaseMutex(&Mapping->Mutex);
+
+    FdoHoleFree(Context->Fdo, Mapping->Mdl);
+    __FreePoolWithTag(Mapping->MapHandles, XENBUS_GNTTAB_TAG);
+    __GnttabFree(Mapping);
+
+    InterlockedDecrement(&Context->MappingCount);
+
+    return STATUS_SUCCESS;
 }
 
 static VOID
@@ -1039,6 +1324,9 @@ GnttabRelease(
     if (!IsListEmpty(&Context->List))
         BUG("OUTSTANDING CACHES");
 
+    if (Context->MappingCount != 0)
+        BUG("OUTSTANDING MAPPINGS");
+
     XENBUS_DEBUG(Deregister,
                  &Context->DebugInterface,
                  Context->DebugCallback);
@@ -1087,8 +1375,8 @@ static struct _XENBUS_GNTTAB_INTERFACE_V2   GnttabInterfaceVersion2 = {
     GnttabRevokeForeignAccess,
     GnttabGetReference,
     GnttabDestroyCache,
-    GnttabMapForeignPages,
-    GnttabUnmapForeignPages
+    GnttabMapForeignPagesVersion1,
+    GnttabUnmapForeignPagesVersion1
 };
 
 static struct _XENBUS_GNTTAB_INTERFACE_V3   GnttabInterfaceVersion3 = {
@@ -1101,8 +1389,8 @@ static struct _XENBUS_GNTTAB_INTERFACE_V3   GnttabInterfaceVersion3 = {
     GnttabGetReference,
     GnttabQueryReference,
     GnttabDestroyCache,
-    GnttabMapForeignPages,
-    GnttabUnmapForeignPages
+    GnttabMapForeignPagesVersion1,
+    GnttabUnmapForeignPagesVersion1
 };
 
 static struct _XENBUS_GNTTAB_INTERFACE_V4   GnttabInterfaceVersion4 = {
@@ -1115,8 +1403,25 @@ static struct _XENBUS_GNTTAB_INTERFACE_V4   GnttabInterfaceVersion4 = {
     GnttabGetReference,
     GnttabQueryReference,
     GnttabDestroyCache,
+    GnttabMapForeignPagesVersion1,
+    GnttabUnmapForeignPagesVersion1
+};
+
+static struct _XENBUS_GNTTAB_INTERFACE_V5   GnttabInterfaceVersion5 = {
+    { sizeof (struct _XENBUS_GNTTAB_INTERFACE_V5), 5, NULL, NULL, NULL },
+    GnttabAcquire,
+    GnttabRelease,
+    GnttabCreateCache,
+    GnttabPermitForeignAccess,
+    GnttabRevokeForeignAccess,
+    GnttabGetReference,
+    GnttabQueryReference,
+    GnttabDestroyCache,
+    GnttabCreateMapping,
     GnttabMapForeignPages,
-    GnttabUnmapForeignPages
+    GnttabGetMappingAddress,
+    GnttabUnmapForeignPages,
+    GnttabDestroyMapping
 };
 
 NTSTATUS
@@ -1245,6 +1550,23 @@ GnttabGetInterface(
             break;
 
         *GnttabInterface = GnttabInterfaceVersion4;
+
+        ASSERT3U(Interface->Version, ==, Version);
+        Interface->Context = Context;
+
+        status = STATUS_SUCCESS;
+        break;
+    }
+    case 5: {
+        struct _XENBUS_GNTTAB_INTERFACE_V5  *GnttabInterface;
+
+        GnttabInterface = (struct _XENBUS_GNTTAB_INTERFACE_V5 *)Interface;
+
+        status = STATUS_BUFFER_OVERFLOW;
+        if (Size < sizeof (struct _XENBUS_GNTTAB_INTERFACE_V5))
+            break;
+
+        *GnttabInterface = GnttabInterfaceVersion5;
 
         ASSERT3U(Interface->Version, ==, Version);
         Interface->Context = Context;
