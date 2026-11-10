@@ -262,15 +262,23 @@ GrantTableCopy(
     _In_ ULONG              Count
     );
 
+// Maximum number of pages accepted by the map/unmap functions.
+#define XEN_GNTTAB_MAP_BATCH_MAX  256
+
+// Zero is a valid Xen handle.
+#define XEN_GNTTAB_INVALID_HANDLE ((ULONG)-1)
+
 _Check_return_
 XEN_API
 NTSTATUS
-GrantTableMapForeignPage(
-    _In_ USHORT             Domain,
-    _In_ ULONG              GrantRef,
-    _In_ PHYSICAL_ADDRESS   Address,
-    _In_ BOOLEAN            ReadOnly,
-    _Out_ ULONG             *Handle
+GrantTableMapForeignPages(
+    _In_ USHORT                          Domain,
+    _In_ ULONG                           NumberPages,
+    _In_reads_(NumberPages) PULONG       GrantRefs,
+    _In_ PHYSICAL_ADDRESS                StartAddress,
+    _In_ BOOLEAN                         ReadOnly,
+    _Out_writes_(NumberPages) PULONG     Handles,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
     );
 
 _Check_return_
@@ -279,6 +287,16 @@ NTSTATUS
 GrantTableUnmapForeignPage(
     _In_ ULONG              Handle,
     _In_ PHYSICAL_ADDRESS   Address
+    );
+
+_Check_return_
+XEN_API
+NTSTATUS
+GrantTableUnmapForeignPages(
+    _In_ ULONG                           NumberPages,
+    _In_reads_(NumberPages) PULONG       Handles,
+    _In_ PHYSICAL_ADDRESS                StartAddress,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
     );
 
 _Check_return_

@@ -38,9 +38,12 @@
 #include "hypercall.h"
 #include "dbg_print.h"
 #include "assert.h"
+#include "util.h"
 
 #pragma warning(push)
 #pragma warning(disable:4127)   // conditional expression is constant
+
+#define XEN_GNTTAB_TAG  'TNGX'
 
 // Most of the GNTST_* values don't have meaningful NTSTATUS counterparts,
 // this macro translates those that do.
@@ -168,47 +171,90 @@ fail1:
 _Check_return_
 XEN_API
 NTSTATUS
-GrantTableMapForeignPage(
-    _In_ USHORT                 Domain,
-    _In_ ULONG                  GrantRef,
-    _In_ PHYSICAL_ADDRESS       Address,
-    _In_ BOOLEAN                ReadOnly,
-    _Out_ ULONG                 *Handle
+GrantTableMapForeignPages(
+    _In_ USHORT                          Domain,
+    _In_ ULONG                           NumberPages,
+    _In_reads_(NumberPages) PULONG       GrantRefs,
+    _In_ PHYSICAL_ADDRESS                StartAddress,
+    _In_ BOOLEAN                         ReadOnly,
+    _Out_writes_(NumberPages) PULONG     Handles,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
     )
 {
-    struct gnttab_map_grant_ref op;
-    LONG_PTR                    rc;
-    NTSTATUS                    status;
+    struct gnttab_map_grant_ref          *ops;
+    LONG_PTR                             rc;
+    NTSTATUS                             status;
+    ULONG                                i;
+    ULONG                                fail_count;
 
-    RtlZeroMemory(&op, sizeof(op));
-    op.dom = Domain;
-    op.ref = GrantRef;
-    op.flags = GNTMAP_host_map;
-    if (ReadOnly)
-        op.flags |= GNTMAP_readonly;
-    op.host_addr = Address.QuadPart;
-
-    rc = GrantTableOp(GNTTABOP_map_grant_ref, &op, 1);
-
-    if (rc < 0) {
-        ERRNO_TO_STATUS(-rc, status);
+    status = STATUS_INVALID_PARAMETER;
+    if (NumberPages == 0 || NumberPages > XEN_GNTTAB_MAP_BATCH_MAX)
         goto fail1;
-    }
 
-    if (op.status != GNTST_okay) {
-        Warning("%u:%u -> %u.%u failed (%d)\n",
-                op.dom,
-                op.ref,
-                Address.HighPart,
-                Address.LowPart,
-                op.status);
+    for (i = 0; i < NumberPages; i++)
+        Handles[i] = XEN_GNTTAB_INVALID_HANDLE;
 
-        GNTST_TO_STATUS(op.status, status);
+    status = STATUS_NO_MEMORY;
+    ops = __AllocatePoolWithTag(NonPagedPool,
+                                NumberPages * sizeof(*ops),
+                                XEN_GNTTAB_TAG);
+    if (ops == NULL)
         goto fail2;
+
+    for (i = 0; i < NumberPages; i++) {
+        ops[i].dom = Domain;
+        ops[i].ref = GrantRefs[i];
+        ops[i].flags = GNTMAP_host_map;
+        if (ReadOnly)
+            ops[i].flags |= GNTMAP_readonly;
+
+        ops[i].host_addr = StartAddress.QuadPart + ((ULONGLONG)i << PAGE_SHIFT);
     }
 
-    *Handle = op.handle;
+    rc = GrantTableOp(GNTTABOP_map_grant_ref, ops, NumberPages);
 
+    if (rc != 0) {
+        Error("map_grant_ref: %u ops at 0x%08x%08x failed (%lld)\n",
+              NumberPages,
+              (ULONG)(StartAddress.QuadPart >> 32),
+              (ULONG)StartAddress.QuadPart,
+              rc);
+
+        // Possible Xen errors during a hypercall:
+        // EFAULT: Xen failed to access the output buffer. Some pages may
+        //         have been processed, but the state is unknown.
+        // EINVAL: invalid arguments
+        // ENOSYS: unsupported hypercall
+        // EPERM: caller not running at ring 0
+        // All of these indicate either an unsafe state or corrupted
+        // executing environment.
+        BUG("map hypercall failed");
+    }
+
+    fail_count = 0;
+    for (i = 0; i < NumberPages; i++) {
+        GNTST_TO_STATUS(ops[i].status, Results[i]);
+
+        if (NT_SUCCESS(Results[i])) {
+            Handles[i] = ops[i].handle;
+        } else {
+            if (fail_count == 0) {
+                Warning("op[%u] %hu:%u -> 0x%08x%08x failed (%hd)\n",
+                        i,
+                        ops[i].dom, ops[i].ref,
+                        (ULONG)(ops[i].host_addr >> 32),
+                        (ULONG)ops[i].host_addr,
+                        ops[i].status);
+            }
+
+            fail_count++;
+        }
+    }
+
+    if (fail_count > 0)
+        Warning("%u of %u ops failed\n", fail_count, NumberPages);
+
+    __FreePoolWithTag(ops, XEN_GNTTAB_TAG);
     return STATUS_SUCCESS;
 
 fail2:
@@ -244,7 +290,7 @@ GrantTableUnmapForeignPage(
     }
 
     if (op.status != GNTST_okay) {
-        Warning("%u.%u failed (%d)\n",
+        Warning("0x%08x%08x failed (%hd)\n",
                 Address.HighPart,
                 Address.LowPart,
                 op.status);
@@ -257,6 +303,108 @@ GrantTableUnmapForeignPage(
 
 fail2:
     Error("fail2\n");
+
+fail1:
+    Error("fail1 (%08x)\n", status);
+
+    return status;
+}
+
+_Check_return_
+XEN_API
+NTSTATUS
+GrantTableUnmapForeignPages(
+    _In_ ULONG                           NumberPages,
+    _In_reads_(NumberPages) PULONG       Handles,
+    _In_ PHYSICAL_ADDRESS                StartAddress,
+    _Out_writes_(NumberPages) PNTSTATUS  Results
+    )
+{
+    struct gnttab_unmap_grant_ref        *ops;
+    LONG_PTR                             rc;
+    NTSTATUS                             status;
+    ULONG                                i;
+    ULONG                                count;
+    ULONG                                fail_count;
+
+    status = STATUS_INVALID_PARAMETER;
+    if (NumberPages == 0 || NumberPages > XEN_GNTTAB_MAP_BATCH_MAX)
+        goto fail1;
+
+    count = 0;
+    for (i = 0; i < NumberPages; i++) {
+        if (Handles[i] != XEN_GNTTAB_INVALID_HANDLE)
+            count++;
+    }
+
+    if (count == 0)
+        goto done;
+
+    status = STATUS_NO_MEMORY;
+    ops = __AllocatePoolWithTag(NonPagedPool,
+                                count * sizeof(*ops),
+                                XEN_GNTTAB_TAG);
+    if (ops == NULL)
+        goto fail2;
+
+    count = 0;
+    for (i = 0; i < NumberPages; i++) {
+        if (Handles[i] == XEN_GNTTAB_INVALID_HANDLE)
+            continue;
+
+        ops[count].handle = Handles[i];
+        ops[count].host_addr = StartAddress.QuadPart + ((ULONGLONG)i << PAGE_SHIFT);
+        count++;
+    }
+
+    rc = GrantTableOp(GNTTABOP_unmap_grant_ref, ops, count);
+
+    if (rc != 0) {
+        Error("unmap_grant_ref: %u ops at 0x%08x%08x failed (%lld)\n",
+              count,
+              (ULONG)(StartAddress.QuadPart >> 32),
+              (ULONG)StartAddress.QuadPart,
+              rc);
+
+        // See GrantTableMapForeignPages() for explanation why this is fatal
+        BUG("unmap hypercall failed");
+    }
+
+    count = 0;
+    fail_count = 0;
+    for (i = 0; i < NumberPages; i++) {
+        if (Handles[i] == XEN_GNTTAB_INVALID_HANDLE) {
+            Results[i] = STATUS_SUCCESS;
+            continue;
+        }
+
+        GNTST_TO_STATUS(ops[count].status, Results[i]);
+
+        if (!NT_SUCCESS(Results[i])) {
+            if (fail_count == 0) {
+                Warning("op[%u] 0x%08x%08x failed (%hd)\n",
+                        i,
+                        (ULONG)(ops[count].host_addr >> 32),
+                        (ULONG)ops[count].host_addr,
+                        ops[count].status);
+            }
+
+            fail_count++;
+        }
+
+        count++;
+    }
+
+    if (fail_count > 0)
+        Warning("%u of %u ops failed\n", fail_count, count);
+
+    __FreePoolWithTag(ops, XEN_GNTTAB_TAG);
+
+done:
+    return STATUS_SUCCESS;
+
+fail2:
+    Error("fail2 (%08x)\n", status);
 
 fail1:
     Error("fail1 (%08x)\n", status);

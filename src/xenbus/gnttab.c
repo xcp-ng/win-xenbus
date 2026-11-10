@@ -656,56 +656,76 @@ fail1:
 
 static NTSTATUS
 GnttabMapForeignPages(
-    _In_ PINTERFACE             Interface,
-    _In_ USHORT                 Domain,
-    _In_ ULONG                  NumberPages,
-    _In_ PULONG                 References,
-    _In_ BOOLEAN                ReadOnly,
-    _Out_ PHYSICAL_ADDRESS      *Address
+    _In_ PINTERFACE                 Interface,
+    _In_ USHORT                     Domain,
+    _In_ ULONG                      NumberPages,
+    _In_reads_(NumberPages) PULONG  References,
+    _In_ BOOLEAN                    ReadOnly,
+    _Out_ PPHYSICAL_ADDRESS         StartAddress
     )
 {
-    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
-    PMDL                        Mdl;
-    LONG                        PageIndex;
-    PHYSICAL_ADDRESS            PageAddress;
-    PXENBUS_GNTTAB_MAP_ENTRY    MapEntry;
-    NTSTATUS                    status;
+    PXENBUS_GNTTAB_CONTEXT          Context = Interface->Context;
+    PMDL                            Mdl;
+    PXENBUS_GNTTAB_MAP_ENTRY        MapEntry;
+    NTSTATUS                        Results[XEN_GNTTAB_MAP_BATCH_MAX];
+    PHYSICAL_ADDRESS                Address;
+    ULONG                           Offset;
+    ULONG                           Count;
+    ULONG                           Index;
+    NTSTATUS                        Status;
 
-    Mdl = FdoHoleAllocate(Context->Fdo, NumberPages);
+    // Don't leave stale output address on failures.
+    StartAddress->QuadPart = 0;
 
-    status = STATUS_NO_MEMORY;
-    if (Mdl == NULL)
+    Status = STATUS_INVALID_PARAMETER;
+    // Sanity check for maximum MDL byte count.
+    if (NumberPages == 0 || NumberPages >= 0x100000)
         goto fail1;
 
-    MapEntry = __GnttabAllocate(FIELD_OFFSET(XENBUS_GNTTAB_MAP_ENTRY,
-                                             MapHandles) +
-                                (NumberPages * sizeof (ULONG)));
-
-    status = STATUS_NO_MEMORY;
-    if (MapEntry == NULL)
+    Status = STATUS_NO_MEMORY;
+    Mdl = FdoHoleAllocate(Context->Fdo, NumberPages);
+    if (Mdl == NULL)
         goto fail2;
 
+    MapEntry = __GnttabAllocate(FIELD_OFFSET(XENBUS_GNTTAB_MAP_ENTRY, MapHandles)
+                                + NumberPages * sizeof (ULONG));
+    if (MapEntry == NULL)
+        goto fail3;
+
     MapEntry->Mdl = Mdl;
+    for (Index = 0; Index < NumberPages; Index++)
+        MapEntry->MapHandles[Index] = XEN_GNTTAB_INVALID_HANDLE;
 
-    Address->QuadPart = MmGetMdlPfnArray(Mdl)[0] << PAGE_SHIFT;
-    PageAddress.QuadPart = Address->QuadPart;
+    Address.QuadPart = MmGetMdlPfnArray(Mdl)[0] << PAGE_SHIFT;
 
-    for (PageIndex = 0; PageIndex < (LONG)NumberPages; PageIndex++) {
-        status = GrantTableMapForeignPage(Domain,
-                                          References[PageIndex],
-                                          PageAddress,
-                                          ReadOnly,
-                                          &MapEntry->MapHandles[PageIndex]);
-        if (!NT_SUCCESS(status))
-            goto fail3;
+    *StartAddress = Address;
 
-        PageAddress.QuadPart += PAGE_SIZE;
+    for (Offset = 0; Offset < NumberPages; Offset += Count) {
+        Count = __min(NumberPages - Offset, XEN_GNTTAB_MAP_BATCH_MAX);
+        Address.QuadPart = StartAddress->QuadPart + ((ULONGLONG)Offset << PAGE_SHIFT);
+
+        Status = GrantTableMapForeignPages(Domain,
+                                           Count,
+                                           &References[Offset],
+                                           Address,
+                                           ReadOnly,
+                                           &MapEntry->MapHandles[Offset],
+                                           Results);
+        if (NT_SUCCESS(Status)) {
+            for (Index = 0; Index < Count; Index++) {
+                if (!NT_SUCCESS(Results[Index])) {
+                    Status = Results[Index];
+                    break;
+                }
+            }
+        }
+
+        if (!NT_SUCCESS(Status))
+            goto fail4;
     }
 
-    status = HashTableAdd(Context->MapTable,
-                          (ULONG_PTR)Address->QuadPart,
-                          (ULONG_PTR)MapEntry);
-    if (!NT_SUCCESS(status))
+    Status = HashTableAdd(Context->MapTable, (ULONG_PTR)StartAddress->QuadPart, (ULONG_PTR)MapEntry);
+    if (!NT_SUCCESS(Status))
         goto fail4;
 
     return STATUS_SUCCESS;
@@ -713,70 +733,90 @@ GnttabMapForeignPages(
 fail4:
     Error("fail4\n");
 
+    // Legacy rollback behavior: ignore unmap failures, preserve the map error.
+    for (Index = NumberPages; Index != 0; Index--) {
+        if (MapEntry->MapHandles[Index - 1] == XEN_GNTTAB_INVALID_HANDLE)
+            continue;
+
+        Address.QuadPart = StartAddress->QuadPart + ((ULONGLONG)(Index - 1) << PAGE_SHIFT);
+        (VOID) GrantTableUnmapForeignPage(MapEntry->MapHandles[Index - 1], Address);
+    }
+
+    StartAddress->QuadPart = 0;
+    __GnttabFree(MapEntry);
+
 fail3:
     Error("fail3\n");
 
-    while (--PageIndex >= 0) {
-        PageAddress.QuadPart -= PAGE_SIZE;
-        (VOID) GrantTableUnmapForeignPage(MapEntry->MapHandles[PageIndex],
-                                          PageAddress);
-    }
-
-    Address->QuadPart = 0;
-
-    __GnttabFree(MapEntry);
+    FdoHoleFree(Context->Fdo, Mdl);
 
 fail2:
     Error("fail2\n");
 
-    FdoHoleFree(Context->Fdo, Mdl);
-
 fail1:
-    Error("fail1: (%08x)\n", status);
+    Error("fail1 (%08x)\n", Status);
 
-    return status;
+    return Status;
 }
 
 static NTSTATUS
 GnttabUnmapForeignPages(
-    _In_ PINTERFACE             Interface,
-    _In_ PHYSICAL_ADDRESS       Address
+    _In_ PINTERFACE           Interface,
+    _In_ PHYSICAL_ADDRESS     StartAddress
     )
 {
-    PXENBUS_GNTTAB_CONTEXT      Context = Interface->Context;
-    ULONG                       NumberPages;
-    PHYSICAL_ADDRESS            PageAddress;
-    ULONG                       PageIndex;
-    PXENBUS_GNTTAB_MAP_ENTRY    MapEntry;
-    PMDL                        Mdl;
-    NTSTATUS                    status;
+    PXENBUS_GNTTAB_CONTEXT    Context = Interface->Context;
+    PXENBUS_GNTTAB_MAP_ENTRY  MapEntry;
+    PMDL                      Mdl;
+    NTSTATUS                  Results[XEN_GNTTAB_MAP_BATCH_MAX];
+    PHYSICAL_ADDRESS          Address;
+    ULONG                     NumberPages;
+    ULONG                     Offset;
+    ULONG                     Count;
+    ULONG                     Index;
+    NTSTATUS                  Status;
+    NTSTATUS                  BatchStatus;
 
-    status = HashTableLookup(Context->MapTable,
-                             (ULONG_PTR)Address.QuadPart,
-                             (PULONG_PTR)&MapEntry);
-    if (!NT_SUCCESS(status))
+    Status = HashTableLookup(Context->MapTable,
+                            (ULONG_PTR)StartAddress.QuadPart,
+                            (PULONG_PTR)&MapEntry);
+    if (!NT_SUCCESS(Status))
         goto fail1;
-
-    status = HashTableRemove(Context->MapTable,
-                             (ULONG_PTR)Address.QuadPart);
-    if (!NT_SUCCESS(status))
-        goto fail2;
-
-    PageAddress.QuadPart = Address.QuadPart;
 
     Mdl = MapEntry->Mdl;
     NumberPages = Mdl->ByteCount >> PAGE_SHIFT;
+    Status = STATUS_SUCCESS;
 
-    for (PageIndex = 0; PageIndex < NumberPages; PageIndex++) {
-        status = GrantTableUnmapForeignPage(MapEntry->MapHandles[PageIndex],
-                                            PageAddress);
-        BUG_ON(!NT_SUCCESS(status));
+    for (Offset = 0; Offset < NumberPages; Offset += Count) {
+        Count = __min(NumberPages - Offset, XEN_GNTTAB_MAP_BATCH_MAX);
+        Address.QuadPart = StartAddress.QuadPart + ((ULONGLONG)Offset << PAGE_SHIFT);
 
-        PageAddress.QuadPart += PAGE_SIZE;
+        BatchStatus = GrantTableUnmapForeignPages(Count,
+                                                  &MapEntry->MapHandles[Offset],
+                                                  Address,
+                                                  Results);
+
+        if (NT_SUCCESS(BatchStatus)) {
+            for (Index = 0; Index < Count; Index++) {
+                if (!NT_SUCCESS(Results[Index])) {
+                    BatchStatus = Results[Index];
+                    break;
+                }
+            }
+        }
+
+        if (!NT_SUCCESS(BatchStatus) && NT_SUCCESS(Status))
+            Status = BatchStatus;
     }
 
-    __GnttabFree(MapEntry);
+    // Legacy behavior: failures are fatal.
+    BUG_ON(!NT_SUCCESS(Status));
 
+    Status = HashTableRemove(Context->MapTable, (ULONG_PTR)StartAddress.QuadPart);
+    if (!NT_SUCCESS(Status))
+        goto fail2;
+
+    __GnttabFree(MapEntry);
     FdoHoleFree(Context->Fdo, Mdl);
 
     return STATUS_SUCCESS;
@@ -785,9 +825,9 @@ fail2:
     Error("fail2\n");
 
 fail1:
-    Error("fail1: (%08x)\n", status);
+    Error("fail1 (%08x)\n", Status);
 
-    return status;
+    return Status;
 }
 
 static VOID
